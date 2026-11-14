@@ -6,8 +6,9 @@
 'use strict';
 import { $, sleep, clamp, pick } from './util.js';
 import { CL, SK, IT, EN, BG } from './data.js';
-import { G, P, START, held, st, S, heroes, alive, learned, gainXP, resetProgress } from './state.js';
+import { G, P, START, held, st, S, heroes, alive, learned, gainXP, resetProgress, eqSum, heroFx } from './state.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
+import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { updateHUD, toast } from './ui.js';
 import { save } from './storage.js';
 import { notice } from './net.js';
@@ -78,9 +79,11 @@ const RUN = {
 export async function runSkill(k, u, ts) { await RUN[k](u, ts); }
 
 // ================= Enemigos y fórmulas =================
+// Fase B: el escalado por nivel subió levemente (ATQ/DEF/MAG 13%→15% y PV 30%→35% por nivel)
+// para compensar el equipo; a nivel 1 no cambia nada y a nivel 10 los enemigos son ~6-10% más duros.
 function mkEnemy(key, lvl) {
-  const b = EN[key], k = lvl - 1, f = (1 + .13 * k) * (b.boss ? .95 : 1.1), hm = b.boss ? .9 : 1.1;
-  const e = { id: 'e' + (eid++), isHero: false, key, name: b.n, e: b.e, tint: b.tint || '', lvl, boss: !!b.boss, mhp: Math.round(b.hp * hm * (1 + .3 * k)),
+  const b = EN[key], k = lvl - 1, f = (1 + .15 * k) * (b.boss ? .95 : 1.1), hm = b.boss ? .9 : 1.1;
+  const e = { id: 'e' + (eid++), isHero: false, key, name: b.n, e: b.e, tint: b.tint || '', lvl, boss: !!b.boss, mhp: Math.round(b.hp * hm * (1 + .35 * k)),
     atk: b.atk * f, def: b.def * f * .85, mag: (b.mag || 2) * f, spd: b.spd * (1 + .05 * k), xp: Math.round(b.xp * (1 + .25 * k)), g: Math.round(b.g * (1 + .2 * k)),
     sk: b.sk || [], magic: !!b.magic, undead: !!b.undead, buffs: {}, poison: 0, hp: 0 };
   e.hp = e.mhp; return e;
@@ -89,24 +92,42 @@ const uel = u => document.getElementById('u-' + u.id);
 function log(m) { $('#b-log').innerHTML = m; }
 function popup(u, txt, col) { const el = uel(u); if (!el) return; const s = document.createElement('div'); s.className = 'pop'; s.textContent = txt; s.style.color = col || '#fff'; el.appendChild(s); setTimeout(() => s.remove(), 1050); }
 function anim(u, cls) { const el = uel(u); if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 450); }
-const critOf = u => u.isHero ? CL[u.cls].crit : .05;
+const critOf = u => u.isHero ? CL[u.cls].crit + eqSum(u, 'crit') / 100 : .05;
 function phys(a, d, m, o = {}) {
   const atk = S(a, 'atk') * (a.buffs.atk > 0 ? 1.35 : 1), def = S(d, 'def') * (d.buffs.def > 0 ? 1.35 : 1);
   let v = Math.max(1, (atk * m - def * .5) * (.9 + Math.random() * .2));
-  const crit = !!o.crit || Math.random() < (o.critC != null ? o.critC : critOf(a)); if (crit) v *= 1.75;
+  const crit = !!o.crit || Math.random() < (o.critC != null ? o.critC : critOf(a)); if (crit) v *= heroFx(a, 'umbra') ? 2.5 : 1.75;
   return { dmg: Math.round(v), crit };
 }
+// Costo de una habilidad (la Túnica del Sabio Errante lo baja 25%)
+export const skillCost = (h, k) => heroFx(h, 'sabio') ? Math.ceil(SK[k].mp * .75) : SK[k].mp;
+// Un personaje llega a 0 PV: el Amuleto del Fénix lo levanta una vez por combate
+function fall(u) {
+  if (u.isHero && BT && heroFx(u, 'fenix') && !BT.fenix.has(u.id)) {
+    BT.fenix.add(u.id); u.hp = Math.max(1, Math.round(S(u, 'mhp') * .3)); popup(u, '🔥 ¡Fénix!', '#ff9a3d'); return;
+  }
+  kill(u);
+}
+// Resistencia al veneno del equipo (0..80%)
+const resists = u => u.isHero && Math.random() * 100 < eqSum(u, 'pres');
 function magic(a, d, m) { const def = S(d, 'def') * (d.buffs.def > 0 ? 1.35 : 1); return { dmg: Math.max(1, Math.round((S(a, 'mag') * m - def * .2) * (.9 + Math.random() * .2))), crit: false, mag: true }; }
 async function strike(a, d, r, o = {}) {
   if (d.hp <= 0) return 0;
   if (!r.mag && !o.sure && Math.random() < .05) { popup(d, '¡Falla!', '#ccc'); await sleep(o.fast ? 200 : 400); return 0; }
+  // Égida del Alba: 15% de bloquear el golpe completo
+  if (d.isHero && heroFx(d, 'egida') && Math.random() < .15) { popup(d, '🛡️ ¡Bloqueo!', '#ffe08a'); await sleep(o.fast ? 220 : 450); return 0; }
   let dmg = r.dmg; if (d.defending) dmg = Math.ceil(dmg / 2);
   const before = d.hp; d.hp = Math.max(0, d.hp - dmg); hurtEnemy(a, d, before);
   popup(d, (r.crit ? '¡CRÍTICO! ' : '') + dmg, r.crit ? '#ffd34d' : (o.col || (d.isHero ? '#ff6b6b' : '#ffffff')));
-  anim(d, 'hit'); if (d.hp <= 0) kill(d); refresh();
+  // Robo de vida del equipo
+  const ls = a.isHero ? eqSum(a, 'ls') : 0;
+  if (ls > 0 && a.hp > 0 && !d.isHero) { const mx = S(a, 'mhp'), g = Math.min(mx - a.hp, Math.round((before - d.hp) * ls / 100)); if (g > 0) { a.hp += g; popup(a, '+' + g, '#46c37b'); } }
+  // Colmillo de Brasa: los golpes físicos queman
+  if (!r.mag && !d.isHero && d.hp > 0 && heroFx(a, 'brasa')) { d.burn = 3; d.burnBy = a; }
+  anim(d, 'hit'); if (d.hp <= 0) fall(d); refresh();
   await sleep(o.fast ? 220 : 450); return dmg;
 }
-function kill(u) { u.hp = 0; u.poison = 0; u.buffs = {}; if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
+function kill(u) { u.hp = 0; u.poison = 0; u.burn = 0; u.buffs = {}; if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
 function heal(u, amt, by) { const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
 export function useItem(k, t) {
   G.items[k]--;
@@ -115,7 +136,7 @@ export function useItem(k, t) {
   else if (k === 'pluma') { t.hp = Math.round(S(t, 'mhp') * .5); popup(t, '¡Revive!', '#46c37b'); }
   refresh();
 }
-const tags = u => (u.poison > 0 ? '☠️' : '') + (u.buffs.atk > 0 ? '⚔️' : '') + (u.buffs.def > 0 ? '🛡️' : '') + (u.defending ? '🔰' : '');
+const tags = u => (u.poison > 0 ? '☠️' : '') + (u.burn > 0 ? '🔥' : '') + (u.buffs.atk > 0 ? '⚔️' : '') + (u.buffs.def > 0 ? '🛡️' : '') + (u.defending ? '🔰' : '');
 
 // ================= Pantalla de combate =================
 function buildBattle(biome) {
@@ -159,15 +180,33 @@ function pickTarget(kind) {
 }
 async function targetsFor(t) { if (t === 'none') return []; if (t === 'enemies') return alive(BT.enemies); if (t === 'allies') return alive(heroes()); const x = await pickTarget(t); return x ? [x] : null; }
 async function heroTurn(h) {
-  BT.active = h; refresh();
+  BT.active = h;
+  // Báculo de las Mareas: +3 PM al empezar el turno
+  if (heroFx(h, 'mareas')) { const mm = S(h, 'mmp'), g = Math.min(3, mm - h.mp); if (g > 0) { h.mp += g; popup(h, '+' + g + ' PM', '#6fb1ff'); } }
+  refresh();
   while (true) {
     log(`Turno de <b>${h.e} ${h.name}</b>`);
     const c = await menu([{ v: 'atk', l: '⚔️ Atacar' }, { v: 'skill', l: '✨ Habilidades' }, { v: 'item', l: '🎒 Objetos' }, { v: 'def', l: '🛡️ Defender' }, { v: 'run', l: '🏃 Huir', full: 1 }]);
-    if (c === 'atk') { const t = await pickTarget('enemy'); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1)); return; }
+    if (c === 'atk') {
+      const t = await pickTarget('enemy'); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
+      // Arco del Viento Norte: 25% de flecha extra
+      if (t.hp > 0 && heroFx(h, 'viento') && Math.random() < .25) { popup(h, '🌬️ ¡Flecha extra!', '#bff0ff'); await strike(h, t, phys(h, t, .6), { fast: 1 }); }
+      return;
+    }
     if (c === 'skill') {
-      const list = learned(h).map(k => ({ v: k, l: SK[k].n, s: `${SK[k].mp} PM · ${SK[k].d}`, dis: h.mp < SK[k].mp })); list.push({ v: null, l: '↩ Volver', full: 1 });
+      const list = learned(h).map(k => ({ v: k, l: SK[k].n, s: `${skillCost(h, k)} PM · ${SK[k].d}`, dis: h.mp < skillCost(h, k) })); list.push({ v: null, l: '↩ Volver', full: 1 });
       const k = await menu(list); if (!k) continue; const sk = SK[k]; const ts = await targetsFor(sk.t); if (ts === null) continue;
-      h.mp -= sk.mp; log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts); return;
+      h.mp -= skillCost(h, k); log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts);
+      // Anillo del Eco: 20% de repetir la habilidad gratis
+      if (heroFx(h, 'eco') && h.hp > 0 && sk.t !== 'dead' && alive(BT.enemies).length && Math.random() < .2) {
+        let ts2 = ts;
+        if (sk.t === 'enemies') ts2 = alive(BT.enemies);
+        else if (sk.t === 'allies') ts2 = alive(heroes());
+        else if (sk.t === 'enemy' && ts[0].hp <= 0) ts2 = alive(BT.enemies).slice(0, 1);
+        else if (sk.t === 'ally' && ts[0].hp <= 0) ts2 = [];
+        if (ts2.length || sk.t === 'none') { popup(h, '🔁 ¡Eco!', '#ffd34d'); log(`¡Eco! ${h.name} repite <b>${sk.n}</b>`); await sleep(300); await runSkill(k, h, ts2); }
+      }
+      return;
     }
     if (c === 'item') {
       const list = Object.keys(IT).map(k => ({ v: k, l: `${IT[k].e} ${IT[k].n} ×${G.items[k] || 0}`, s: IT[k].d, dis: !G.items[k] })); list.push({ v: null, l: '↩ Volver', full: 1 });
@@ -189,7 +228,7 @@ async function enemyTurn(e) {
   const t = pick(ts); const s = e.sk.length && Math.random() < .35 ? pick(e.sk) : null;
   if (!s) { log(`${e.name} ataca a ${t.name}`); await strike(e, t, e.magic ? magic(e, t, 1) : phys(e, t, 1)); return; }
   if (s === 'brutal') { log(`${e.name} usa <b>Golpe Brutal</b> contra ${t.name}`); await strike(e, t, phys(e, t, 1.6)); }
-  else if (s === 'veneno') { log(`${e.name} usa <b>Mordida Venenosa</b>`); const d = await strike(e, t, phys(e, t, .8)); if (d && t.hp > 0 && Math.random() < .65) { t.poison = 3; popup(t, '☠ Veneno', '#c27bff'); refresh(); } }
+  else if (s === 'veneno') { log(`${e.name} usa <b>Mordida Venenosa</b>`); const d = await strike(e, t, phys(e, t, .8)); if (d && t.hp > 0 && Math.random() < .65) { if (resists(t)) popup(t, 'Resiste el veneno', '#9fe8b0'); else { t.poison = 3; popup(t, '☠ Veneno', '#c27bff'); } refresh(); } }
   else if (s === 'drenar') { log(`${e.name} <b>drena la vida</b> de ${t.name}`); const d = await strike(e, t, magic(e, t, 1.1), { col: '#c27bff' }); if (d) { const hh = Math.round(d / 2); e.hp = Math.min(e.mhp, e.hp + hh); popup(e, '+' + hh, '#46c37b'); refresh(); } }
   else if (s === 'fuego') { log(`${e.name} lanza <b>Aliento de Fuego</b>`); for (const h of ts) await strike(e, h, magic(e, h, .85), { fast: 1, col: '#ff9a3d' }); }
 }
@@ -202,7 +241,11 @@ async function runBattle() {
       if (u.hp <= 0) continue;
       if (u.poison > 0) {
         const d = Math.max(1, Math.round(S(u, 'mhp') * .07)), before = u.hp; u.hp = Math.max(0, u.hp - d); u.poison--; hurtEnemy(u.poisonBy, u, before); popup(u, d, '#c27bff'); log(`${u.name} sufre por el veneno`);
-        if (u.hp <= 0) kill(u); refresh(); await sleep(500); if (u.hp <= 0) continue;
+        if (u.hp <= 0) fall(u); refresh(); await sleep(500); if (u.hp <= 0) continue;
+      }
+      if (u.burn > 0) {   // quemadura (Colmillo de Brasa)
+        const d = Math.max(1, Math.round(S(u, 'mhp') * .06)), before = u.hp; u.hp = Math.max(0, u.hp - d); u.burn--; hurtEnemy(u.burnBy, u, before); popup(u, '🔥' + d, '#ff9a3d'); log(`${u.name} se quema`);
+        if (u.hp <= 0) fall(u); refresh(); await sleep(450); if (u.hp <= 0) continue;
       }
       u.defending = false;
       const r = u.isHero ? await heroTurn(u) : await enemyTurn(u);
@@ -220,7 +263,7 @@ export async function startBattle(m) {
   if (st.busy) return; st.busy = true; held.clear();
   const ens = m.group.map((k, i) => mkEnemy(k, Math.max(1, m.boss && i > 0 ? m.lvl - 2 : m.lvl)));
   const supp = Math.round(.15 * ens.reduce((a, e) => a + e.mhp, 0) / ens.length);
-  BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp };
+  BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set() };
   buildBattle(m.biome); $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
   log(m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`);
   await sleep(1000);
@@ -242,6 +285,13 @@ async function victory() {
   lines.push(...lvMsgs);
   if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); }
   else if (Math.random() < .25) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
+  // Equipo: 15% en combates normales; los jefes siempre sueltan uno (mínimo Raro)
+  if (m.boss || Math.random() < .15) {
+    const luck = Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400);
+    const it = rollLoot(m.lvl, luck, m.boss ? 'raro' : 'comun');
+    lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>`
+      : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
+  }
   if (party.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
   monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps;
   // Avisos para los demás jugadores de la sala

@@ -9,6 +9,7 @@ import { startBattle, getBT } from './battle.js';
 import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
 import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
+import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -37,6 +38,12 @@ function move(dir) {
 }
 function openChest(f) {
   G.opened[f.id] = 1; const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
+  // 50%: equipo del nivel de la zona (mejor rareza mientras más lejos)
+  if (Math.random() < .5) {
+    const it = rollLoot(dangerAt(f.x, f.y), Math.min(1, d / 400));
+    if (addItem(it)) { toast(`📦 Cofre: ${itemLabel(it)}<br><span style="font-size:13px;color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</span>`); save(); return; }
+    toast('🎒 Inventario lleno: el cofre tenía equipo, pero no cabe');
+  }
   if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
   else { const k = r < .8 ? 'pocion' : r < .93 ? 'eter' : 'pluma', n = k === 'pocion' ? 2 : 1; G.items[k] += n; toast(`📦 Cofre: ${IT[k].e} ${IT[k].n} ×${n}`); }
   save();
@@ -118,7 +125,7 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, inventory: [], seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);

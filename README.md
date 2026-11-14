@@ -96,6 +96,26 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - El panel de la sala muestra a todos los jugadores registrados (los no conectados aparecen "💤 fuera de línea").
   Máximo 4 conectados a la vez.
 
+### Fase B (lista): equipo con rarezas
+- **Ranuras por héroe:** Arma, Armadura y Accesorio. Tipos con restricción de clase: Espada/Hacha y Coraza
+  (Guerrero), Báculo y Túnica (Maga, Sanadora), Arco (Arquera), Dagas (Pícaro); Armadura ligera, Anillo y
+  Amuleto (todas).
+- **Rarezas:** Común (gris, 60%, ×1.0), Raro (azul, 28%, ×1.3, 1 propiedad extra), Épico (morado, 10%, ×1.7, 2 extra),
+  Legendario (naranjo, 2%, ×2.3, 3 extra + efecto único). Mientras más lejos de Villa Origen, mejores probabilidades.
+- **Stat principal** = `round((2 + ilvl × 1.2) × multiplicador)`; arma → ATQ (báculo → MAG), armadura → DEF + PV,
+  accesorio → un stat al azar. Extras posibles: PV, PM, ATQ, DEF, MAG, VEL, % crítico, % robo de vida, % res. veneno.
+- **8 legendarios:** Colmillo de Brasa (quema), Égida del Alba (15% bloquea), Anillo del Eco (20% habilidad doble),
+  Báculo de las Mareas (+3 PM por turno), Arco del Viento Norte (25% flecha extra), Dagas de Umbra (crítico ×2.5),
+  Túnica del Sabio Errante (−25% PM), Amuleto del Fénix (revive una vez por combate).
+- **Botín:** 15% en combates normales, siempre en jefes (mínimo Raro), 50% en cofres.
+- **Inventario compartido** de 40 objetos en 🎒 Grupo → pestaña Equipo: al tocar un objeto se compara con lo
+  equipado (verde mejora, rojo empeora) y se puede Equipar, Vender (en una aldea) o Tirar.
+- **Armería de la aldea:** vende 4 objetos Comunes del nivel de la zona (se renuevan cada 400 pasos) y compra
+  equipo al 30% de su valor.
+- **Balance:** para compensar el equipo, el crecimiento de los enemigos por nivel subió de 13% a 15% (ATQ/DEF/MAG)
+  y de 30% a 35% (PV). A nivel 1 no cambia nada; a nivel 10 los enemigos son ~6–10% más duros.
+- Al morir todo el grupo también se pierde el equipo (puesto y del inventario).
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -129,7 +149,8 @@ public/js/data.js      Clases, habilidades, bestiario, objetos, biomas (también
 public/js/state.js     Estado compartido de la partida y fórmulas de héroes
 public/js/world.js     Ruido, chunks, aldeas/cofres/santuarios, spawns (determinista por semilla)
 public/js/render.js    Dibujo del mapa, otros jugadores, pines, globos y flechas
-public/js/battle.js    Combate por turnos
+public/js/battle.js    Combate por turnos, participación y efectos del equipo
+public/js/items.js     Equipo: tipos, rarezas, legendarios, nombres, botín y armería
 public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

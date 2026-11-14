@@ -15,13 +15,26 @@ export const held = [];
 held.clear = function () { this.length = 0; };
 
 // ================= Héroes =================
+// Suma de un stat en el equipo puesto (incluye % crítico, robo de vida, res. veneno)
+export function eqSum(h, k) { let s = 0; const e = h.equip; if (e) for (const sl in e) { const it = e[sl]; if (it && it.st && it.st[k]) s += it.st[k]; } return s; }
+// ¿Lleva puesto un legendario con este efecto?
+export function heroFx(h, fx) { const e = h && h.isHero && h.equip; if (e) for (const sl in e) if (e[sl] && e[sl].fx === fx) return true; return false; }
 export function hs(h, k) {
   const c = CL[h.cls];
-  return Math.round(c.b[k] + c.g[k] * (h.lvl - 1)) + (h.bonus[k] || 0) + (k === 'atk' ? G.upA * 2 : k === 'def' ? G.upD * 2 : 0);
+  return Math.round(c.b[k] + c.g[k] * (h.lvl - 1)) + (h.bonus[k] || 0) + (k === 'atk' ? G.upA * 2 : k === 'def' ? G.upD * 2 : 0) + eqSum(h, k);
 }
 export const S = (u, k) => u.isHero ? hs(u, k) : u[k];
+// Tras cambiar equipo, la vida/magia actual no puede pasar del nuevo máximo
+export function clampHero(h) { h.hp = Math.min(h.hp, hs(h, 'mhp')); h.mp = Math.min(h.mp, hs(h, 'mmp')); }
+// Cambia el equipo de un héroe: si sube el máximo de PV/PM, la vida/magia actual sube lo mismo (como al subir de nivel)
+export function changeEquip(h, fn) {
+  const om = hs(h, 'mhp'), omm = hs(h, 'mmp'); fn();
+  const dm = hs(h, 'mhp') - om, dmm = hs(h, 'mmp') - omm;
+  if (h.hp > 0 && dm > 0) h.hp += dm; if (dmm > 0) h.mp += dmm;
+  clampHero(h);
+}
 export function mkHero(cls, i) {
-  const h = { id: 'h' + i, isHero: true, cls, name: CL[cls].name, e: CL[cls].e, lvl: 1, xp: 0, hp: 0, mp: 0, bonus: {}, buffs: {}, poison: 0 };
+  const h = { id: 'h' + i, isHero: true, cls, name: CL[cls].name, e: CL[cls].e, lvl: 1, xp: 0, hp: 0, mp: 0, bonus: {}, buffs: {}, poison: 0, equip: {} };
   h.hp = hs(h, 'mhp'); h.mp = hs(h, 'mmp'); return h;
 }
 export const heroes = () => G.party.map(i => G.roster[i]);
@@ -48,10 +61,11 @@ export const startItems = () => ({ pocion: 3, eter: 1, pluma: 1 });
 // Se conserva: mapa explorado, aldeas descubiertas, cofres abiertos, jefes derrotados, grupo y líder.
 export function resetProgress() {
   G.gold = START_GOLD; G.items = startItems(); G.upA = 0; G.upD = 0;
-  for (const k of ['inventory', 'quests', 'boat']) delete G[k];            // campos de fases futuras
+  G.inventory = [];                                                        // equipo (fase B)
+  for (const k of ['quests', 'boat']) delete G[k];                         // campos de fases futuras
   for (const h of G.roster) {
-    h.lvl = 1; h.xp = 0; h.bonus = {}; h.buffs = {}; h.poison = 0; h.defending = false;
-    for (const k of ['equip', 'talents', 'adv']) delete h[k];              // campos de fases futuras
+    h.lvl = 1; h.xp = 0; h.bonus = {}; h.buffs = {}; h.poison = 0; h.defending = false; h.equip = {};
+    for (const k of ['talents', 'adv']) delete h[k];                       // campos de fases futuras
     h.hp = hs(h, 'mhp'); h.mp = hs(h, 'mmp');
   }
   G.lastVillage = { x: G.start.x, y: G.start.y };
