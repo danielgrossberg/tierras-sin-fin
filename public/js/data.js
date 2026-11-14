@@ -29,6 +29,7 @@ export const BG = {
   SWAMP: 'linear-gradient(#2c3a2c,#5a6b4c 44%,#384a2e 45%,#161f13)',
   SAND: 'linear-gradient(#6fbde8,#cfeaf5 44%,#e3cf93 45%,#a98f50)',
   ASH: 'linear-gradient(#1c080a,#5a1e1e 44%,#3a2626 45%,#0f0808)',
+  WATER: 'linear-gradient(#5aa9e6,#c4e6f5 44%,#2f6fa8 45%,#0f3354)',
 };
 
 // ================= Clases =================
@@ -100,6 +101,7 @@ export const EN = {
   esqueleto: { n: 'Esqueleto', e: '💀', hp: 26, atk: 13, def: 5, spd: 7, xp: 14, g: 12, undead: 1 },
   demonio: { n: 'Demonio', e: '👹', hp: 40, atk: 15, def: 6, mag: 10, spd: 8, xp: 20, g: 18, sk: ['fuego'], min: 4 },
   fantasma: { n: 'Fantasma', e: '👻', hp: 22, atk: 6, def: 2, mag: 13, spd: 9, xp: 13, g: 10, sk: ['drenar'], undead: 1, magic: 1 },
+  serpmar: { n: 'Serpiente Marina', e: '🐍', hp: 26, atk: 12, def: 4, spd: 9, xp: 12, g: 10, sk: ['veneno'], tint: 'hue-rotate(160deg) saturate(1.4)' },
   // Jefes
   ogro: { n: 'Ogro Rey', e: '👹', hp: 100, atk: 16, def: 6, mag: 4, spd: 5, xp: 85, g: 110, sk: ['brutal'], boss: 1, tint: 'hue-rotate(90deg)' },
   rex: { n: 'Tirano de Arena', e: '🦖', hp: 110, atk: 17, def: 6, spd: 6, xp: 95, g: 100, sk: ['brutal'], boss: 1 },
@@ -108,6 +110,9 @@ export const EN = {
   reyesq: { n: 'Rey Esqueleto', e: '💀', hp: 85, atk: 13, def: 7, mag: 12, spd: 7, xp: 85, g: 110, sk: ['drenar', 'fuego'], undead: 1, boss: 1, tint: 'drop-shadow(0 0 12px #ff3030)' },
 };
 export const POOL = { GRASS: ['rata', 'jabali', 'abeja', 'lobo'], FOREST: ['arana', 'lobo', 'oso', 'murcielago'], DESERT: ['escorpion', 'serpiente', 'momia'], SNOW: ['loboartico', 'osopolar', 'espectro'], SWAMP: ['sapo', 'cocodrilo', 'zombi'], SAND: ['cangrejo', 'serpiente', 'rata'], ASH: ['esqueleto', 'demonio', 'fantasma'] };
+// En el mar (con bote): encuentros al azar, menos frecuentes; muy rara vez el Kraken
+export const SEA_POOL = ['cangrejo', 'serpmar', 'serpmar'];
+export const BOAT_PRICE = 300;
 export const BOSS = { GRASS: 'ogro', FOREST: 'ogro', DESERT: 'rex', SNOW: 'dragon', SWAMP: 'kraken', SAND: 'kraken', ASH: 'reyesq' };
 
 // ================= Santuarios y nombres de aldeas =================

@@ -44,8 +44,12 @@ export function biomeAt(x, y) {
   return genTile(x, y).b;
 }
 export const isBlocked = (x, y) => blockT(tileAt(x, y));
-function vName(r) { return pick(SYL1, r) + pick(SYL2, r) + (r() < .3 ? ' ' + pick(VSUF, r) : ''); }
-function addFeat(type, x, y, extra) { const f = Object.assign({ type, x, y, id: type + '@' + x + ',' + y }, extra || {}); feats.set(x + ',' + y, f); return f; }
+// El jugador con bote puede navegar por el mar (las montañas siguen bloqueadas)
+export function playerBlocked(x, y) { const t = tileAt(x, y); return t.b === 'WATER' ? !G.boat : blockT(t); }
+// Aldea costera: hay mar a 3 casillas o menos
+export function isCoastal(f) { for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) if (tileAt(f.x + i, f.y + j).b === 'WATER') return true; return false; }
+export function vName(r) { return pick(SYL1, r) + pick(SYL2, r) + (r() < .3 ? ' ' + pick(VSUF, r) : ''); }
+export function addFeat(type, x, y, extra) { const f = Object.assign({ type, x, y, id: type + '@' + x + ',' + y }, extra || {}); feats.set(x + ',' + y, f); return f; }
 export function dangerAt(x, y) { return Math.max(1, Math.floor(1 + Math.hypot(x - START.x, y - START.y) / 14)); }
 
 // ================= Chunks: aldeas, cofres, santuarios y monstruos =================
@@ -89,6 +93,10 @@ function makeChunk(cx, cy) {
       for (let q = 0; q < mn; q++) group.push(pick(pool, r));
       c.spawns.push({ id: 'b@' + p.x + ',' + p.y, x: p.x, y: p.y, biome: p.t.b, lvl, group, boss: true });
     }
+  }
+  // Lugares creados por misiones (Fase C) que no existían en el mundo: se guardan en G.extraFeats
+  if (G.extraFeats) for (const f of G.extraFeats) {
+    if (Math.floor(f.x / CH) === cx && Math.floor(f.y / CH) === cy && !feats.has(f.x + ',' + f.y)) addFeat(f.type, f.x, f.y, f.name ? { name: f.name } : null);
   }
   return c;
 }

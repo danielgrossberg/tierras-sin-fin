@@ -7,7 +7,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -20,11 +20,18 @@ export function migrate(o) {
     o.inventory = o.inventory || [];
     for (const h of o.roster) h.equip = h.equip || {};
   }
+  if (v < 4) {
+    // Fase C: misiones, bote y aldeas descubiertas (Villa Origen siempre cuenta como descubierta)
+    o.quests = o.quests || []; o.qtrack = o.qtrack || null; o.board = o.board || {}; o.boat = !!o.boat; o.extraFeats = o.extraFeats || [];
+    o.vv = o.vv || {};
+    if (o.start) o.vv['village@' + o.start.x + ',' + o.start.y] = { x: o.start.x, y: o.start.y, name: 'Villa Origen' };
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
   for (const k of ['gold', 'upA', 'upD', 'steps', 'bosses']) o[k] = o[k] || 0;
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];
+  o.quests = Array.isArray(o.quests) ? o.quests : []; o.vv = o.vv || {}; o.board = o.board || {}; o.extraFeats = Array.isArray(o.extraFeats) ? o.extraFeats : [];
   for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; }
   o.saveVersion = SAVE_VERSION;
   return o;

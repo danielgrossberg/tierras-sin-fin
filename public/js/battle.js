@@ -9,6 +9,7 @@ import { CL, SK, IT, EN, BG } from './data.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, resetProgress, eqSum, heroFx } from './state.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
+import { onVictory } from './quests.js';
 import { updateHUD, toast } from './ui.js';
 import { save } from './storage.js';
 import { notice } from './net.js';
@@ -293,7 +294,9 @@ async function victory() {
       : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
   }
   if (party.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
-  monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps;
+  if (!m.sea) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }  // los del mar no se registran
+  // Misiones: cacerías y jefes
+  lines.push(...onVictory(BT.enemies, m));
   // Avisos para los demás jugadores de la sala
   const ups = heroes().filter((h, i) => h.lvl > before[i]).map(h => `${h.name} Nv ${h.lvl}`);
   if (ups.length) notice('level', ups.join(', '));

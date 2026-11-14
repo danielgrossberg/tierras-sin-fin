@@ -62,7 +62,8 @@ export const startItems = () => ({ pocion: 3, eter: 1, pluma: 1 });
 export function resetProgress() {
   G.gold = START_GOLD; G.items = startItems(); G.upA = 0; G.upD = 0;
   G.inventory = [];                                                        // equipo (fase B)
-  for (const k of ['quests', 'boat']) delete G[k];                         // campos de fases futuras
+  G.quests = []; G.qtrack = null; G.boat = false;                          // misiones activas y bote (fase C)
+  // Se conservan: G.vv (aldeas descubiertas para los portales), G.board y G.extraFeats
   for (const h of G.roster) {
     h.lvl = 1; h.xp = 0; h.bonus = {}; h.buffs = {}; h.poison = 0; h.defending = false; h.equip = {};
     for (const k of ['talents', 'adv']) delete h[k];                       // campos de fases futuras

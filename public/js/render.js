@@ -3,8 +3,9 @@
 import { $, hash, shade, EF } from './util.js';
 import { TILE, CH, B, EN } from './data.js';
 import { G, P, START, st, leader } from './state.js';
-import { getChunk, biomeAt, feats, monsters } from './world.js';
+import { getChunk, biomeAt, feats, monsters, tileAt } from './world.js';
 import { net } from './net.js';
+import { tracked, QICON } from './quests.js';
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
 let W = 0, H = 0, DPR = 1, Z = 1.3, vign = null;
@@ -179,6 +180,12 @@ export function draw(t) {
       ctx.globalAlpha = fade; label(pin.name, X, Y - TS * .78, 11, '#ffc2dc'); ctx.globalAlpha = 1;
     } });
   }
+  // Objetivo de la misión seguida (❗ sobre la casilla)
+  const tq = tracked();
+  if (tq && tq.target && tq.target.x >= x0 && tq.target.x <= x1 && tq.target.y >= y0 && tq.target.y <= y1) {
+    sprites.push({ y: tq.target.y + .02, fn: () => { const X = sx(tq.target.x), Y = sy(tq.target.y); emoji('❗', X, Y - TS * 1.05 - Math.abs(Math.sin(t / 250)) * 5, TS * .6); } });
+  }
+  const onWater = tileAt(P.x, P.y).b === 'WATER';
   // Otros jugadores
   const away = [];
   for (const o of net.others.values()) {
@@ -189,14 +196,14 @@ export function draw(t) {
       const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .45 : 1;
       shadow(X, Y + TS * .38, TS * .34);
       ctx.fillStyle = 'rgba(127,224,255,.22)'; ctx.beginPath(); ctx.ellipse(X, Y + TS * .38, TS * .42, TS * .15, 0, 0, 7); ctx.fill();
-      emoji(o.leaderEmoji || '🙂', X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), TS * .9, a);
+      emoji(o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), TS * .9, a);
       ctx.globalAlpha = a; label(statusIcon(o.status) + o.name, X, Y - TS * .72, 12, '#7fe0ff'); ctx.globalAlpha = 1;
     } });
   }
   // Jugador propio
   sprites.push({ y: P.py + .01, fn: () => {
     const X = sx(P.px), Y = sy(P.py); const moving = Math.abs(P.x - P.px) + Math.abs(P.y - P.py) > .03;
-    shadow(X, Y + TS * .38, TS * .34); ctx.save(); ctx.translate(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0)); if (P.face > 0) ctx.scale(-1, 1); emoji(leader().e, 0, 0, TS * .9); ctx.restore();
+    shadow(X, Y + TS * .38, TS * .34); ctx.save(); ctx.translate(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0)); if (P.face > 0) ctx.scale(-1, 1); emoji(onWater ? '⛵' : leader().e, 0, onWater ? Math.sin(t / 400) * 2 : 0, TS * (onWater ? 1 : .9)); ctx.restore();
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
   // Globos de mensajes rápidos (encima de todo)
@@ -208,5 +215,7 @@ export function draw(t) {
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
   if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏘️', `Villa Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  // Misión seguida (morado)
+  if (tq && tq.target) { const qx = sx(tq.target.x), qy = sy(tq.target.y); if (offscreen(qx, qy)) edgeArrow(qx, qy, QICON[tq.type], `Misión · ${Math.round(Math.hypot(tq.target.x - P.x, tq.target.y - P.y))} c`, '#c084fc', '#ead5ff', 1, placed); }
   for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, '#7fe0ff', '#bff0ff', o.online === false ? .5 : 1, placed);
 }

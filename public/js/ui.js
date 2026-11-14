@@ -1,9 +1,10 @@
 // Interfaz: HUD, toasts, avisos online, modales (aldea, grupo, mapa) y panel de la sala.
 'use strict';
 import { $, esc, dirArrow } from './util.js';
-import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK } from './data.js';
+import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip } from './state.js';
-import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage } from './world.js';
+import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround } from './world.js';
+import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
 import { INV_MAX, SLOTS, SLOT_KEYS, TYPES, RAR, STAT, LEGENDS, slotOf, canUse, sellPrice, buyPrice, statList, classesText, itemLabel, compare, addItem, shopStock, markBought } from './items.js';
 import { save } from './storage.js';
@@ -30,7 +31,8 @@ export function updateHUD() {
   $('#hud').innerHTML = heroes().map(h => { const mh = S(h, 'mhp'), mm = S(h, 'mmp'); return `<div class="mini ${h.hp <= 0 ? 'dead' : ''}"><span class="em emoji">${h.e}</span><div style="flex:1;min-width:0"><div class="nm">${h.name} <span class="mut">Nv ${h.lvl}</span> ${h.poison > 0 ? '☠️' : ''}</div><div class="bar"><i style="width:${100 * h.hp / mh}%"></i></div><div class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></div></div></div>`; }).join('');
   const b = tileAt(P.x, P.y).b;
   const n = [...net.others.values()].filter(o => o.online !== false).length;
-  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span class="mut">📍 ${P.x - START.x}, ${START.y - P.y}</span> · <span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`;
+  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span class="mut">📍 ${P.x - START.x}, ${START.y - P.y}</span> · <span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
+    + (tracked() ? `<div class="qline">${QICON[tracked().type]} ${tracked().title} · <b>${progressText(tracked())}</b></div>` : '');
   const badge = $('#socBadge'); if (badge) { badge.textContent = n ? n : ''; badge.classList.toggle('hidden', !n); }
 }
 
@@ -99,6 +101,7 @@ function villageRender() {
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
+  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div></div>
@@ -120,6 +123,17 @@ function villageAct(a, k) {
     }
   }
   if (a === 'togsell') VSELL = !VSELL;
+  // ---- Misiones, bote y portal (fase C) ----
+  if (a === 'qacc') {
+    const q = boardQuest(VF, +k);
+    if (q && accept(q)) { save('now'); VMSG = `📜 Aceptaste: <b>${q.title}</b>. La flecha morada te guía.`; }
+    else if (active().length >= MAX_ACTIVE) VMSG = `Ya tienes ${MAX_ACTIVE} misiones activas. Abandona o termina una primero.`;
+  }
+  if (a === 'boat' && !G.boat && G.gold >= BOAT_PRICE) { G.gold -= BOAT_PRICE; G.boat = true; save('now'); VMSG = '⛵ ¡Compraste un bote! Ahora puedes navegar por el mar (las montañas siguen bloqueadas).'; }
+  if (a === 'travel') {
+    const v = G.vv[k], cost = travelCost();
+    if (v && G.gold >= cost) { G.gold -= cost; closeModal(); travelTo(v); return; }
+  }
   if (a === 'selleq') { const it = G.inventory[+k]; if (it) { G.inventory.splice(+k, 1); G.gold += sellPrice(it); save('now'); VMSG = `Vendiste ${itemLabel(it)} por ${sellPrice(it)} de oro.`; } }
   if (a === 'tog') {
     const i = +k, ix = G.party.indexOf(i);
@@ -129,7 +143,43 @@ function villageAct(a, k) {
   }
   rerender();
 }
-export function openVillage(f) { VF = f; VMSG = ''; VSELL = false; G.lastVillage = G.lastVillage || { x: f.x, y: f.y }; openModal(villageRender, villageAct); }
+export function openVillage(f) {
+  VF = f; VMSG = ''; VSELL = false; G.lastVillage = G.lastVillage || { x: f.x, y: f.y };
+  G.vv = G.vv || {}; if (!G.vv[f.id]) G.vv[f.id] = { x: f.x, y: f.y, name: f.name };   // aldea descubierta (portales)
+  openModal(villageRender, villageAct);
+}
+
+// ---- Tablón de misiones ----
+function boardHTML(f) {
+  const n = active().length;
+  let rows = '';
+  for (let s = 0; s < SLOTS_PER_BOARD; s++) {
+    const q = boardQuest(f, s); if (!q) continue;
+    const on = isActive(q.id);
+    rows += `<div class="qrow"><div class="qi">${QICON[q.type]}</div><div class="qt"><b>${q.title}</b><small class="mut">${QNAME[q.type]} · Nv ${q.lvl} · ${q.desc}</small><small class="goldt">${rewardText(q.reward)}</small></div>
+      ${on ? '<span class="qon">✅ En curso</span>' : `<button class="btn sm" data-a="qacc" data-k="${s}" ${n >= MAX_ACTIVE ? 'disabled' : ''}>Aceptar</button>`}</div>`;
+  }
+  return `<div class="sec"><h3>📜 Tablón de misiones <small class="mut">${n}/${MAX_ACTIVE} activas</small></h3>${rows}</div>`;
+}
+// ---- Muelle (solo aldeas costeras) ----
+function dockHTML(f) {
+  if (!isCoastal(f)) return '';
+  return `<div class="sec"><h3>⛵ Muelle</h3><div class="shop"><span>${G.boat ? 'Ya tienes bote: camina hacia el mar para navegar.' : `<b>Bote</b> <small class="mut">navega por el mar (con encuentros marinos). Se pierde si cae todo el grupo.</small>`}</span>${G.boat ? '<span class="qon">✅ Tuyo</span>' : `<button class="btn sm" data-a="boat" ${G.gold < BOAT_PRICE ? 'disabled' : ''}>Comprar · ${BOAT_PRICE} oro</button>`}</div></div>`;
+}
+// ---- Portal: viajar a otra aldea ya visitada ----
+const travelCost = () => Math.round(5 * avgLvl());
+function portalHTML(f) {
+  const list = Object.entries(G.vv || {}).filter(([id]) => id !== f.id).map(([id, v]) => ({ id, v, d: Math.round(Math.hypot(v.x - f.x, v.y - f.y)) })).sort((a, b) => a.d - b.d);
+  const cost = travelCost();
+  return `<div class="sec"><h3>🌀 Portal <small class="mut">viaja a una aldea que ya visitaste · ${cost} oro</small></h3>
+    ${list.length ? list.map(({ id, v, d }) => `<div class="shop"><span>🏘️ <b>${v.name}</b> <small class="mut">${d} casillas al ${compass(v.x - f.x, v.y - f.y)}</small></span><button class="btn sm" data-a="travel" data-k="${id}" ${G.gold < cost ? 'disabled' : ''}>Viajar</button></div>`).join('')
+      : '<p class="mut small" style="margin:0">Visita otras aldeas para poder viajar entre ellas.</p>'}</div>`;
+}
+function travelTo(v) {
+  P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
+  toast(`🌀 Llegaste a ${v.name}`);
+  const f = feats.get(v.x + ',' + v.y); if (f) setTimeout(() => openVillage(f), 350);
+}
 
 // ================= Grupo (pestañas: Héroes · Equipo · Objetos) =================
 let PA = null, NGC = false, PT = 'heroes', PH = null, PI = null, PF = false;
@@ -193,11 +243,22 @@ function equipTab() {
   if (PI) h += detailHTML(sel);
   return h;
 }
+// ---- Registro de misiones ----
+let QD = null;   // misión a la que se tocó "Abandonar" una vez (pide confirmación)
+function questsTab() {
+  const list = active();
+  if (!list.length) return `<p class="mut small" style="margin-top:10px">No tienes misiones. Acepta hasta ${MAX_ACTIVE} en el 📜 tablón de cualquier aldea.</p>`;
+  return `<div class="qlog">${list.map(q => { const on = G.qtrack === q.id; return `<div class="qcard ${on ? 'on' : ''}">
+    <div class="qhead"><span class="qi">${QICON[q.type]}</span><div class="qt"><b>${q.title}</b><small class="mut">${QNAME[q.type]} · de ${q.from.name} · Nv ${q.lvl}</small></div><span class="qprog">${progressText(q)}</span></div>
+    <small class="goldt">${rewardText(q.reward)}</small>
+    <div class="qbtns"><button class="btn sm ${on ? 'gold' : ''}" data-a="qtrack" data-k="${q.id}" ${on ? 'disabled' : ''}>${on ? '🎯 Siguiendo' : '🎯 Seguir'}</button><button class="btn sm" data-a="qdrop" data-k="${q.id}">${QD === q.id ? '⚠️ ¿Abandonar? Toca otra vez' : 'Abandonar'}</button></div></div>`; }).join('')}</div>
+  <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
+}
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos']];
+  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['quests', `📜 Misiones <small>${active().length}</small>`]];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
-  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : heroesTab();
+  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : heroesTab();
   h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button><button class="btn" data-a="newgame">${NGC ? '⚠️ ¿Seguro? Se borra la partida' : 'Nueva partida'}</button><button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;
 }
@@ -206,7 +267,9 @@ async function partyAct(a, k) {
   if (a === 'close') { PA = null; PI = null; closeModal(); return; }
   if (a === 'exit') { PA = null; PI = null; closeModal(); if (hooks.onExit) hooks.onExit(); return; }
   if (a === 'newgame') { if (!NGC) { NGC = true; rerender(); return; } NGC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return; }
-  if (a === 'tab') { PT = k; PI = null; PA = null; }
+  if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; }
+  if (a === 'qtrack') track(k);
+  if (a === 'qdrop') { if (QD !== k) QD = k; else { abandon(k); QD = null; save(); } }
   if (a === 'cancel') PA = null;
   if (a === 'leader') G.leader = +k;
   if (a === 'fskill') {
@@ -277,7 +340,7 @@ export function openBossConfirm(m, onFight) {
 // ================= Mapa =================
 function mapRender() {
   return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">Solo se ve lo que has explorado. Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
-  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
+  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
   <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
 }
 function drawMinimap() {
@@ -298,6 +361,7 @@ function drawMinimap() {
   const edge = (x, y, col, s) => { const i = Math.max(2, Math.min(N - 3, x - P.x + R)), j = Math.max(2, Math.min(N - 3, y - P.y + R)); g.fillStyle = '#000'; g.fillRect(i - s, j - s, s * 2 + 1, s * 2 + 1); g.fillStyle = col; g.fillRect(i - s + 1, j - s + 1, s * 2 - 1, s * 2 - 1); };
   const now = Date.now();
   for (const p of net.pins.values()) if (p.until > now) edge(p.x, p.y, '#ff5fa2', 2);
+  const tq = tracked(); if (tq && tq.target) edge(tq.target.x, tq.target.y, '#c084fc', 2);
   for (const o of net.others.values()) if (o.status && o.status !== 'lobby' && o.status !== 'away') edge(o.x, o.y, '#7fe0ff', 2);
   g.fillStyle = '#000'; g.fillRect(R - 2, R - 2, 5, 5); g.fillStyle = '#fff'; g.fillRect(R - 1, R - 1, 3, 3);
 }

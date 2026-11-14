@@ -1,15 +1,16 @@
 // Arranque: pantalla de inicio (sala + héroes), movimiento en el mapa, entrada y loop principal.
 'use strict';
 import { $, esc, pick, roomSeed, cleanName } from './util.js';
-import { CL, B, IT, CH, BOONS, CODE_ALPHABET } from './data.js';
+import { CL, B, IT, CH, BOONS, CODE_ALPHABET, SEA_POOL } from './data.js';
 import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_GOLD, startItems } from './state.js';
-import { resetWorld, findStart, tileAt, feats, mpos, monsters, isBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
+import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
 import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
+import { onArrive, clearQuestCache } from './quests.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -20,7 +21,7 @@ function move(dir) {
   const m = mpos.get(nx + ',' + ny);
   if (m && !inVillage()) { if (m.boss) openBossConfirm(m, startBattle); else startBattle(m); return; }
   if (m) return;
-  if (isBlocked(nx, ny)) return;
+  if (playerBlocked(nx, ny)) return;   // con bote se puede navegar por el mar
   P.x = nx; P.y = ny; G.steps++;
   visitAround();
   if (G.steps % 20 === 0 || Math.floor(nx / CH) !== Math.floor((nx - dx) / CH) || Math.floor(ny / CH) !== Math.floor((ny - dy) / CH)) spawnNearby();
@@ -32,9 +33,21 @@ function move(dir) {
     else if (f.type === 'chest' && !G.opened[f.id]) openChest(f);
     else if (f.type === 'shrine' && !G.opened[f.id]) useShrine(f);
   }
+  // Misiones de entrega y exploración: se cumplen al pisar el lugar
+  const done = onArrive(nx, ny);
+  if (done.length) { feed(done.join('<br>')); save('now'); }
   const hit = moveMonsters(); updateHUD();
   if (hit && !st.busy) startBattle(hit);
+  // En el mar: encuentros al azar (menos frecuentes que en tierra)
+  else if (b === 'WATER' && !st.busy && Math.random() < 1 / 26) seaEncounter();
   if (G.steps % 15 === 0) save();
+}
+function seaEncounter() {
+  const lvl = dangerAt(P.x, P.y), kraken = lvl >= 3 && Math.random() < 1 / 40;
+  const n = 1 + Math.floor(Math.random() * (lvl >= 4 ? 3 : 2));
+  const m = { id: 'sea@' + P.x + ',' + P.y + '#' + G.steps, sea: true, x: P.x, y: P.y, biome: 'WATER', lvl: kraken ? lvl + 1 : lvl, boss: kraken,
+    group: kraken ? ['kraken', pick(SEA_POOL)] : Array.from({ length: n }, () => pick(SEA_POOL)) };
+  if (kraken) openBossConfirm(m, startBattle); else startBattle(m);
 }
 function openChest(f) {
   G.opened[f.id] = 1; const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
@@ -123,16 +136,18 @@ function enterWorld() {
   updateHUD(); updatePlayersUI(); save('now');
 }
 function newGame(sel) {
-  st.seed = roomSeed(st.room); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
+  st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, inventory: [], seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Villa Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
 }
 function continueGame(s) {
-  setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
+  clearQuestCache(); setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
   if (!G.start) G.start = { x: START.x, y: START.y };
+  G.vv = G.vv || {}; const sid = 'village@' + START.x + ',' + START.y;   // Villa Origen siempre está en el portal
+  if (!G.vv[sid]) G.vv[sid] = { x: START.x, y: START.y, name: 'Villa Origen' };
   P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
 }
 

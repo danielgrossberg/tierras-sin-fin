@@ -116,6 +116,21 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   y de 30% a 35% (PV). A nivel 1 no cambia nada; a nivel 10 los enemigos son ~6–10% más duros.
 - Al morir todo el grupo también se pierde el equipo (puesto y del inventario).
 
+### Fase C (lista): misiones, bote y portales
+- **Tablón de misiones** en cada aldea: 3 misiones generadas de forma determinista por aldea (mismas para todos
+  los jugadores de la sala); cada puesto se renueva al completar su misión. Máximo 5 activas.
+  - 🏹 **Caza:** derrota N monstruos de la zona. · ✉️ **Entrega:** lleva una carta a una aldea a 40–120 casillas
+    (si no hay una, se crea). · 🧭 **Exploración:** encuentra un santuario a 20–70 casillas. · 👑 **Jefe:** derrota
+    al jefe más cercano de la región.
+  - Recompensas de oro, experiencia (repartida entre el grupo) y probabilidad de equipo, según el peligro del objetivo.
+  - **Registro de misiones** en 🎒 Grupo → 📜 Misiones (Seguir / Abandonar). La misión seguida aparece en el HUD,
+    con una flecha morada en el borde de la pantalla, un ❗ sobre el objetivo y una marca en el mapa.
+- **Bote ⛵:** se compra por 300 de oro en aldeas costeras (mar a 3 casillas o menos). Permite navegar por el mar
+  (las montañas siguen bloqueadas), con encuentros marinos (cangrejos, serpientes marinas y, muy rara vez, el Kraken,
+  que siempre pide confirmación). Se pierde si cae todo el grupo.
+- **Portales 🌀:** cada aldea visitada queda registrada; desde cualquier aldea se puede viajar a otra ya visitada por
+  5 × nivel promedio en oro. Las aldeas descubiertas se conservan al morir.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -151,6 +166,7 @@ public/js/world.js     Ruido, chunks, aldeas/cofres/santuarios, spawns (determin
 public/js/render.js    Dibujo del mapa, otros jugadores, pines, globos y flechas
 public/js/battle.js    Combate por turnos, participación y efectos del equipo
 public/js/items.js     Equipo: tipos, rarezas, legendarios, nombres, botín y armería
+public/js/quests.js    Misiones de aldea: generación determinista, progreso y recompensas
 public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

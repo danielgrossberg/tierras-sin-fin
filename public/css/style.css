@@ -297,3 +297,24 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .ibtns .btn{min-height:46px}
 .ibtns .btn:only-child{grid-column:1/-1}
 .ishop{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+
+/* ===== Etapa 2 · Fase C: misiones, muelle y portal ===== */
+.tabs{grid-template-columns:repeat(4,1fr)}
+.tab{font-size:13px;padding:4px 2px}
+@media (max-width:400px){.tab small{display:none}}
+.qline{margin-top:3px;padding-top:3px;border-top:1px solid #ffffff14;color:#ead5ff;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qline b{color:#c084fc}
+.qrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #ffffff10}
+.qrow:last-child{border-bottom:0}
+.qi{font-size:22px;width:30px;text-align:center;flex:none}
+.qt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.qt small{font-size:12px;line-height:1.35}
+.qon{font-size:12px;color:var(--ok);white-space:nowrap}
+.qrow .btn{min-height:40px}
+.qlog{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.qcard{background:var(--panel2);border:1px solid var(--line);border-left:5px solid #c084fc55;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.qcard.on{border-color:#c084fc;border-left-color:#c084fc;box-shadow:0 0 0 1px #c084fc55}
+.qhead{display:flex;align-items:center;gap:8px}
+.qprog{font-weight:800;color:#c084fc;white-space:nowrap}
+.qbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.qbtns .btn{min-height:42px}
