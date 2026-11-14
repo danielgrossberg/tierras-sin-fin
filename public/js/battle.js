@@ -229,7 +229,7 @@ export async function startBattle(m) {
   if (res === 'win') await victory();
   else if (res === 'lose') await defeat();
   else m.stun = 5;
-  $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save();
+  $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
 }
 async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0); const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4));
@@ -259,7 +259,7 @@ async function defeat() {
   await waitButton('Volver a empezar');
   resetProgress();
   BT.m.stun = 8; P.x = P.px = START.x; P.y = P.py = START.y; spawnNearby(); visitAround();
-  save();                                   // guardar de inmediato el estado reiniciado
+  save('now');                                 // guardar de inmediato el estado reiniciado
   notice('death', 'Villa Origen');
   setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Tu grupo vuelve a empezar desde nivel 1</span>'), 400);
 }

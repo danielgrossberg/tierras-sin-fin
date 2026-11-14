@@ -82,7 +82,7 @@ function bubble(txt, x, y) {
   ctx.fillStyle = '#1a1f36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx + w / 2, by + h / 2 + 1);
 }
 const statusIcon = s => s === 'battle' ? '⚔️ ' : s === 'village' ? '🏘️ ' : '';
-const visibleOther = o => o.status && o.status !== 'lobby' && Number.isFinite(o.px);
+const visibleOther = o => o.status && o.status !== 'lobby' && o.status !== 'away' && Number.isFinite(o.px);
 
 // Rectángulos del HUD (se leen del DOM cada medio segundo, no en cada frame)
 let hudRects = [], hudT = 0;

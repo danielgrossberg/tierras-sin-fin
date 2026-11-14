@@ -57,6 +57,10 @@
       <p class="mut intro">Un mundo que se va creando mientras lo exploras. Juega con tus amigos: compartan una sala y se verán en el mapa.</p>
       <label class="lbl" for="nameIn">Tu nombre</label>
       <input id="nameIn" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Ej: Dani">
+      <div id="pinRow" class="hidden">
+        <label class="lbl" for="pinIn">PIN de 4 dígitos <span class="mut">· protege tu personaje y te deja jugar desde otro celular</span></label>
+        <input id="pinIn" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="• • • •">
+      </div>
       <button id="createBtn" class="btn gold big">✨ Crear sala nueva</button>
       <div class="or"><span>o únete a la sala de un amigo</span></div>
       <div class="row join">

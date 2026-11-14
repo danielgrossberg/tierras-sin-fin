@@ -248,3 +248,8 @@ input:focus{outline:2px solid var(--gold);outline-offset:1px}
 .xpn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .xpr .bar{margin-top:0;height:7px}
 @media (hover:hover) and (pointer:fine) and (max-width:520px){#dock .lb .mut{display:none}}
+
+/* ===== Etapa 2 · Fase A: PIN ===== */
+#pinRow{display:flex;flex-direction:column;gap:8px}
+#pinRow input{width:100%}
+input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}

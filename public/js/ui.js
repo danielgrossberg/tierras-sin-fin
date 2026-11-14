@@ -42,11 +42,11 @@ export function playersHTML(onlyOthers) {
     rows.push(`<div class="prow me"><span class="emoji pe">${leader().e}</span><div class="pi"><b>${esc(st.name)}</b> <span class="mut">(tú) · Nv ${avgLvl().toFixed(1)}</span><div class="mut ps">${B[b].i} ${B[b].n}</div></div></div>`);
   }
   for (const o of net.others.values()) {
-    const lobby = o.status === 'lobby', off = o.online === false;
+    const away = o.status === 'away', lobby = o.status === 'lobby' || away, off = o.online === false;
     const bi = B[o.biome] || B.GRASS;
     const where = lobby ? '' : `${bi.i} ${bi.n}`;
     const dist = !lobby && st.inGame ? `<span class="pd">${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c ${dirArrow(o.x - P.x, o.y - P.y)}</span>` : '';
-    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${off ? '📴 desconectado' : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
+    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
   }
   if (!rows.length || (rows.length === 1 && !onlyOthers && st.inGame)) rows.push(`<div class="mut pempty">${st.online ? 'Comparte el código <b>' + esc(st.room) + '</b> para que tu amigo entre.' : 'Modo sin conexión.'}</div>`);
   return rows.join('');
@@ -101,9 +101,9 @@ function villageRender() {
 function villageAct(a, k) {
   VMSG = '';
   if (a === 'close') { closeModal(); return; }
-  if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y }; save(); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.'; }
-  if (a === 'buy') { if (G.gold >= IT[k].p) { G.gold -= IT[k].p; G.items[k]++; } }
-  if (a === 'upA' || a === 'upD') { const key = a === 'upA' ? 'upA' : 'upD', c = upCost(G[key]); if (G.gold >= c) { G.gold -= c; G[key]++; VMSG = a === 'upA' ? '🗡️ ¡Armas afiladas!' : '🛡️ ¡Armaduras reforzadas!'; } }
+  if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y }; save('now'); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.'; }
+  if (a === 'buy') { if (G.gold >= IT[k].p) { G.gold -= IT[k].p; G.items[k]++; save('now'); } }
+  if (a === 'upA' || a === 'upD') { const key = a === 'upA' ? 'upA' : 'upD', c = upCost(G[key]); if (G.gold >= c) { G.gold -= c; G[key]++; save('now'); VMSG = a === 'upA' ? '🗡️ ¡Armas afiladas!' : '🛡️ ¡Armaduras reforzadas!'; } }
   if (a === 'tog') {
     const i = +k, ix = G.party.indexOf(i);
     if (ix >= 0) { if (G.party.length > 1) G.party.splice(ix, 1); else VMSG = 'Necesitas al menos un héroe en el grupo.'; }
@@ -210,7 +210,7 @@ function drawMinimap() {
   const edge = (x, y, col, s) => { const i = Math.max(2, Math.min(N - 3, x - P.x + R)), j = Math.max(2, Math.min(N - 3, y - P.y + R)); g.fillStyle = '#000'; g.fillRect(i - s, j - s, s * 2 + 1, s * 2 + 1); g.fillStyle = col; g.fillRect(i - s + 1, j - s + 1, s * 2 - 1, s * 2 - 1); };
   const now = Date.now();
   for (const p of net.pins.values()) if (p.until > now) edge(p.x, p.y, '#ff5fa2', 2);
-  for (const o of net.others.values()) if (o.status && o.status !== 'lobby') edge(o.x, o.y, '#7fe0ff', 2);
+  for (const o of net.others.values()) if (o.status && o.status !== 'lobby' && o.status !== 'away') edge(o.x, o.y, '#7fe0ff', 2);
   g.fillStyle = '#000'; g.fillRect(R - 2, R - 2, 5, 5); g.fillStyle = '#fff'; g.fillRect(R - 1, R - 1, 3, 3);
 }
 export function openMap() { openModal(mapRender, a => { if (a === 'close') closeModal(); }, drawMinimap); }
@@ -233,5 +233,5 @@ export function initUI(h) {
   $('#bParty').onclick = () => { if (!st.busy) openParty(); };
   $('#bMap').onclick = () => { if (!st.busy) openMap(); };
   $('#bSocial').onclick = () => toggleSocial();
-  $('#bSave').onclick = () => { toast(save() ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador'); };
+  $('#bSave').onclick = () => { toast(save('now') ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador'); };
 }

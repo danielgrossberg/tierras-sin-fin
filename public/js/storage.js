@@ -1,6 +1,7 @@
 // Guardado local (localStorage). Todo en try/catch: si falla, se juega igual.
 'use strict';
 import { G, P, st } from './state.js';
+import { pushSave } from './net.js';
 
 export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
@@ -23,11 +24,18 @@ export function migrate(o) {
   return o;
 }
 
-export function save() {
+// Guarda en el celular y, si hay guardado en servidor, programa la subida.
+// mode: 'soon' (por defecto, junta cambios ~10 s), 'now' (~2 s) o 'urgent' (inmediato).
+export function save(mode) {
   if (!st.inGame || !st.room) return false;
-  try { G.pos = { x: P.x, y: P.y }; localStorage.setItem(saveKey(st.room, st.name), JSON.stringify(G)); return true; }
-  catch (e) { return false; }
+  G.pos = { x: P.x, y: P.y }; G.savedAt = Date.now(); G.saveVersion = SAVE_VERSION;
+  let ok = true;
+  try { localStorage.setItem(saveKey(st.room, st.name), JSON.stringify(G)); } catch (e) { ok = false; }
+  pushSave(mode || 'soon');
+  return ok;
 }
+// Escribe una partida (por ejemplo la que vino del servidor) como respaldo local
+export function writeLocal(code, name, data) { try { localStorage.setItem(saveKey(code, name), JSON.stringify(data)); } catch (e) { /* nada */ } }
 export function loadGame(code, name) {
   try {
     const s = localStorage.getItem(saveKey(code, name));

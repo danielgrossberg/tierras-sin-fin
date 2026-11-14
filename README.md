@@ -1,4 +1,4 @@
-# ⚔️ Tierras Sin Fin Online (Etapa 1)
+# ⚔️ Tierras Sin Fin Online
 
 RPG de exploración infinita para jugar desde el celular con amigos (pensado para 2, soporta hasta 4 por sala).
 Cada jugador explora por su cuenta dentro del **mismo mundo**: se ven en el mapa, saben dónde está el otro,
@@ -6,7 +6,8 @@ se mandan mensajes rápidos y marcan lugares. Cada uno pelea sus propios combate
 
 - **Servidor:** Node.js 20+ con Express + Socket.io (un solo proceso; sirve los archivos y el websocket).
 - **Cliente:** HTML + CSS + JavaScript con ES modules nativos, sin frameworks ni build.
-- **Sin base de datos:** las salas viven en memoria y el progreso se guarda en el celular (`localStorage`).
+- **Guardado:** siempre en el celular (`localStorage`). Si se configura `DATABASE_URL` (Neon), además se
+  guarda en el servidor y se puede seguir jugando desde otro celular (ver "Guardado en servidor con Neon").
 
 ## Cómo correrlo localmente
 
@@ -84,10 +85,42 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Guardado versionado:** las partidas llevan `saveVersion`, y `migrate()` en `public/js/storage.js`
   actualiza las partidas antiguas al cargarlas (las de la Etapa 1 siguen funcionando).
 
+### Fase A (lista): guardado en servidor
+- **Identidad sin correo:** código de sala + nombre + **PIN de 4 dígitos**. Si el nombre es nuevo en la sala,
+  se crea con ese PIN; si ya existe, hay que escribir su PIN (6 intentos fallidos bloquean ese nombre 10 minutos).
+  El PIN se guarda como hash `scrypt` con sal, nunca en texto plano.
+- **Cuándo se guarda en el servidor:** juntando cambios cada ~10 s, y de inmediato al descansar, comprar,
+  terminar un combate, morir, tocar 💾, minimizar la app o salir. localStorage queda como respaldo.
+- **Primera vez:** si el celular tiene una partida y el servidor no, se sube sola. Si ambos tienen,
+  se usa la más reciente.
+- El panel de la sala muestra a todos los jugadores registrados (los no conectados aparecen "💤 fuera de línea").
+  Máximo 4 conectados a la vez.
+
+## Guardado en servidor con Neon
+
+Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
+
+1. Entra a <https://neon.tech> y crea una cuenta (puede ser con GitHub).
+2. **New Project** → nombre `tierras-sin-fin` → región cercana (por ejemplo *AWS São Paulo* o *US East*).
+   ⚠️ Debe ser un **proyecto nuevo y exclusivo** del juego: no uses la base de datos de otro proyecto.
+3. En el panel del proyecto toca **Connect** y copia la **connection string**
+   (empieza con `postgresql://` y termina con `?sslmode=require`).
+4. En Render: tu servicio → **Environment** → **Add Environment Variable**:
+   - Key: `DATABASE_URL`
+   - Value: la connection string que copiaste
+   - **Save Changes** (Render redespliega solo).
+5. Comprueba en `https://<tu-servicio>.onrender.com/health` que diga `"db":"ok"`.
+   Las tablas `rooms` y `players` se crean solas al arrancar.
+
+**Probar sin base de datos (local):** `npm start` sin `DATABASE_URL` → `/health` dice `"db":"off"`, no se pide PIN
+y todo se guarda en el navegador. **Probar con base de datos (local):** `DATABASE_URL="postgresql://…" npm start`
+(puede ser la misma de Neon o un Postgres local; para `localhost` el SSL se desactiva solo).
+
 ## Estructura
 
 ```
-server.js              Express + Socket.io: salas, presencia, mensajes, pines y avisos
+server.js              Express + Socket.io: salas, presencia, mensajes, pines, avisos y guardado
+db.js                  Neon/Postgres: tablas, PIN (scrypt) y partidas (solo si hay DATABASE_URL)
 public/index.html      Pantallas (inicio, juego, combate, modales)
 public/manifest.json   "Agregar a pantalla de inicio" (sin service worker)
 public/css/style.css   Estilos mobile-first con zonas seguras (notch)
@@ -108,7 +141,8 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | Evento | Dirección | Datos |
 |---|---|---|
 | `room:create` | cliente → servidor (ack) | → `{ok, code}` |
-| `room:join` | cliente → servidor (ack) | `{code, name, rejoin}` → `{ok, players, pins, seed}` o `{ok:false, error}` ("Sala llena", "Sala no existe") |
+| `room:join` | cliente → servidor (ack) | `{code, name, pin, rejoin}` → `{ok, name, players, pins, seed, db, save}` o `{ok:false, error, needPin}` ("Sala llena", "Sala no existe", "PIN incorrecto") |
+| `save:push` | cliente → servidor (ack) | `{data}` (máx. 200 KB; no pisa una partida más nueva) → `{ok, stored}` |
 | `room:leave` | cliente → servidor | — |
 | `player:state` | cliente → servidor (≤ 8/s, solo si cambió) | `{x, y, leaderEmoji, avgLvl, biome, status:'map'\|'battle'\|'village'}` |
 | `players:update` | servidor → sala (≤ 10/s) | `{players:[…]}` |
@@ -119,9 +153,10 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 El servidor valida tipos, largos y frecuencias de todo lo que llega. Lo de la **Etapa 2**
 (`boss:invite`, `battle:join`, `battle:action`) está comentado en `server.js`, `net.js` y `battle.js`.
 
-## Limitaciones conocidas (Etapa 1)
+## Limitaciones conocidas
 
 - Monstruos, cofres y santuarios son individuales por jugador (si tú derrotas un monstruo, sigue vivo para tu amigo).
-- El progreso vive en el navegador de cada celular: si se borran los datos del sitio, se pierde la partida.
+- Sin `DATABASE_URL`, el progreso vive solo en el navegador: si se borran los datos del sitio, se pierde la partida.
+- El PIN queda recordado en el celular para entrar más rápido (solo en ese navegador).
 - Un mismo nombre en dos dispositivos dentro de la misma sala: el último en entrar reemplaza al anterior.
 - Si el servidor está caído al **abrir** la página, no carga (no hay service worker). Si se cae **durante** la partida, se sigue jugando y se reconecta solo.

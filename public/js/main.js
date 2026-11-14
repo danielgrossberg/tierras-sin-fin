@@ -7,8 +7,8 @@ import { resetWorld, findStart, tileAt, feats, mpos, monsters, isBlocked, visitA
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
-import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers } from './net.js';
-import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, SAVE_VERSION } from './storage.js';
+import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
+import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -113,7 +113,7 @@ function enterWorld() {
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
-  updateHUD(); updatePlayersUI(); save();
+  updateHUD(); updatePlayersUI(); save('now');
 }
 function newGame(sel) {
   st.seed = roomSeed(st.room); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
@@ -136,6 +136,7 @@ function showLobby(msg) {
   $('#title').classList.remove('hidden'); $('#scrLobby').classList.remove('hidden'); $('#scrHeroes').classList.add('hidden');
   const pr = loadPrefs(); if (!$('#nameIn').value && pr.name) $('#nameIn').value = pr.name;
   if (!$('#codeIn').value && pr.code) $('#codeIn').value = pr.code;
+  if (!$('#pinIn').value && pr.pin) $('#pinIn').value = pr.pin;
   lobbyMsg(msg || ''); lockLobby(false);
 }
 function lobbyMsg(html, kind) { const m = $('#lobbyMsg'); m.innerHTML = html; m.className = 'msg' + (kind ? ' ' + kind : ''); }
@@ -146,22 +147,37 @@ function readName() {
   if (!n) { lobbyMsg('Escribe tu nombre (máximo 12 caracteres).', 'err'); $('#nameIn').focus(); return null; }
   $('#nameIn').value = n; return n;
 }
+// PIN de 4 dígitos (solo cuando el servidor tiene guardado en base de datos)
+let dbOn = false;
+const readPin = () => { const p = $('#pinIn').value.trim(); return /^\d{4}$/.test(p) ? p : null; };
+function showPin(focus) { $('#pinRow').classList.remove('hidden'); if (focus) $('#pinIn').focus(); }
 const randomCode = () => Array.from({ length: 4 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
 const offlineHint = ' <button class="btn sm" id="offHint">Jugar sin conexión</button>';
 
 async function enterRoom(code, name) {
-  const r = await joinRoom(code, name, !!loadGame(code, name));
+  const pin = readPin();
+  const r = await joinRoom(code, name, !!loadGame(code, name), pin);
   if (!r.ok) {
     lockLobby(false);
+    if (r.needPin) { $('#codeIn').value = code; showPin(true); $('#pinIn').select(); }
     lobbyMsg(esc(r.error || 'No se pudo entrar a la sala.') + (r.timeout ? offlineHint : ''), 'err');
     const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click();
     return;
   }
-  st.room = code; st.name = name; st.online = true; savePrefs({ name, code }); showHeroes();
+  const canon = net.name || name;   // el servidor puede devolver el nombre con sus mayúsculas originales
+  // ¿Qué partida usar? La más reciente entre la del servidor y la de este celular.
+  const local = loadGame(code, canon) || (canon !== name ? loadGame(code, name) : null);
+  const server = net.serverSave ? migrate(net.serverSave) : null;
+  if (server && (!local || (server.savedAt || 0) >= (local.savedAt || 0))) writeLocal(code, canon, server);
+  else if (local) { writeLocal(code, canon, local); uploadSave(local); } // primera vez: se sube la partida local
+  st.room = code; st.name = canon; st.online = true; savePrefs({ name: canon, code, pin: pin || undefined });
+  $('#nameIn').value = canon; showHeroes();
+  if (net.db) feed('☁️ Tu partida se guarda en el servidor');
 }
 $('#createBtn').onclick = async () => {
   const name = readName(); if (!name) return;
   if (!available()) { lobbyMsg('No se pudo cargar la conexión con el servidor.' + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
+  if (dbOn && !readPin()) { showPin(true); lobbyMsg('Elige un PIN de 4 dígitos para proteger tu personaje.', 'err'); return; }
   lockLobby(true); lobbyMsg('Creando sala…');
   const r = await createRoom();
   if (!r.ok) { lockLobby(false); lobbyMsg(esc(r.error || 'No se pudo crear la sala.') + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
@@ -181,6 +197,10 @@ $('#offlineBtn').onclick = () => {
 };
 $('#codeIn').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); });
 $('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
+$('#pinIn').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
+$('#pinIn').addEventListener('keydown', e => { if (e.key === 'Enter') (readCode() ? $('#joinBtn') : $('#createBtn')).click(); });
+// ¿El servidor tiene guardado en base de datos? Si sí, se pide PIN.
+fetch('health', { cache: 'no-store' }).then(r => r.json()).then(h => { dbOn = h && h.db === 'ok'; if (dbOn) showPin(false); }).catch(() => { /* sin servidor: modo individual */ });
 
 // Selección de héroes (igual que en la referencia)
 let SEL = ['guerrero', 'maga', 'sanadora'];
@@ -217,15 +237,16 @@ $('#shareBtn').onclick = async () => {
 net.ev.players = () => { updatePlayersUI(); renderRoomInfo(); };
 net.ev.feed = html => feed(html);
 net.ev.status = () => { updateHUD(); updatePlayersUI(); renderRoomInfo(); };
+net.ev.saveData = () => st.inGame ? G : null;   // lo que se sube al servidor
 
 initUI({
   onNewGame: () => { removeGame(st.room, st.name); showHeroes(); },
-  onExit: () => { save(); leaveRoom(); showLobby(); },
+  onExit: () => { save('urgent'); leaveRoom(); showLobby(); },
 });
 
 // Autoguardado al minimizar o bloquear el celular; reconexión al volver
-document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); held.clear(); } else wake(); });
-addEventListener('pagehide', () => save());
+document.addEventListener('visibilitychange', () => { if (document.hidden) { save('urgent'); held.clear(); } else wake(); });
+addEventListener('pagehide', () => save('urgent'));
 addEventListener('resize', resize);
 
 resize();

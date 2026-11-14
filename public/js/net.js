@@ -8,7 +8,9 @@ import { P } from './state.js';
 export const net = {
   socket: null,
   status: 'off',        // 'on' conectado · 'wait' reconectando · 'off' sin conexión / modo individual
-  code: null, name: null, joined: false, replaced: false,
+  code: null, name: null, pin: null, joined: false, replaced: false,
+  db: false,            // true si el servidor guarda la partida (entró con PIN y hay base de datos)
+  serverSave: null,     // partida que devolvió el servidor al entrar
   others: new Map(),    // nombre → {name,x,y,px,py,leaderEmoji,avgLvl,biome,status,online,bubble}
   pins: new Map(),      // nombre → {name,x,y,until}
   myBubble: null,
@@ -58,18 +60,21 @@ async function onConnect() {
   if (!net.code || net.replaced) return;
   // Reconexión: volvemos a entrar a la sala (si el servidor se reinició, la recrea)
   const wasWaiting = net.status === 'wait';
-  const r = await ask('room:join', { code: net.code, name: net.name, rejoin: true });
+  const r = await ask('room:join', { code: net.code, name: net.name, pin: net.pin || undefined, rejoin: true });
   if (r.ok) {
+    net.db = !!r.db;
     applyPlayers(r.players || []); applyPins(r.pins || []); lastKey = ''; setStatus('on');
     if (wasWaiting) fire('feed', '🟢 Conexión recuperada');
+    if (owed) flushSave();   // subir lo que no se alcanzó a guardar mientras no había conexión
   } else { setStatus('wait'); fire('feed', '⚠️ ' + esc(r.error || 'No se pudo volver a la sala')); }
 }
 
 export async function createRoom() { return ask('room:create', {}); }
-export async function joinRoom(code, name, rejoin) {
-  const r = await ask('room:join', { code, name, rejoin: !!rejoin });
+export async function joinRoom(code, name, rejoin, pin) {
+  const r = await ask('room:join', { code, name, rejoin: !!rejoin, pin: pin || undefined });
   if (r.ok) {
-    net.code = code; net.name = name; net.joined = true; net.replaced = false;
+    net.code = code; net.name = r.name || name; net.pin = pin || null; net.joined = true; net.replaced = false;
+    net.db = !!r.db; net.serverSave = r.save || null;
     net.others.clear(); net.pins.clear(); applyPlayers(r.players || []); applyPins(r.pins || []);
     lastKey = ''; setStatus('on');
   }
@@ -78,6 +83,7 @@ export async function joinRoom(code, name, rejoin) {
 export function leaveRoom() {
   if (net.socket && net.joined && net.socket.connected) net.socket.emit('room:leave');
   net.joined = false; net.code = null; net.others.clear(); net.pins.clear(); net.myBubble = null;
+  net.db = false; net.serverSave = null; net.pin = null; owed = false; clearTimeout(saveTimer); saveTimer = null;
   setStatus('off'); fire('players');
 }
 // Al volver a la app (desbloquear el celular) o recuperar red, reconectar de inmediato
@@ -102,6 +108,27 @@ export function placePin(x, y) {
   else net.pins.set('(tú)', { name: 'Tú', x, y, until: Date.now() + PIN_TTL });
 }
 export function notice(type, text) { if (canSend()) net.socket.emit('event:notice', { type, text }); }
+
+// ================= Guardado en el servidor =================
+// mode 'soon': espera ~10 s juntando cambios · 'now': en ~2 s (descansar, combate, comerciar)
+// 'urgent': de inmediato (al minimizar la app o salir). net.ev.saveData entrega la partida actual.
+let saveTimer = null, lastPush = 0, owed = false;
+export function pushSave(mode) {
+  if (!net.db) return;
+  owed = true;
+  if (mode === 'urgent') { clearTimeout(saveTimer); flushSave(); return; }
+  if (mode === 'now') { clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, Math.max(0, 2000 - (Date.now() - lastPush))); return; }
+  if (!saveTimer) saveTimer = setTimeout(flushSave, 10000);
+}
+function flushSave() {
+  saveTimer = null;
+  if (!owed || !net.db || !canSend()) return;     // sigue pendiente: se sube al reconectar
+  const data = net.ev.saveData && net.ev.saveData(); if (!data) return;
+  owed = false; lastPush = Date.now();
+  net.socket.timeout(10000).emit('save:push', { data }, (err, r) => { if (err || !r || !r.ok) owed = true; });
+}
+// Sube una partida concreta (la primera vez: la que estaba solo en este celular)
+export function uploadSave(data) { if (net.db && canSend() && data) net.socket.timeout(10000).emit('save:push', { data }, () => {}); }
 
 // ================= Recepción =================
 function applyPlayers(list) {

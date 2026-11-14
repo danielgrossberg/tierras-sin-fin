@@ -1,7 +1,8 @@
-// Tierras Sin Fin Online — servidor (Etapa 1)
+// Tierras Sin Fin Online — servidor
 // Express sirve los archivos estáticos y Socket.io maneja salas, presencia y mensajes.
-// Las salas viven en memoria: no hay base de datos. El mundo NO se simula aquí;
-// cada cliente lo genera con la semilla que sale del código de sala.
+// La presencia vive en memoria. Si hay DATABASE_URL (Neon), además se guardan las salas,
+// los jugadores (nombre + PIN) y sus partidas; si no, todo queda en el navegador.
+// El mundo NO se simula aquí: cada cliente lo genera con la semilla del código de sala.
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import express from 'express';
 import { Server } from 'socket.io';
 import { roomSeed, cleanName } from './public/js/util.js';
 import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL } from './public/js/data.js';
+import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -20,12 +22,16 @@ const BIOMES = new Set(Object.keys(B));
 const EMOJIS = new Set(LEADER_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
 const NOTICE_TYPES = new Set(['level', 'boss', 'death']);
+const MAX_SAVE = 200 * 1024;                     // tamaño máximo de una partida guardada (bytes)
+const PIN_FAILS = 6, PIN_LOCK = 10 * 60 * 1000;  // intentos de PIN fallidos antes de bloquear 10 minutos
 
 // ================= HTTP =================
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.get('/healthz', (req, res) => res.type('text').send('ok'));
+// Para Render y para el cliente: indica si el guardado en servidor está activo
+app.get('/health', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true, db: db.status(), rooms: rooms.size }));
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
   setHeaders(res, file) {
@@ -36,11 +42,12 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 const server = http.createServer(app);
-const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000, maxHttpBufferSize: 4096 });
+const io = new Server(server, { pingInterval: 10000, pingTimeout: 8000, maxHttpBufferSize: 300 * 1024 }); // permite subir la partida (máx. 200 KB)
 
 // ================= Salas en memoria =================
 // rooms: código → { code, seed, players: Map(nombre → jugador), pins: Map(nombre → pin), emptySince, dirty }
 const rooms = new Map();
+const pinFails = new Map(); // "SALA|nombre" → {n intentos fallidos, t último intento}
 
 const isCode = c => typeof c === 'string' && /^[A-Z]{4}$/.test(c) && [...c].every(ch => CODE_ALPHABET.includes(ch));
 function newCode() {
@@ -51,11 +58,16 @@ function newCode() {
   return null;
 }
 function makeRoom(code) {
-  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), emptySince: Date.now(), dirty: false };
+  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), emptySince: Date.now(), dirty: false };
   rooms.set(code, room); return room;
 }
 const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online });
-const publicPlayers = room => [...room.players.values()].map(publicPlayer);
+// Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
+function publicPlayers(room) {
+  const list = [...room.players.values()].map(publicPlayer);
+  for (const n of room.members) if (!room.players.has(n)) list.push({ name: n, status: 'away', online: false });
+  return list;
+}
 function publicPins(room) {
   const now = Date.now();
   return [...room.pins.values()].filter(p => p.until > now).map(p => ({ name: p.name, x: p.x, y: p.y, ttl: p.until - now }));
@@ -110,30 +122,69 @@ function ctxOf(socket) {
 io.on('connection', socket => {
   socket.data.room = null; socket.data.name = null;
 
-  socket.on('room:create', (d, ack) => {
+  socket.on('room:create', async (d, ack) => {
     if (typeof ack !== 'function') return;
     if (!allow(socket, 'create', 3, 10000)) return ack({ ok: false, error: 'Demasiados intentos. Espera un momento.' });
     if (rooms.size >= MAX_ROOMS) return ack({ ok: false, error: 'El servidor está lleno. Intenta más tarde.' });
-    const code = newCode(); if (!code) return ack({ ok: false, error: 'No se pudo crear la sala.' });
+    let code = null;
+    for (let i = 0; i < 20 && !code; i++) {
+      const c = newCode(); if (!c) break;
+      try { if (db.isReady() && await db.roomExists(c)) continue; } catch (e) { /* sin base de datos: basta con la memoria */ }
+      code = c;
+    }
+    if (!code) return ack({ ok: false, error: 'No se pudo crear la sala.' });
     makeRoom(code);
+    if (db.isReady()) db.createRoom(code).catch(e => console.warn('No se pudo guardar la sala:', e.message));
     ack({ ok: true, code });
   });
 
-  socket.on('room:join', (d, ack) => {
+  socket.on('room:join', async (d, ack) => {
     if (typeof ack !== 'function') return;
     if (!allow(socket, 'join', 6, 10000)) return ack({ ok: false, error: 'Demasiados intentos. Espera un momento.' });
     if (!isObj(d)) return ack({ ok: false, error: 'Datos inválidos.' });
     const code = typeof d.code === 'string' ? d.code.toUpperCase() : '';
-    const name = cleanName(d.name);
+    let name = cleanName(d.name);
+    const pin = typeof d.pin === 'string' && /^\d{4}$/.test(d.pin) ? d.pin : null;
     if (!isCode(code)) return ack({ ok: false, error: 'Código de sala inválido.' });
     if (!name) return ack({ ok: false, error: 'Nombre inválido.' });
+
+    // ---- Identidad con PIN (solo si hay base de datos) ----
+    let row = null;
+    if (db.isReady()) {
+      try {
+        if (!rooms.has(code) && !(await db.roomExists(code))) {
+          // Sala desconocida: se recrea solo si el jugador ya tenía partida local en ella
+          if (d.rejoin === true) await db.createRoom(code); else return ack({ ok: false, error: 'Sala no existe.' });
+        }
+        const key = code + '|' + name.toLowerCase(), f = pinFails.get(key);
+        if (f && f.n >= PIN_FAILS && Date.now() - f.t < PIN_LOCK) return ack({ ok: false, needPin: true, error: 'Demasiados intentos de PIN. Espera 10 minutos.' });
+        row = await db.getPlayer(code, name);
+        if (row) {
+          if (!pin) return ack({ ok: false, needPin: true, error: `"${row.name}" ya existe en esta sala. Escribe su PIN de 4 dígitos.` });
+          if (!(await db.checkPin(pin, row.pin_hash))) {
+            const g = f && Date.now() - f.t < PIN_LOCK ? f : { n: 0, t: 0 }; g.n++; g.t = Date.now(); pinFails.set(key, g);
+            return ack({ ok: false, needPin: true, error: 'PIN incorrecto.' });
+          }
+          pinFails.delete(key);
+        } else {
+          if (!pin) return ack({ ok: false, needPin: true, newName: true, error: 'Elige un PIN de 4 dígitos para proteger tu personaje.' });
+          row = await db.createPlayer(code, name, await db.hashPin(pin));
+          if (!row) return ack({ ok: false, needPin: true, error: 'Ese nombre se acaba de registrar. Escribe su PIN.' });
+        }
+        name = row.name; // mismo nombre aunque se escriba con otras mayúsculas
+      } catch (e) { console.warn('Base de datos en room:join:', e.message); row = null; } // sigue sin guardado en servidor
+    }
+    if (!socket.connected) return;
+
     let room = rooms.get(code);
     if (!room) {
-      // Si el jugador ya tenía partida en esa sala (o se está reconectando), la recreamos:
-      // el mundo sale de la semilla del código, así que es el mismo aunque el servidor se haya reiniciado.
-      if (d.rejoin === true && rooms.size < MAX_ROOMS) room = makeRoom(code);
+      // Si la sala está en la base de datos, o el jugador ya tenía partida en ella (o se está reconectando),
+      // la recreamos: el mundo sale de la semilla del código, así que es el mismo aunque el servidor se haya reiniciado.
+      if ((row || d.rejoin === true) && rooms.size < MAX_ROOMS) room = makeRoom(code);
       else return ack({ ok: false, error: 'Sala no existe.' });
     }
+    if (row && !room.membersLoaded) { try { for (const n of await db.members(code)) room.members.add(n); room.membersLoaded = true; } catch (e) { /* nada */ } }
+    if (row) room.members.add(row.name);
     const existing = room.players.get(name);
     if (!existing && room.players.size >= MAX_PLAYERS) return ack({ ok: false, error: 'Sala llena.' });
     if (socket.data.room) leaveCurrent(socket, socket.data.room !== code);
@@ -141,19 +192,33 @@ io.on('connection', socket => {
     if (existing && existing.socketId && existing.socketId !== socket.id) {
       // El mismo nombre entra desde otra conexión: la nueva reemplaza a la vieja
       const old = io.sockets.sockets.get(existing.socketId);
-      if (old) { old.data.room = null; old.leave(code); old.emit('room:replaced'); }
+      if (old) { old.data.room = null; old.data.playerId = null; old.leave(code); old.emit('room:replaced'); }
     }
     if (existing) clearTimeout(existing.graceTimer);
     const p = existing || { name, x: 0, y: 0, leaderEmoji: LEADER_EMOJIS[0], avgLvl: 1, biome: 'GRASS', status: 'lobby' };
     p.socketId = socket.id; p.online = true; p.graceTimer = null;
     room.players.set(name, p); room.emptySince = null;
-    socket.join(code); socket.data.room = code; socket.data.name = name;
-    ack({ ok: true, code, seed: room.seed, players: publicPlayers(room), pins: publicPins(room) });
+    socket.join(code); socket.data.room = code; socket.data.name = name; socket.data.playerId = row ? row.id : null;
+    ack({ ok: true, code, name, seed: room.seed, players: publicPlayers(room), pins: publicPins(room),
+      db: !!row, save: row ? row.data : null });
     if (!existing) socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` });
     markDirty(room);
   });
 
   socket.on('room:leave', () => leaveCurrent(socket, true));
+
+  // Guardado de la partida en el servidor (si hay base de datos y el jugador entró con PIN)
+  socket.on('save:push', async (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const c = ctxOf(socket);
+    if (!c || !socket.data.playerId || !db.isReady()) return reply({ ok: false, error: 'Sin guardado en servidor.' });
+    if (!allow(socket, 'save', 6, 10000)) return reply({ ok: false, error: 'Guardado demasiado seguido.' });
+    if (!isObj(d) || !isObj(d.data) || !Array.isArray(d.data.roster) || !Array.isArray(d.data.party)) return reply({ ok: false, error: 'Partida inválida.' });
+    let json; try { json = JSON.stringify(d.data); } catch (e) { return reply({ ok: false, error: 'Partida inválida.' }); }
+    if (Buffer.byteLength(json) > MAX_SAVE) return reply({ ok: false, error: 'Partida demasiado grande.' });
+    try { const stored = await db.saveData(socket.data.playerId, json, Number(d.data.savedAt) || 0); reply({ ok: true, stored }); }
+    catch (e) { console.warn('save:push:', e.message); reply({ ok: false, error: 'Error de base de datos.' }); }
+  });
 
   // Estado del jugador (posición, líder, nivel, bioma, estado). El cliente manda ~8/s como máximo.
   socket.on('player:state', d => {
@@ -210,7 +275,9 @@ setInterval(() => {
       rooms.delete(code);
     }
   }
+  for (const [k, f] of pinFails) if (now - f.t > PIN_LOCK) pinFails.delete(k);
 }, 60 * 1000);
 
+db.init(); // no bloquea: si la base no responde, el juego funciona igual y se reintenta
 server.listen(PORT, () => console.log(`Tierras Sin Fin escuchando en http://localhost:${PORT}`));
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { io.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { io.close(); db.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });
