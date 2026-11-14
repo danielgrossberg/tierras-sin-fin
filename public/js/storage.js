@@ -55,6 +55,21 @@ export function loadGame(code, name) {
     return s ? migrate(JSON.parse(s)) : null;
   } catch (e) { return null; }
 }
+// Partidas guardadas en este navegador para un nombre (en cualquier sala), la más reciente primero
+export function listSaves(name) {
+  const out = [], low = String(name).toLowerCase();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i), m = /^tsf:([A-Z]{4}):(.+)$/.exec(k || '');
+      if (!m || m[2].toLowerCase() !== low) continue;
+      try {
+        const o = JSON.parse(localStorage.getItem(k));
+        if (o && Array.isArray(o.roster) && Array.isArray(o.party)) out.push({ code: m[1], name: m[2], savedAt: o.savedAt || 0, steps: o.steps || 0, heroes: o.roster.filter((_, j) => o.party.includes(j)).map(h => h.e + ' Nv ' + h.lvl).join(' · ') });
+      } catch (e) { /* partida dañada: se ignora */ }
+    }
+  } catch (e) { /* sin localStorage */ }
+  return out.sort((a, b) => b.savedAt - a.savedAt || b.steps - a.steps);
+}
 export function removeGame(code, name) { try { localStorage.removeItem(saveKey(code, name)); } catch (e) { /* nada */ } }
 export function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch (e) { return {}; } }
 export function savePrefs(p) { try { localStorage.setItem(PREFS, JSON.stringify(p)); } catch (e) { /* nada */ } }

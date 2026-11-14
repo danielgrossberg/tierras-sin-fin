@@ -8,7 +8,7 @@ import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
-import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
+import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onArrive, clearQuestCache } from './quests.js';
 
@@ -159,7 +159,7 @@ function showLobby(msg) {
   const pr = loadPrefs(); if (!$('#nameIn').value && pr.name) $('#nameIn').value = pr.name;
   if (!$('#codeIn').value && pr.code) $('#codeIn').value = pr.code;
   if (!$('#pinIn').value && pr.pin) $('#pinIn').value = pr.pin;
-  lobbyMsg(msg || ''); lockLobby(false);
+  lobbyMsg(msg || ''); lockLobby(false); $('#lobbyConfirm').innerHTML = '';
 }
 function lobbyMsg(html, kind) { const m = $('#lobbyMsg'); m.innerHTML = html; m.className = 'msg' + (kind ? ' ' + kind : ''); }
 function lockLobby(on) { for (const id of ['#createBtn', '#joinBtn', '#offlineBtn']) $(id).disabled = on; }
@@ -178,7 +178,9 @@ const offlineHint = ' <button class="btn sm" id="offHint">Jugar sin conexión</b
 
 async function enterRoom(code, name) {
   const pin = readPin();
-  const r = await joinRoom(code, name, !!loadGame(code, name), pin);
+  // ¿Hay partida local para esta sala? (sin importar mayúsculas en el nombre)
+  const mine = listSaves(name).find(x => x.code === code);
+  const r = await joinRoom(code, name, !!mine, pin);
   if (!r.ok) {
     lockLobby(false);
     if (r.needPin) { $('#codeIn').value = code; showPin(true); $('#pinIn').select(); }
@@ -188,7 +190,7 @@ async function enterRoom(code, name) {
   }
   const canon = net.name || name;   // el servidor puede devolver el nombre con sus mayúsculas originales
   // ¿Qué partida usar? La más reciente entre la del servidor y la de este celular.
-  const local = loadGame(code, canon) || (canon !== name ? loadGame(code, name) : null);
+  const local = loadGame(code, canon) || (canon !== name ? loadGame(code, name) : null) || (mine ? loadGame(code, mine.name) : null);
   const server = net.serverSave ? migrate(net.serverSave) : null;
   if (server && (!local || (server.savedAt || 0) >= (local.savedAt || 0))) writeLocal(code, canon, server);
   else if (local) { writeLocal(code, canon, local); uploadSave(local); } // primera vez: se sube la partida local
@@ -196,16 +198,37 @@ async function enterRoom(code, name) {
   $('#nameIn').value = canon; showHeroes();
   if (net.db) feed('☁️ Tu partida se guarda en el servidor');
 }
+// Si ya hay una partida guardada con este nombre, crear una sala nueva empieza desde cero en OTRO mundo:
+// se avisa y se pregunta (la partida anterior no se borra; sigue en su sala).
+let createOk = false;
+function warnNewRoom(name) {
+  const saves = listSaves(name); if (!saves.length) return false;
+  const s = saves[0], more = saves.length - 1;
+  $('#lobbyConfirm').innerHTML = `<div class="danger warn">
+    <b>⚠️ Ya tienes una partida como ${esc(s.name)}</b>
+    <p>Está en la sala <b>${s.code}</b> (${s.heroes} · ${s.steps} pasos)${more ? ` y tienes ${more} partida${more > 1 ? 's' : ''} más en otras salas` : ''}.</p>
+    <p>Si creas una sala nueva, <b>empiezas desde cero en otro mundo</b>: tus héroes, niveles, oro y equipo no se traspasan. Tu partida no se borra: para seguirla, entra con el código <b>${s.code}</b>.</p>
+    <p><b>¿Quieres crear una sala nueva igual?</b></p>
+    <div class="cfbtns"><button class="btn gold" id="lcKeep">No, seguir en ${s.code}</button><button class="btn dangerbtn" id="lcNew">Sí, crear sala nueva</button></div>
+  </div>`;
+  $('#lcKeep').onclick = () => { $('#lobbyConfirm').innerHTML = ''; $('#codeIn').value = s.code; $('#nameIn').value = s.name; $('#joinBtn').click(); };
+  $('#lcNew').onclick = () => { $('#lobbyConfirm').innerHTML = ''; createOk = true; $('#createBtn').click(); };
+  $('#lobbyConfirm').scrollIntoView({ block: 'center' });
+  return true;
+}
 $('#createBtn').onclick = async () => {
   const name = readName(); if (!name) return;
   if (!available()) { lobbyMsg('No se pudo cargar la conexión con el servidor.' + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
   if (dbOn && !readPin()) { showPin(true); lobbyMsg('Elige un PIN de 4 dígitos para proteger tu personaje.', 'err'); return; }
+  if (!createOk && warnNewRoom(name)) { lobbyMsg(''); return; }
+  createOk = false; $('#lobbyConfirm').innerHTML = '';
   lockLobby(true); lobbyMsg('Creando sala…');
   const r = await createRoom();
   if (!r.ok) { lockLobby(false); lobbyMsg(esc(r.error || 'No se pudo crear la sala.') + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
   lobbyMsg('Entrando a la sala…'); await enterRoom(r.code, name);
 };
 $('#joinBtn').onclick = async () => {
+  $('#lobbyConfirm').innerHTML = '';
   const name = readName(); if (!name) return;
   const code = readCode(); if (!code) { lobbyMsg('El código tiene 4 letras (sin O ni I). Ej: KTRX', 'err'); $('#codeIn').focus(); return; }
   if (!available()) { lobbyMsg('No se pudo cargar la conexión con el servidor.' + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
