@@ -29,7 +29,9 @@ app.get('/healthz', (req, res) => res.type('text').send('ok'));
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
   setHeaders(res, file) {
-    if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    // Código del juego: el navegador siempre pregunta si cambió (ETag), así tras cada deploy
+    // nadie queda con una mezcla de módulos viejos y nuevos. Los íconos sí se guardan 1 hora.
+    if (/\.(html|js|css|json)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
     if (file.endsWith('manifest.json')) res.setHeader('Content-Type', 'application/manifest+json');
   },
 }));
