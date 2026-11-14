@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Tierras Sin Fin</title>
+<meta name="description" content="RPG de exploración infinita para jugar con amigos desde el celular.">
+<meta name="theme-color" content="#0f1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tierras Sin Fin">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="world"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden"></div>
+<div id="topright" class="hidden">
+  <div id="info"></div>
+  <div id="plist"></div>
+</div>
+<div id="dock" class="hidden">
+  <button class="btn" id="bParty" aria-label="Grupo">🎒<span class="lb"> Grupo <span class="mut">(G)</span></span></button>
+  <button class="btn" id="bMap" aria-label="Mapa">🗺️<span class="lb"> Mapa <span class="mut">(M)</span></span></button>
+  <button class="btn" id="bSocial" aria-label="Mensajes y sala">💬<span class="lb"> Sala <span class="mut">(C)</span></span><span id="socBadge" class="badge hidden"></span></button>
+  <button class="btn" id="bSave" aria-label="Guardar">💾<span class="lb"> Guardar</span></button>
+</div>
+<div id="social" class="hidden"></div>
+<div id="toast"></div>
+<div id="feed"></div>
+<div id="dpad" class="hidden">
+  <span class="c"></span><button data-d="u" aria-label="Arriba">▲</button><span class="c"></span>
+  <button data-d="l" aria-label="Izquierda">◀</button><span class="c"></span><button data-d="r" aria-label="Derecha">▶</button>
+  <span class="c"></span><button data-d="d" aria-label="Abajo">▼</button><span class="c"></span>
+</div>
+
+<!-- Combate -->
+<div id="battle" class="hidden">
+  <div id="b-field"></div>
+  <div id="b-log"></div>
+  <div id="b-bottom"><div id="b-party"></div><div id="b-menu"></div></div>
+</div>
+
+<div id="modal" class="hidden"><div class="panel" id="mcontent"></div></div>
+
+<!-- Pantalla de inicio -->
+<div id="title">
+  <div class="panel tpanel">
+    <div class="logo">⚔️ Tierras Sin Fin</div>
+
+    <div id="scrLobby">
+      <p class="mut intro">Un mundo que se va creando mientras lo exploras. Juega con tus amigos: compartan una sala y se verán en el mapa.</p>
+      <label class="lbl" for="nameIn">Tu nombre</label>
+      <input id="nameIn" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Ej: Dani">
+      <button id="createBtn" class="btn gold big">✨ Crear sala nueva</button>
+      <div class="or"><span>o únete a la sala de un amigo</span></div>
+      <div class="row join">
+        <input id="codeIn" class="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CÓDIGO" aria-label="Código de sala">
+        <button id="joinBtn" class="btn big">Unirse</button>
+      </div>
+      <div id="lobbyMsg" class="msg"></div>
+      <div class="row center"><button id="offlineBtn" class="btn sm ghost">Jugar sin conexión</button></div>
+    </div>
+
+    <div id="scrHeroes" class="hidden">
+      <div class="roomhead">
+        <div>Sala <b id="roomCode" class="rcode"></b></div>
+        <button id="shareBtn" class="btn sm">📤 Compartir</button>
+      </div>
+      <div class="mut small" id="roomConn"></div>
+      <div class="small" id="roomPlayers"></div>
+      <div id="contWrap"></div>
+      <h3 style="margin:14px 0 2px">Elige hasta 3 héroes para tu grupo</h3>
+      <p class="mut small" style="margin:0">Los demás esperan en las tabernas de las aldeas, ganan la mitad de la experiencia y puedes cambiarlos cuando quieras.</p>
+      <div class="classes" id="clsel"></div>
+      <div class="row">
+        <button id="leaveBtn" class="btn">← Salir</button>
+        <button id="startBtn" class="btn gold" style="flex:1">Comenzar aventura</button>
+      </div>
+    </div>
+
+    <div class="help">Moverse: WASD o flechas (o la cruceta en el celular: mantén presionado) · G: grupo · M: mapa · C: sala<br>Combate: toca las opciones o teclas 1–9 · Las aldeas 🏘️ son seguras: posada, tienda, herrería y taberna</div>
+  </div>
+</div>
+
+<!-- Socket.io lo sirve el mismo servidor; si no carga, el juego sigue en modo individual -->
+<script src="socket.io/socket.io.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+npm-debug.log*
+.env
+.DS_Store
+Thumbs.db
+
+# Notas locales del encargo (mencionan otros proyectos)
+PROMPT_tierras-sin-fin-online.md

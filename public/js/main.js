@@ -1,0 +1,233 @@
+// Arranque: pantalla de inicio (sala + héroes), movimiento en el mapa, entrada y loop principal.
+'use strict';
+import { $, esc, pick, roomSeed, cleanName } from './util.js';
+import { CL, B, IT, CH, BOONS, CODE_ALPHABET } from './data.js';
+import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader } from './state.js';
+import { resetWorld, findStart, tileAt, feats, mpos, monsters, isBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
+import { resize, draw, clearCanvas } from './render.js';
+import { startBattle, getBT } from './battle.js';
+import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
+import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers } from './net.js';
+import { save, loadGame, removeGame, loadPrefs, savePrefs } from './storage.js';
+
+// ================= Movimiento en el mapa =================
+const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
+let lastBiome = null, lastToastStep = -99;
+function move(dir) {
+  const [dx, dy] = DIRS[dir]; if (dx) P.face = dx;
+  const nx = P.x + dx, ny = P.y + dy;
+  const m = mpos.get(nx + ',' + ny);
+  if (m && !inVillage()) { startBattle(m); return; }
+  if (m) return;
+  if (isBlocked(nx, ny)) return;
+  P.x = nx; P.y = ny; G.steps++;
+  visitAround();
+  if (G.steps % 20 === 0 || Math.floor(nx / CH) !== Math.floor((nx - dx) / CH) || Math.floor(ny / CH) !== Math.floor((ny - dy) / CH)) spawnNearby();
+  const b = tileAt(P.x, P.y).b;
+  if (b !== lastBiome) { if (G.steps - lastToastStep > 6) { toast(`${B[b].i} ${B[b].n}<br><span style="font-size:13px;color:#cfd5ea">Peligro: Nv ~${dangerAt(P.x, P.y)}</span>`); lastToastStep = G.steps; } lastBiome = b; }
+  const f = feats.get(nx + ',' + ny);
+  if (f) {
+    if (f.type === 'village') openVillage(f);
+    else if (f.type === 'chest' && !G.opened[f.id]) openChest(f);
+    else if (f.type === 'shrine' && !G.opened[f.id]) useShrine(f);
+  }
+  const hit = moveMonsters(); updateHUD();
+  if (hit && !st.busy) startBattle(hit);
+  if (G.steps % 15 === 0) save();
+}
+function openChest(f) {
+  G.opened[f.id] = 1; const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
+  if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
+  else { const k = r < .8 ? 'pocion' : r < .93 ? 'eter' : 'pluma', n = k === 'pocion' ? 2 : 1; G.items[k] += n; toast(`📦 Cofre: ${IT[k].e} ${IT[k].n} ×${n}`); }
+  save();
+}
+function useShrine(f) {
+  G.opened[f.id] = 1; const b = pick(BOONS); for (const h of G.roster) h.bonus[b[0]] = (h.bonus[b[0]] || 0) + b[1];
+  for (const h of heroes()) if (h.hp > 0) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; }
+  toast(`⛩️ Santuario antiguo<br><span style="font-size:14px">${b[2]} para todos los héroes · grupo restaurado</span>`); save();
+}
+// Estado que ven los demás
+const curStatus = () => getBT() ? 'battle' : (inVillage() || modalIs('village')) ? 'village' : 'map';
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus() });
+
+// ================= Entrada: teclado =================
+const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
+addEventListener('keydown', e => {
+  if (st.titleOpen || e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (getBT()) {
+    const n = parseInt(k, 10); const btns = [...document.querySelectorAll('#b-menu button')];
+    if (n >= 1 && n <= 9 && btns[n - 1] && !btns[n - 1].disabled) { btns[n - 1].click(); e.preventDefault(); }
+    else if ((k === 'enter' || k === ' ') && btns.length === 1) { btns[0].click(); e.preventDefault(); }
+    else if (k === 'escape') { const c = btns.find(b => /Cancelar|Volver/.test(b.textContent)); if (c) c.click(); }
+    return;
+  }
+  if (isModalOpen()) { if (k === 'escape' || (k === 'g' && modalIs('party')) || (k === 'm' && modalIs('map'))) closeModal(); return; }
+  if (KEYMAP[k]) { e.preventDefault(); if (!held.includes(KEYMAP[k])) { held.push(KEYMAP[k]); tapDir = KEYMAP[k]; } }
+  else if (k === 'g') openParty(); else if (k === 'm') openMap(); else if (k === 'c') toggleSocial(); else if (k === 'escape') closeSocial();
+});
+addEventListener('keyup', e => { const d = KEYMAP[e.key.toLowerCase()]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
+addEventListener('blur', () => held.clear());
+
+// ================= Entrada: cruceta táctil (mantener presionado para caminar) =================
+// Toda la cruceta funciona como un joystick: la dirección sale del ángulo del dedo,
+// así que se puede deslizar entre flechas sin levantar el dedo.
+const dpad = $('#dpad'); let dpPointer = null, dpDir = null, lastMove = 0, tapDir = null; // tapDir: un toque corto igual avanza una casilla
+function dpSet(d) {
+  if (dpDir === d && (d === null || held.includes(d))) return;
+  if (dpDir) { const i = held.indexOf(dpDir); if (i >= 0) held.splice(i, 1); }
+  dpDir = d; if (d && !held.includes(d)) { held.push(d); tapDir = d; }
+  dpad.querySelectorAll('[data-d]').forEach(b => b.classList.toggle('on', b.dataset.d === d));
+}
+function dirAt(e) {
+  const r = dpad.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  if (Math.hypot(dx, dy) < r.width * .12) return dpDir; // zona muerta al centro
+  return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : (dy > 0 ? 'd' : 'u');
+}
+dpad.addEventListener('pointerdown', e => { e.preventDefault(); dpPointer = e.pointerId; try { dpad.setPointerCapture(e.pointerId); } catch (_) { /* nada */ } lastMove = 0; dpSet(dirAt(e)); });
+dpad.addEventListener('pointermove', e => { if (e.pointerId === dpPointer) dpSet(dirAt(e)); });
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) dpad.addEventListener(ev, e => { if (e.pointerId === dpPointer) { dpPointer = null; dpSet(null); } });
+addEventListener('contextmenu', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); });
+document.addEventListener('gesturestart', e => e.preventDefault()); // evita zoom con pellizco en iOS
+
+// ================= Loop principal =================
+let lastT = 0;
+function frame(t) {
+  const dt = Math.min(.05, (t - lastT) / 1000 || 0); lastT = t;
+  if (st.inGame && !st.titleOpen) {
+    if (st.busy) tapDir = null;
+    else if ((held.length || tapDir) && t - lastMove > 140) { move(held.length ? held[held.length - 1] : tapDir); lastMove = t; tapDir = null; }
+    const a = 1 - Math.exp(-dt * 20); P.px += (P.x - P.px) * a; P.py += (P.y - P.py) * a;
+    if (Math.abs(P.x - P.px) > 3 || Math.abs(P.y - P.py) > 3) { P.px = P.x; P.py = P.y; }
+    for (const m of monsters.values()) { m.px += (m.x - m.px) * a; m.py += (m.y - m.py) * a; }
+    lerpOthers(dt);
+    draw(t);
+    tick(t, myState);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ================= Partidas =================
+function enterWorld() {
+  st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
+  ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
+  P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
+  updateHUD(); updatePlayersUI(); save();
+}
+function newGame(sel) {
+  st.seed = roomSeed(st.room); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
+  const keys = Object.keys(CL);
+  setG({ seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: 30, items: { pocion: 3, eter: 1, pluma: 1 }, roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+    upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
+  P.x = START.x; P.y = START.y; enterWorld();
+  setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
+}
+function continueGame(s) {
+  setG(s); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
+  for (const h of G.roster) { h.buffs = {}; h.poison = h.poison || 0; h.bonus = h.bonus || {}; }
+  P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
+}
+
+// ================= Pantalla de inicio =================
+function hideGameUI() { ['#hud', '#topright', '#dock', '#dpad', '#battle', '#modal', '#social'].forEach(s => $(s).classList.add('hidden')); }
+function showLobby(msg) {
+  st.titleOpen = true; st.inGame = false; st.busy = false; held.clear(); hideGameUI(); clearCanvas();
+  $('#title').classList.remove('hidden'); $('#scrLobby').classList.remove('hidden'); $('#scrHeroes').classList.add('hidden');
+  const pr = loadPrefs(); if (!$('#nameIn').value && pr.name) $('#nameIn').value = pr.name;
+  if (!$('#codeIn').value && pr.code) $('#codeIn').value = pr.code;
+  lobbyMsg(msg || ''); lockLobby(false);
+}
+function lobbyMsg(html, kind) { const m = $('#lobbyMsg'); m.innerHTML = html; m.className = 'msg' + (kind ? ' ' + kind : ''); }
+function lockLobby(on) { for (const id of ['#createBtn', '#joinBtn', '#offlineBtn']) $(id).disabled = on; }
+const readCode = () => { const c = $('#codeIn').value.toUpperCase().replace(/[^A-Z]/g, ''); return c.length === 4 && [...c].every(ch => CODE_ALPHABET.includes(ch)) ? c : null; };
+function readName() {
+  const n = cleanName($('#nameIn').value);
+  if (!n) { lobbyMsg('Escribe tu nombre (máximo 12 caracteres).', 'err'); $('#nameIn').focus(); return null; }
+  $('#nameIn').value = n; return n;
+}
+const randomCode = () => Array.from({ length: 4 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
+const offlineHint = ' <button class="btn sm" id="offHint">Jugar sin conexión</button>';
+
+async function enterRoom(code, name) {
+  const r = await joinRoom(code, name, !!loadGame(code, name));
+  if (!r.ok) {
+    lockLobby(false);
+    lobbyMsg(esc(r.error || 'No se pudo entrar a la sala.') + (r.timeout ? offlineHint : ''), 'err');
+    const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click();
+    return;
+  }
+  st.room = code; st.name = name; st.online = true; savePrefs({ name, code }); showHeroes();
+}
+$('#createBtn').onclick = async () => {
+  const name = readName(); if (!name) return;
+  if (!available()) { lobbyMsg('No se pudo cargar la conexión con el servidor.' + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
+  lockLobby(true); lobbyMsg('Creando sala…');
+  const r = await createRoom();
+  if (!r.ok) { lockLobby(false); lobbyMsg(esc(r.error || 'No se pudo crear la sala.') + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
+  lobbyMsg('Entrando a la sala…'); await enterRoom(r.code, name);
+};
+$('#joinBtn').onclick = async () => {
+  const name = readName(); if (!name) return;
+  const code = readCode(); if (!code) { lobbyMsg('El código tiene 4 letras (sin O ni I). Ej: KTRX', 'err'); $('#codeIn').focus(); return; }
+  if (!available()) { lobbyMsg('No se pudo cargar la conexión con el servidor.' + offlineHint, 'err'); const b = $('#offHint'); if (b) b.onclick = () => $('#offlineBtn').click(); return; }
+  lockLobby(true); lobbyMsg('Conectando…'); await enterRoom(code, name);
+};
+$('#offlineBtn').onclick = () => {
+  const name = readName(); if (!name) return;
+  const code = readCode() || randomCode();
+  if (net.joined) leaveRoom();
+  st.room = code; st.name = name; st.online = false; savePrefs({ name, code }); showHeroes();
+};
+$('#codeIn').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); });
+$('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
+
+// Selección de héroes (igual que en la referencia)
+let SEL = ['guerrero', 'maga', 'sanadora'];
+function renderClasses() {
+  $('#clsel').innerHTML = Object.keys(CL).map(k => { const c = CL[k]; return `<div class="cls ${SEL.includes(k) ? 'sel' : ''}" data-c="${k}"><div class="em emoji">${c.e}</div><b>${c.name}</b><span class="goldt" style="font-size:13px">${c.n}</span><small>${c.d}</small><div class="st">PV ${c.b.mhp} · PM ${c.b.mmp} · ATQ ${c.b.atk} · MAG ${c.b.mag}</div></div>`; }).join('');
+  document.querySelectorAll('.cls').forEach(el => el.onclick = () => { const k = el.dataset.c, i = SEL.indexOf(k); if (i >= 0) { if (SEL.length > 1) SEL.splice(i, 1); } else if (SEL.length < 3) SEL.push(k); else { SEL.shift(); SEL.push(k); } renderClasses(); });
+  $('#startBtn').textContent = `⚔️ Comenzar aventura (${SEL.length} ${SEL.length === 1 ? 'héroe' : 'héroes'})`;
+}
+function renderRoomInfo() {
+  if ($('#scrHeroes').classList.contains('hidden')) return;
+  $('#roomCode').textContent = st.room;
+  $('#roomConn').textContent = !st.online ? '⚪ Sin conexión (juego individual)' : net.status === 'on' ? '🟢 Conectado' : '🟡 Reconectando…';
+  const names = [`${esc(st.name)} (tú)`, ...[...net.others.values()].map(o => esc(o.name) + (o.online === false ? ' 📴' : ''))];
+  $('#roomPlayers').innerHTML = st.online ? `👥 En la sala: ${names.join(', ')}` : '';
+  $('#shareBtn').classList.toggle('hidden', !st.online);
+}
+function showHeroes() {
+  st.titleOpen = true; st.inGame = false; st.busy = false; hideGameUI(); clearCanvas();
+  $('#title').classList.remove('hidden'); $('#scrLobby').classList.add('hidden'); $('#scrHeroes').classList.remove('hidden');
+  renderClasses(); renderRoomInfo();
+  const s = loadGame(st.room, st.name);
+  $('#contWrap').innerHTML = s ? `<button class="btn gold big" id="contBtn">▶ Continuar (${s.roster.filter((_, i) => s.party.includes(i)).map(h => h.e + ' Nv ' + h.lvl).join(' · ')} · ${s.steps} pasos)</button><p class="mut small" style="text-align:center;margin:6px 0 0">o arma un grupo nuevo (se reemplaza la partida guardada)</p>` : '';
+  if (s) $('#contBtn').onclick = () => continueGame(s);
+}
+$('#startBtn').onclick = () => newGame(SEL.slice());
+$('#leaveBtn').onclick = () => { leaveRoom(); showLobby(); };
+$('#shareBtn').onclick = async () => {
+  const text = `¡Juguemos Tierras Sin Fin! Sala ${st.room}`, url = location.origin;
+  try { if (navigator.share) { await navigator.share({ title: 'Tierras Sin Fin', text, url }); return; } } catch (_) { return; }
+  try { await navigator.clipboard.writeText(`${text} → ${url}`); feed('📋 Código copiado'); } catch (_) { feed(`Código de sala: <b>${esc(st.room)}</b>`); }
+};
+
+// ================= Conexión con la capa online =================
+net.ev.players = () => { updatePlayersUI(); renderRoomInfo(); };
+net.ev.feed = html => feed(html);
+net.ev.status = () => { updateHUD(); updatePlayersUI(); renderRoomInfo(); };
+
+initUI({
+  onNewGame: () => { removeGame(st.room, st.name); showHeroes(); },
+  onExit: () => { save(); leaveRoom(); showLobby(); },
+});
+
+// Autoguardado al minimizar o bloquear el celular; reconexión al volver
+document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); held.clear(); } else wake(); });
+addEventListener('pagehide', () => save());
+addEventListener('resize', resize);
+
+resize();
+if (available()) ensureSocket();   // conecta en segundo plano; si falla, igual se puede jugar
+showLobby();
+requestAnimationFrame(frame);
