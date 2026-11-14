@@ -2,13 +2,13 @@
 'use strict';
 import { $, esc, pick, roomSeed, cleanName } from './util.js';
 import { CL, B, IT, CH, BOONS, CODE_ALPHABET } from './data.js';
-import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader } from './state.js';
+import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_GOLD, startItems } from './state.js';
 import { resetWorld, findStart, tileAt, feats, mpos, monsters, isBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
-import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
+import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers } from './net.js';
-import { save, loadGame, removeGame, loadPrefs, savePrefs } from './storage.js';
+import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, SAVE_VERSION } from './storage.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -17,7 +17,7 @@ function move(dir) {
   const [dx, dy] = DIRS[dir]; if (dx) P.face = dx;
   const nx = P.x + dx, ny = P.y + dy;
   const m = mpos.get(nx + ',' + ny);
-  if (m && !inVillage()) { startBattle(m); return; }
+  if (m && !inVillage()) { if (m.boss) openBossConfirm(m, startBattle); else startBattle(m); return; }
   if (m) return;
   if (isBlocked(nx, ny)) return;
   P.x = nx; P.y = ny; G.steps++;
@@ -63,7 +63,8 @@ addEventListener('keydown', e => {
     return;
   }
   if (isModalOpen()) { if (k === 'escape' || (k === 'g' && modalIs('party')) || (k === 'm' && modalIs('map'))) closeModal(); return; }
-  if (KEYMAP[k]) { e.preventDefault(); if (!held.includes(KEYMAP[k])) { held.push(KEYMAP[k]); tapDir = KEYMAP[k]; } }
+  // Una tecla que quedó apretada mientras se abría una ventana no vuelve a caminar sola
+  if (KEYMAP[k]) { e.preventDefault(); if (e.repeat && !held.includes(KEYMAP[k])) return; if (!held.includes(KEYMAP[k])) { held.push(KEYMAP[k]); tapDir = KEYMAP[k]; } }
   else if (k === 'g') openParty(); else if (k === 'm') openMap(); else if (k === 'c') toggleSocial(); else if (k === 'escape') closeSocial();
 });
 addEventListener('keyup', e => { const d = KEYMAP[e.key.toLowerCase()]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
@@ -117,14 +118,14 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: 30, items: { pocion: 3, eter: 1, pluma: 1 }, roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
 }
 function continueGame(s) {
-  setG(s); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
-  for (const h of G.roster) { h.buffs = {}; h.poison = h.poison || 0; h.bonus = h.bonus || {}; }
+  setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
+  if (!G.start) G.start = { x: START.x, y: START.y };
   P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
 }
 

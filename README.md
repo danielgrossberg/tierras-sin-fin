@@ -60,7 +60,29 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 
 - **Moverse:** WASD / flechas, o la cruceta en pantalla (mantén presionado; puedes deslizar el dedo para cambiar de dirección).
 - **G** grupo · **M** mapa · **C** sala y mensajes · Combate: toca las opciones o teclas 1–9.
+- Al morir todo el grupo se vuelve a empezar desde nivel 1 en Villa Origen (ver "Reglas de la Etapa 2").
 - Aldeas 🏘️: posada (guarda), tienda, herrería y taberna (cambiar héroes). Cofres 📦, santuarios ⛩️ y jefes 👑.
+
+## Reglas de la Etapa 2
+
+### Fase 0 (lista)
+- **Muerte = empezar de cero.** Si cae **todo** el grupo en un combate, se vuelve a Villa Origen y se pierde:
+  nivel y experiencia de todo el roster (también los de la taberna), oro, objetos, mejoras de herrería y
+  bonificaciones de santuarios. Se conserva: el mapa explorado, los cofres abiertos, los jefes derrotados,
+  el grupo y el líder. El oro y los objetos vuelven a los de una partida nueva, y los demás jugadores
+  de la sala reciben el aviso "💀 [nombre] cayó y vuelve a empezar desde Villa Origen".
+  Si cae solo una parte del grupo y el resto gana, los caídos siguen caídos hasta revivirlos (posada o Pluma Fénix).
+- **Flecha dorada a Villa Origen** 🏘️ con la distancia, siempre visible cuando la villa está fuera de pantalla.
+  Esquiva la cruceta, los botones y la flecha del amigo.
+- **Jefes con confirmación:** nunca inician el combate. Al tocarlos aparece una ventana con su nivel,
+  el nivel promedio de tu grupo, "⚠️ Muy peligroso" si te supera por 2 o más niveles, y los botones Pelear / Retirarse.
+- **Experiencia según participación:** cada héroe suma puntos por daño realmente aplicado (+25% de la vida
+  máxima del enemigo si lo remata), por curación real y un monto fijo por apoyo (Grito de Guerra, Bendición,
+  Revivir, Robar con éxito). La experiencia del combate se reparte en proporción a esos puntos.
+  Un héroe vivo que actuó recibe como mínimo el 5%, los caídos conservan lo que aportaron antes de caer
+  y los que esperan en la taberna reciben el 10%.
+- **Guardado versionado:** las partidas llevan `saveVersion`, y `migrate()` en `public/js/storage.js`
+  actualiza las partidas antiguas al cargarlas (las de la Etapa 1 siguen funcionando).
 
 ## Estructura
 
@@ -92,7 +114,7 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `players:update` | servidor → sala (≤ 10/s) | `{players:[…]}` |
 | `chat:quick` | ida y vuelta | `{msgId}` → `{name, msgId}` |
 | `ping:place` | ida y vuelta | `{x, y}` → `{name, x, y, ttl}` (2 minutos) |
-| `event:notice` | ida y vuelta | `{type:'level'\|'boss', text}`; el servidor además envía `join`/`leave` |
+| `event:notice` | ida y vuelta | `{type:'level'\|'boss'\|'death', text}`; el servidor además envía `join`/`leave` |
 
 El servidor valida tipos, largos y frecuencias de todo lo que llega. Lo de la **Etapa 2**
 (`boss:invite`, `battle:join`, `battle:action`) está comentado en `server.js`, `net.js` y `battle.js`.

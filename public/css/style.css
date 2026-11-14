@@ -227,3 +227,24 @@ input.code{text-transform:uppercase;letter-spacing:.35em;text-align:center;font-
 input{background:#0f1323;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--txt);font:inherit;font-size:16px;flex:1;min-width:120px;user-select:text;-webkit-user-select:text;touch-action:manipulation}
 input:focus{outline:2px solid var(--gold);outline-offset:1px}
 .help{font-size:12px;color:var(--mut);text-align:center;margin-top:14px;line-height:1.6}
+
+/* ===== Etapa 2 · Fase 0 ===== */
+/* Confirmación antes de pelear con un jefe */
+.bossc{text-align:center;max-width:420px;margin:0 auto}
+.bcrown{font-size:30px;line-height:1}
+.bsprite{font-size:clamp(64px,22vw,96px);line-height:1.15;animation:idle 2.2s ease-in-out infinite;display:inline-block}
+.bossc h2{margin:2px 0 8px}
+.blv{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.blv span{background:#0f1323;border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.blv b{color:var(--gold)}
+.bwarn{margin:10px auto 0;background:#4a1717;border:1px solid #ff6b6b;color:#ffb3b3;border-radius:10px;padding:8px 12px;font-weight:700;display:inline-block}
+.bnote{font-size:13px;color:#ffcf8a;margin:12px 0 4px}
+.bbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.bbtns .btn{min-height:48px}
+/* Experiencia por héroe en la pantalla de victoria */
+.xpl{display:flex;flex-direction:column;gap:4px;margin:4px 0 2px}
+.xpr{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(50px,1.2fr) auto;align-items:center;gap:6px;font-size:13px;line-height:1.3}
+.xpr .emoji{font-size:18px}
+.xpn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xpr .bar{margin-top:0;height:7px}
+@media (hover:hover) and (pointer:fine) and (max-width:520px){#dock .lb .mut{display:none}}

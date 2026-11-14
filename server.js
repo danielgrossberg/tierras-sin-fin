@@ -19,7 +19,7 @@ const STATUSES = new Set(['map', 'battle', 'village']);
 const BIOMES = new Set(Object.keys(B));
 const EMOJIS = new Set(LEADER_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
-const NOTICE_TYPES = new Set(['level', 'boss']);
+const NOTICE_TYPES = new Set(['level', 'boss', 'death']);
 
 // ================= HTTP =================
 const app = express();

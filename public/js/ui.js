@@ -1,7 +1,7 @@
 // Interfaz: HUD, toasts, avisos online, modales (aldea, grupo, mapa) y panel de la sala.
 'use strict';
 import { $, esc, dirArrow } from './util.js';
-import { B, CL, SK, IT, CH, RGB, BLOCKO, QUICK } from './data.js';
+import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader } from './state.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey } from './world.js';
 import { runSkill, useItem } from './battle.js';
@@ -158,6 +158,33 @@ async function partyAct(a, k) {
   if (MR === partyRender) rerender();
 }
 export function openParty() { PA = null; NGC = false; openModal(partyRender, partyAct); }
+
+// ================= Confirmación antes de pelear con un jefe =================
+// Los jefes nunca inician el combate solos: el jugador decide.
+// ETAPA 2 fase D: aquí se agregará el botón "📣 Pedir ayuda".
+let BC = null;
+function bossRender() {
+  const m = BC.m, b = EN[m.group[0]], al = avgLvl(), danger = m.lvl - al >= 2;
+  const escort = m.group.slice(1).map(k => `${EN[k].e} ${EN[k].n}`);
+  return `<div class="bossc">
+    <div class="bcrown emoji">👑</div>
+    <div class="bsprite emoji" style="filter:${b.tint || 'none'} drop-shadow(0 8px 6px #0007)">${b.e}</div>
+    <h2>${b.n}</h2>
+    <div class="blv"><span>Nivel del jefe <b>${m.lvl}</b></span><span>Tu grupo <b>Nv ${al.toFixed(1)}</b></span></div>
+    ${escort.length ? `<p class="mut small">Lo acompañan: ${escort.join(', ')}</p>` : ''}
+    ${danger ? '<div class="bwarn">⚠️ Muy peligroso</div>' : ''}
+    <p class="bnote">Si todo tu grupo cae, vuelves a empezar desde cero.</p>
+    <div class="bbtns"><button class="btn gold big" data-a="fight">⚔️ Pelear</button><button class="btn big" data-a="retreat">🏃 Retirarse</button></div>
+  </div>`;
+}
+export function openBossConfirm(m, onFight) {
+  BC = { m, onFight };
+  openModal(bossRender, a => {
+    const c = BC;
+    if (a === 'fight') { closeModal(); c.onFight(c.m); }
+    else if (a === 'retreat') closeModal();
+  });
+}
 
 // ================= Mapa =================
 function mapRender() {

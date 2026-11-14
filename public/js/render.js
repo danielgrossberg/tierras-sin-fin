@@ -2,7 +2,7 @@
 'use strict';
 import { $, hash, shade, EF } from './util.js';
 import { TILE, CH, B, EN } from './data.js';
-import { G, P, st, leader } from './state.js';
+import { G, P, START, st, leader } from './state.js';
 import { getChunk, biomeAt, feats, monsters } from './world.js';
 import { net } from './net.js';
 
@@ -88,13 +88,16 @@ const visibleOther = o => o.status && o.status !== 'lobby' && Number.isFinite(o.
 let hudRects = [], hudT = 0;
 function refreshHud(t) {
   if (t - hudT < 500) return; hudT = t;
-  hudRects = ['#hud', '#info', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(el => el && el.offsetParent !== null)
+  hudRects = ['#hud', '#info', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(Boolean)
     .map(el => el.getBoundingClientRect()).filter(r => r.width && r.height);
 }
-const hitsHud = (x, y) => hudRects.some(r => x > r.left - 26 && x < r.right + 26 && y > r.top - 30 && y < r.bottom + 30);
+const hitsBox = (x0, y0, x1, y1) => hudRects.some(r => x1 > r.left && x0 < r.right && y1 > r.top && y0 < r.bottom);
+const hitsHud = (x, y) => hitsBox(x - 26, y - 30, x + 26, y + 30);
 
-// Flecha en el borde de la pantalla apuntando a un amigo fuera de vista
-function edgeArrow(o, X, Y, dist) {
+// Flecha en el borde de la pantalla apuntando a algo fuera de vista (amigo o Villa Origen).
+// `placed` guarda las flechas ya dibujadas en este frame para que no se encimen.
+const offscreen = (X, Y) => X < 12 || X > W - 12 || Y < 12 || Y > H - 12;
+function edgeArrow(X, Y, icon, text, col, textCol, alpha, placed) {
   const m = 46, L = SAFE.l + m, R = W - SAFE.r - m, T = SAFE.t + m, Bt = H - SAFE.b - m;
   const cx = W / 2, cy = H / 2, dx = X - cx, dy = Y - cy;
   let s = Infinity;
@@ -103,20 +106,29 @@ function edgeArrow(o, X, Y, dist) {
   if (!Number.isFinite(s)) return;
   let ax = cx + dx * s, ay = cy + dy * s;
   const ang = Math.atan2(dy, dx);
-  // Si cae encima del HUD, la deslizamos por el borde hacia el centro
+  // Si cae sobre el HUD (cruceta, botones…) o sobre otra flecha, buscamos el lugar libre más cercano:
+  // primero deslizándola por el borde (a ambos lados) y, si el borde está tapado, un poco hacia adentro.
   const onSide = Math.abs(ax - L) < 1 || Math.abs(ax - R) < 1;
-  for (let k = 0; k < 80 && hitsHud(ax, ay); k++) {
-    if (onSide) ay += Math.sign(cy - ay) * 8; else ax += Math.sign(cx - ax) * 8;
+  const along = onSide ? [0, 1] : [1, 0], inward = onSide ? [Math.sign(cx - ax) || 1, 0] : [0, Math.sign(cy - ay) || 1];
+  ctx.font = `bold 12px system-ui,sans-serif,${EF}`; const tw = ctx.measureText(text).width / 2 + 4;
+  const labelAt = (x, y) => [Math.max(L + 24, Math.min(R - 24, x)), y > cy ? y - 30 : y + 31];
+  const labelHits = (x, y) => { const [lx, ly] = labelAt(x, y); return hitsBox(lx - tw, ly - 9, lx + tw, ly + 9); };
+  const free = (x, y) => x >= L && x <= R && y >= T && y <= Bt && !hitsHud(x, y) && !labelHits(x, y) && !placed.some(p => Math.abs(p.x - x) < 150 && Math.abs(p.y - y) < 64); // 150: ancho del texto
+  search: for (let depth = 0; depth <= Math.max(W, H) / 2; depth += 24) {
+    for (let k = 0; k <= 40; k++) for (const sg of k ? [1, -1] : [1]) {
+      const x = ax + along[0] * sg * k * 8 + inward[0] * depth, y = ay + along[1] * sg * k * 8 + inward[1] * depth;
+      if (free(x, y)) { ax = x; ay = y; break search; }
+    }
   }
-  ctx.save(); ctx.translate(ax, ay);
-  ctx.globalAlpha = o.online === false ? .5 : 1;
-  ctx.fillStyle = 'rgba(15,18,32,.88)'; ctx.strokeStyle = '#7fe0ff'; ctx.lineWidth = 2;
+  placed.push({ x: ax, y: ay });
+  ctx.save(); ctx.translate(ax, ay); ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(15,18,32,.88)'; ctx.strokeStyle = col; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, 0, 18, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.save(); ctx.rotate(ang); ctx.fillStyle = '#7fe0ff'; ctx.beginPath(); ctx.moveTo(32, 0); ctx.lineTo(21, -8); ctx.lineTo(21, 8); ctx.fill(); ctx.restore();
-  emoji(o.leaderEmoji || '🙂', 0, 1, 20, o.online === false ? .5 : 1);
+  ctx.save(); ctx.rotate(ang); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(32, 0); ctx.lineTo(21, -8); ctx.lineTo(21, 8); ctx.fill(); ctx.restore();
+  emoji(icon, 0, 1, 20, alpha);
   ctx.restore();
-  const lx = Math.max(L + 24, Math.min(R - 24, ax)), ly = ay > cy ? ay - 30 : ay + 31;
-  label(`${o.name} · ${dist} c`, lx, ly, 12, '#bff0ff');
+  const [lx, ly] = labelAt(ax, ay);
+  ctx.globalAlpha = alpha; label(text, lx, ly, 12, textCol); ctx.globalAlpha = 1;
 }
 
 // ================= Frame principal =================
@@ -172,7 +184,7 @@ export function draw(t) {
   for (const o of net.others.values()) {
     if (!visibleOther(o)) continue;
     const X = sx(o.px), Y = sy(o.py);
-    if (X < 12 || X > W - 12 || Y < 12 || Y > H - 12) { away.push(o); continue; }
+    if (offscreen(X, Y)) { away.push(o); continue; }
     sprites.push({ y: o.py, fn: () => {
       const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .45 : 1;
       shadow(X, Y + TS * .38, TS * .34);
@@ -192,7 +204,9 @@ export function draw(t) {
   for (const o of net.others.values()) if (o.bubble && visibleOther(o) && !away.includes(o)) bubble(o.bubble.text, sx(o.px), sy(o.py) - TS * 1);
   if (!vign) { vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75); vign.addColorStop(0, 'rgba(0,0,0,0)'); vign.addColorStop(1, 'rgba(0,0,0,.5)'); }
   ctx.fillStyle = vign; ctx.fillRect(0, 0, W, H);
-  // Indicadores de amigos fuera de pantalla
-  if (away.length) refreshHud(t);
-  for (const o of away) edgeArrow(o, sx(o.px), sy(o.py), Math.round(Math.hypot(o.x - P.x, o.y - P.y)));
+  // Indicadores fuera de pantalla: primero Villa Origen (dorado), luego los amigos (celeste)
+  refreshHud(t);
+  const placed = [], vx = sx(START.x), vy = sy(START.y);
+  if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏘️', `Villa Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, '#7fe0ff', '#bff0ff', o.online === false ? .5 : 1, placed);
 }

@@ -38,5 +38,24 @@ export function gainXP(h, x) {
   }
   return msgs;
 }
+// Partida nueva: oro y objetos iniciales
+export const START_GOLD = 30;
+export const startItems = () => ({ pocion: 3, eter: 1, pluma: 1 });
+
+// Muerte de todo el grupo: se pierde el progreso de personaje, se conserva el mundo.
+// Se pierde: niveles/XP de TODO el roster, santuarios, oro, objetos, herrería
+//            (y, cuando existan, equipo, talentos, clases avanzadas, misiones activas y bote).
+// Se conserva: mapa explorado, aldeas descubiertas, cofres abiertos, jefes derrotados, grupo y líder.
+export function resetProgress() {
+  G.gold = START_GOLD; G.items = startItems(); G.upA = 0; G.upD = 0;
+  for (const k of ['inventory', 'quests', 'boat']) delete G[k];            // campos de fases futuras
+  for (const h of G.roster) {
+    h.lvl = 1; h.xp = 0; h.bonus = {}; h.buffs = {}; h.poison = 0; h.defending = false;
+    for (const k of ['equip', 'talents', 'adv']) delete h[k];              // campos de fases futuras
+    h.hp = hs(h, 'mhp'); h.mp = hs(h, 'mmp');
+  }
+  G.lastVillage = { x: G.start.x, y: G.start.y };
+  G.deaths = (G.deaths || 0) + 1;
+}
 export const avgLvl = () => { const h = heroes(); return h.reduce((a, b) => a + b.lvl, 0) / h.length; };
 export const leader = () => { const l = G.roster[G.leader]; return G.party.includes(G.leader) ? l : heroes()[0]; };

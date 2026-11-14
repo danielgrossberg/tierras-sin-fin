@@ -143,6 +143,7 @@ function onNotice(d) {
   else if (d.type === 'leave') fire('feed', `🚪 ${esc(d.text)}`);
   else if (d.type === 'level') fire('feed', `⭐ <b>${esc(d.name)}</b> sube de nivel: ${esc(d.text)}`);
   else if (d.type === 'boss') fire('feed', `👑 <b>${esc(d.name)}</b> derrotó al jefe ${esc(d.text)}`);
+  else if (d.type === 'death') fire('feed', `💀 <b>${esc(d.name)}</b> cayó y vuelve a empezar desde Villa Origen`);
 }
 
 // Interpolación de los otros jugadores (se llama en cada frame)
