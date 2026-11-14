@@ -259,18 +259,25 @@ function partyRender() {
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
   h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : heroesTab();
-  h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button><button class="btn" data-a="newgame">${NGC ? '⚠️ ¿Seguro? Se borra la partida' : 'Nueva partida'}</button><button class="btn gold" data-a="close">Cerrar</button></div>`;
+  if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
+  h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;
 }
 async function partyAct(a, k) {
-  if (a !== 'newgame') NGC = false;
+  if (a !== 'newgame' && a !== 'newgame2') NGC = false;
   if (a === 'close') { PA = null; PI = null; closeModal(); return; }
   if (a === 'exit') { PA = null; PI = null; closeModal(); if (hooks.onExit) hooks.onExit(); return; }
-  if (a === 'newgame') { if (!NGC) { NGC = true; rerender(); return; } NGC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return; }
+  // Nueva partida: primero se muestra el aviso; solo se borra si se escribió CONFIRMAR
+  if (a === 'newgame') { NGC = true; rerender(); const i = $('#cfIn'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } return; }
+  if (a === 'newgame2') {
+    if (!confirmOk($('#cfIn') && $('#cfIn').value)) return;
+    NGC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return;
+  }
   if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; }
   if (a === 'qtrack') track(k);
   if (a === 'qdrop') { if (QD !== k) QD = k; else { abandon(k); QD = null; save(); } }
   if (a === 'cancel') PA = null;
+  if (a === 'ngcancel') NGC = false;
   if (a === 'leader') G.leader = +k;
   if (a === 'fskill') {
     const [ci, sk] = k.split(':'); const c = G.roster[+ci], s = SK[sk];
@@ -367,9 +374,33 @@ function drawMinimap() {
 }
 export function openMap() { openModal(mapRender, a => { if (a === 'close') closeModal(); }, drawMinimap); }
 
+// ================= Confirmación para borrar la partida =================
+// Para evitar perder todo por un toque accidental, hay que escribir la palabra CONFIRMAR.
+export const CONFIRM_WORD = 'CONFIRMAR';
+export const confirmOk = v => String(v || '').trim().toUpperCase() === CONFIRM_WORD;
+// go / cancel: atributos de los botones (data-a="…" en la ventana del grupo, id="…" en la pantalla de héroes)
+export function dangerBox(title, go, cancel) {
+  return `<div class="danger">
+    <b>⚠️ ${title}</b>
+    <p>Se borra la partida guardada${net.db ? ' (también en el servidor)' : ''}: héroes y niveles, oro, objetos, equipo, misiones y bote. <b>No se puede deshacer.</b></p>
+    <label for="cfIn">Para continuar, escribe <b>${CONFIRM_WORD}</b>:</label>
+    <input id="cfIn" class="cfin" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="escribe aquí">
+    <div class="cfbtns"><button class="btn" ${cancel}>Cancelar</button><button class="btn dangerbtn" data-cf="go" ${go} disabled>Borrar y empezar de nuevo</button></div>
+  </div>`;
+}
+
 // ================= Inicialización de eventos de la interfaz =================
 export function initUI(h) {
   Object.assign(hooks, h);
+  // El botón de borrar solo se activa cuando la palabra está bien escrita
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'cfIn') return;
+    const go = e.target.closest('.danger').querySelector('[data-cf=go]'); if (go) go.disabled = !confirmOk(e.target.value);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target.id !== 'cfIn' || e.key !== 'Enter') return;
+    const go = e.target.closest('.danger').querySelector('[data-cf=go]'); if (go && !go.disabled) go.click();
+  });
   $('#modal').addEventListener('click', e => {
     const b = e.target.closest('[data-a]');
     if (b && MH && !b.disabled) { MH(b.dataset.a, b.dataset.k); return; }

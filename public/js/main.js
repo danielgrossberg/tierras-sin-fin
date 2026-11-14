@@ -6,7 +6,7 @@ import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_G
 import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
-import { initUI, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
+import { initUI, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
 import { save, loadGame, removeGame, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
@@ -242,13 +242,21 @@ function renderRoomInfo() {
 function showHeroes() {
   st.titleOpen = true; st.inGame = false; st.busy = false; hideGameUI(); clearCanvas();
   $('#title').classList.remove('hidden'); $('#scrLobby').classList.add('hidden'); $('#scrHeroes').classList.remove('hidden');
-  renderClasses(); renderRoomInfo();
+  renderClasses(); renderRoomInfo(); $('#ngConfirm').innerHTML = '';
   const s = loadGame(st.room, st.name);
-  $('#contWrap').innerHTML = s ? `<button class="btn gold big" id="contBtn">▶ Continuar (${s.roster.filter((_, i) => s.party.includes(i)).map(h => h.e + ' Nv ' + h.lvl).join(' · ')} · ${s.steps} pasos)</button><p class="mut small" style="text-align:center;margin:6px 0 0">o arma un grupo nuevo (se reemplaza la partida guardada)</p>` : '';
+  $('#contWrap').innerHTML = s ? `<button class="btn gold big" id="contBtn">▶ Continuar (${s.roster.filter((_, i) => s.party.includes(i)).map(h => h.e + ' Nv ' + h.lvl).join(' · ')} · ${s.steps} pasos)</button><p class="mut small" style="text-align:center;margin:6px 0 0">Comenzar una aventura nueva borra la partida guardada (se pide confirmar).</p>` : '';
   if (s) $('#contBtn').onclick = () => continueGame(s);
 }
-$('#startBtn').onclick = () => newGame(SEL.slice());
-$('#leaveBtn').onclick = () => { leaveRoom(); showLobby(); };
+// Si ya hay una partida guardada, empezar otra la borra: se pide escribir CONFIRMAR
+$('#startBtn').onclick = () => {
+  if (!loadGame(st.room, st.name)) { newGame(SEL.slice()); return; }
+  const box = $('#ngConfirm');
+  box.innerHTML = dangerBox('¿Empezar una aventura nueva?', 'id="cfGo"', 'id="cfCancel"');
+  $('#cfCancel').onclick = () => { box.innerHTML = ''; };
+  $('#cfGo').onclick = () => { if (!confirmOk($('#cfIn').value)) return; box.innerHTML = ''; removeGame(st.room, st.name); newGame(SEL.slice()); };
+  box.scrollIntoView({ block: 'center' }); $('#cfIn').focus();
+};
+$('#leaveBtn').onclick = () => { $('#ngConfirm').innerHTML = ''; leaveRoom(); showLobby(); };
 $('#shareBtn').onclick = async () => {
   const text = `¡Juguemos Tierras Sin Fin! Sala ${st.room}`, url = location.origin;
   try { if (navigator.share) { await navigator.share({ title: 'Tierras Sin Fin', text, url }); return; } } catch (_) { return; }

@@ -318,3 +318,15 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .qprog{font-weight:800;color:#c084fc;white-space:nowrap}
 .qbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .qbtns .btn{min-height:42px}
+
+/* ===== Confirmación para borrar la partida ===== */
+.danger{margin-top:12px;background:#2a1215;border:2px solid #e5484d;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.danger>b{color:#ff8a8a;font-size:16px}
+.danger p{margin:0;color:#f3c4c4;line-height:1.45}
+.danger label{color:#f3c4c4;font-size:13px}
+.cfin{text-transform:uppercase;letter-spacing:.2em;font-size:18px;text-align:center;font-weight:700;border-color:#e5484d;min-width:0;width:100%}
+.cfbtns{display:grid;grid-template-columns:1fr 1.4fr;gap:8px}
+.cfbtns .btn{min-height:46px}
+.btn.dangerbtn{background:#e5484d;border-color:#b3262b;color:#fff;font-weight:700}
+.btn.dangerbtn:hover:not([disabled]){background:#ff5d62}
+.cfin::placeholder{text-transform:none;letter-spacing:normal;font-weight:400;color:#8a6a6e}

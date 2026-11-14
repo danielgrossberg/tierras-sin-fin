@@ -62,6 +62,8 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Moverse:** WASD / flechas, o la cruceta en pantalla (mantén presionado; puedes deslizar el dedo para cambiar de dirección).
 - **G** grupo · **M** mapa · **C** sala y mensajes · Combate: toca las opciones o teclas 1–9.
 - Al morir todo el grupo se vuelve a empezar desde nivel 1 en Villa Origen (ver "Reglas de la Etapa 2").
+- **Seguridad:** empezar una partida nueva (desde 🎒 Grupo o desde la elección de héroes cuando ya hay una guardada)
+  pide escribir **CONFIRMAR**, para no borrar el avance por un toque accidental.
 - Aldeas 🏘️: posada (guarda), tienda, herrería y taberna (cambiar héroes). Cofres 📦, santuarios ⛩️ y jefes 👑.
 
 ## Reglas de la Etapa 2
