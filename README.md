@@ -61,23 +61,38 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 
 - **Moverse:** WASD / flechas, o la cruceta en pantalla (mantén presionado; puedes deslizar el dedo para cambiar de dirección).
 - **G** grupo · **M** mapa · **C** sala y mensajes · Combate: toca las opciones o teclas 1–9.
-- Al morir todo el grupo se vuelve a empezar desde nivel 1 en Villa Origen (ver "Reglas de la Etapa 2").
+- Al morir todo el grupo se vuelve a empezar desde nivel 1 en Ciudad Origen (ver "Reglas de la Etapa 2").
 - **Seguridad:** empezar una partida nueva (desde 🎒 Grupo o desde la elección de héroes cuando ya hay una guardada)
   pide escribir **CONFIRMAR**, para no borrar el avance por un toque accidental.
   Y si ya tienes una partida con tu nombre, **Crear sala nueva** avisa que empezarás desde cero en otro mundo
   (la partida anterior no se borra) y pregunta si quieres seguir en tu sala o crear una nueva.
 - Aldeas 🏘️: posada (guarda), tienda, herrería y taberna (cambiar héroes). Cofres 📦, santuarios ⛩️ y jefes 👑.
 
+## Mapa, coordenadas y jugadores
+
+- **Ciudad Origen 🏰** es la ciudad inicial y principal de la sala (la misma para todos) y el punto **(0, 0)**.
+  En el mapa se ve como un castillo grande con brillo y nombre dorados; en el minimapa, como un castillo dorado.
+- **Coordenadas X, Y** relativas a Ciudad Origen: **este = X positivo**, **norte = Y positivo** (hacia arriba en la
+  pantalla), con dirección cardinal (N, NE, E, SE, S, SO, O, NO) y distancia en casillas.
+- **Tarjeta de coordenadas** (arriba a la derecha): tus coordenadas, Ciudad Origen, la aldea más cercana ya
+  generada y cada compañero. En el celular parte plegada en una línea; se despliega/pliega tocándola
+  (el navegador lo recuerda).
+- **Jugadores fáciles de distinguir:** el héroe propio se dibuja ~18% más grande que un monstruo, con halo blanco,
+  contorno oscuro, anillo **dorado** con pulso y nombre en una etiqueta dorada; cada compañero tiene su propio color
+  (anillo, nombre y flecha). Los monstruos llevan un anillo **rojizo**: rojo = enemigo.
+- Arreglo: los emojis del mapa se veían semitransparentes porque heredaban la transparencia del último color
+  de relleno (la sombra, al 28%). Ahora siempre se dibujan con relleno opaco.
+
 ## Reglas de la Etapa 2
 
 ### Fase 0 (lista)
-- **Muerte = empezar de cero.** Si cae **todo** el grupo en un combate, se vuelve a Villa Origen y se pierde:
+- **Muerte = empezar de cero.** Si cae **todo** el grupo en un combate, se vuelve a Ciudad Origen y se pierde:
   nivel y experiencia de todo el roster (también los de la taberna), oro, objetos, mejoras de herrería y
   bonificaciones de santuarios. Se conserva: el mapa explorado, los cofres abiertos, los jefes derrotados,
   el grupo y el líder. El oro y los objetos vuelven a los de una partida nueva, y los demás jugadores
-  de la sala reciben el aviso "💀 [nombre] cayó y vuelve a empezar desde Villa Origen".
+  de la sala reciben el aviso "💀 [nombre] cayó y vuelve a empezar desde Ciudad Origen".
   Si cae solo una parte del grupo y el resto gana, los caídos siguen caídos hasta revivirlos (posada o Pluma Fénix).
-- **Flecha dorada a Villa Origen** 🏘️ con la distancia, siempre visible cuando la villa está fuera de pantalla.
+- **Flecha dorada a Ciudad Origen** 🏰 con la distancia, siempre visible cuando la villa está fuera de pantalla.
   Esquiva la cruceta, los botones y la flecha del amigo.
 - **Jefes con confirmación:** nunca inician el combate. Al tocarlos aparece una ventana con su nivel,
   el nivel promedio de tu grupo, "⚠️ Muy peligroso" si te supera por 2 o más niveles, y los botones Pelear / Retirarse.
@@ -105,7 +120,7 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   (Guerrero), Báculo y Túnica (Maga, Sanadora), Arco (Arquera), Dagas (Pícaro); Armadura ligera, Anillo y
   Amuleto (todas).
 - **Rarezas:** Común (gris, 60%, ×1.0), Raro (azul, 28%, ×1.3, 1 propiedad extra), Épico (morado, 10%, ×1.7, 2 extra),
-  Legendario (naranjo, 2%, ×2.3, 3 extra + efecto único). Mientras más lejos de Villa Origen, mejores probabilidades.
+  Legendario (naranjo, 2%, ×2.3, 3 extra + efecto único). Mientras más lejos de Ciudad Origen, mejores probabilidades.
 - **Stat principal** = `round((2 + ilvl × 1.2) × multiplicador)`; arma → ATQ (báculo → MAG), armadura → DEF + PV,
   accesorio → un stat al azar. Extras posibles: PV, PM, ATQ, DEF, MAG, VEL, % crítico, % robo de vida, % res. veneno.
 - **8 legendarios:** Colmillo de Brasa (quema), Égida del Alba (15% bloquea), Anillo del Eco (20% habilidad doble),

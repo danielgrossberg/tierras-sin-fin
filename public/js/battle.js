@@ -304,15 +304,15 @@ async function victory() {
   log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
   await waitButton('Continuar');
 }
-// Todo el grupo cayó: se empieza de cero en Villa Origen (ver resetProgress en state.js).
+// Todo el grupo cayó: se empieza de cero en Ciudad Origen (ver resetProgress en state.js).
 // ETAPA 2 fase D: en combates cooperativos esto solo aplica si el combate completo se pierde.
 async function defeat() {
   log('💀 Tu grupo ha caído…');
-  $('#b-menu').innerHTML = `<div class="res">💀 <b>Tu grupo ha caído…</b> Comienzas de nuevo en <b>Villa Origen</b>.<br><span class="mut">Pierdes niveles, experiencia, oro, objetos, mejoras de herrería y bonificaciones de santuarios. Conservas el mapa explorado, los cofres abiertos y los jefes derrotados.</span></div>`;
+  $('#b-menu').innerHTML = `<div class="res">💀 <b>Tu grupo ha caído…</b> Comienzas de nuevo en <b>Ciudad Origen</b>.<br><span class="mut">Pierdes niveles, experiencia, oro, objetos, mejoras de herrería y bonificaciones de santuarios. Conservas el mapa explorado, los cofres abiertos y los jefes derrotados.</span></div>`;
   await waitButton('Volver a empezar');
   resetProgress();
   BT.m.stun = 8; P.x = P.px = START.x; P.y = P.py = START.y; spawnNearby(); visitAround();
   save('now');                                 // guardar de inmediato el estado reiniciado
-  notice('death', 'Villa Origen');
-  setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Tu grupo vuelve a empezar desde nivel 1</span>'), 400);
+  notice('death', 'Ciudad Origen');
+  setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Tu grupo vuelve a empezar desde nivel 1</span>'), 400);
 }

@@ -56,6 +56,15 @@ export const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ESC[
 const ARW = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
 export const dirArrow = (dx, dy) => (dx || dy) ? ARW[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8] : '•';
 
+// Dirección cardinal con norte = arriba en la pantalla. dx: este positivo · dn: norte positivo
+const CARD = ['E', 'NE', 'N', 'NO', 'O', 'SO', 'S', 'SE'];
+export const cardinal = (dx, dn) => (dx || dn) ? CARD[(Math.round(Math.atan2(dn, dx) / (Math.PI / 4)) + 8) % 8] : '·';
+
+// Color propio y estable de cada compañero (según su nombre): anillo, nombre y flecha
+const MATE_COLORS = ['#4da3ff', '#46c37b', '#ff7eb6', '#b36bff', '#ff9a3d', '#2ed3c6'];
+export function mateColor(name) { let h = 0; for (const c of String(name)) h = (h * 31 + c.codePointAt(0)) >>> 0; return MATE_COLORS[h % MATE_COLORS.length]; }
+export function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
+
 // Limpia un nombre de jugador: sin controles ni <>, máx. 12 caracteres
 export function cleanName(s) {
   if (typeof s !== 'string') return '';

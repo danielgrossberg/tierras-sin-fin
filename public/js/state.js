@@ -7,7 +7,7 @@ export const G = {};
 export function setG(o) { for (const k of Object.keys(G)) delete G[k]; Object.assign(G, o); }
 
 export const P = { x: 0, y: 0, px: 0, py: 0, face: 1 };   // posición del jugador (px/py = suavizada)
-export const START = { x: 0, y: 0 };                        // Villa Origen
+export const START = { x: 0, y: 0 };                        // Ciudad Origen
 export const st = { seed: 1, busy: false, titleOpen: true, inGame: false, room: null, name: '', online: false };
 
 // Direcciones mantenidas (teclado o cruceta)

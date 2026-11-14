@@ -138,16 +138,16 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Villa Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
-  setTimeout(() => toast('🏘️ Villa Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
+  setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
 }
 function continueGame(s) {
   clearQuestCache(); setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
   if (!G.start) G.start = { x: START.x, y: START.y };
-  G.vv = G.vv || {}; const sid = 'village@' + START.x + ',' + START.y;   // Villa Origen siempre está en el portal
-  if (!G.vv[sid]) G.vv[sid] = { x: START.x, y: START.y, name: 'Villa Origen' };
+  G.vv = G.vv || {}; const sid = 'village@' + START.x + ',' + START.y;   // Ciudad Origen siempre está en el portal
+  if (!G.vv[sid]) G.vv[sid] = { x: START.x, y: START.y, name: 'Ciudad Origen' };
   P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
 }
 

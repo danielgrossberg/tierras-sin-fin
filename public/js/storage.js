@@ -7,7 +7,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -21,10 +21,16 @@ export function migrate(o) {
     for (const h of o.roster) h.equip = h.equip || {};
   }
   if (v < 4) {
-    // Fase C: misiones, bote y aldeas descubiertas (Villa Origen siempre cuenta como descubierta)
+    // Fase C: misiones, bote y aldeas descubiertas (Ciudad Origen siempre cuenta como descubierta)
     o.quests = o.quests || []; o.qtrack = o.qtrack || null; o.board = o.board || {}; o.boat = !!o.boat; o.extraFeats = o.extraFeats || [];
     o.vv = o.vv || {};
-    if (o.start) o.vv['village@' + o.start.x + ',' + o.start.y] = { x: o.start.x, y: o.start.y, name: 'Villa Origen' };
+    if (o.start) o.vv['village@' + o.start.x + ',' + o.start.y] = { x: o.start.x, y: o.start.y, name: 'Ciudad Origen' };
+  }
+  if (v < 5) {
+    // La aldea inicial pasó a llamarse Ciudad Origen: se renombra en el portal y en las misiones guardadas
+    const ren = x => JSON.parse(JSON.stringify(x).replace(/Villa Origen/g, 'Ciudad Origen'));
+    if (o.vv) o.vv = ren(o.vv);
+    if (o.quests) o.quests = ren(o.quests);
   }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});

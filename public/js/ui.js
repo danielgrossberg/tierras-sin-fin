@@ -1,6 +1,6 @@
 // Interfaz: HUD, toasts, avisos online, modales (aldea, grupo, mapa) y panel de la sala.
 'use strict';
-import { $, esc, dirArrow } from './util.js';
+import { $, esc, dirArrow, cardinal, mateColor } from './util.js';
 import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip } from './state.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround } from './world.js';
@@ -31,9 +31,47 @@ export function updateHUD() {
   $('#hud').innerHTML = heroes().map(h => { const mh = S(h, 'mhp'), mm = S(h, 'mmp'); return `<div class="mini ${h.hp <= 0 ? 'dead' : ''}"><span class="em emoji">${h.e}</span><div style="flex:1;min-width:0"><div class="nm">${h.name} <span class="mut">Nv ${h.lvl}</span> ${h.poison > 0 ? '☠️' : ''}</div><div class="bar"><i style="width:${100 * h.hp / mh}%"></i></div><div class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></div></div></div>`; }).join('');
   const b = tileAt(P.x, P.y).b;
   const n = [...net.others.values()].filter(o => o.online !== false).length;
-  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span class="mut">📍 ${P.x - START.x}, ${START.y - P.y}</span> · <span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
+  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
     + (tracked() ? `<div class="qline">${QICON[tracked().type]} ${tracked().title} · <b>${progressText(tracked())}</b></div>` : '');
   const badge = $('#socBadge'); if (badge) { badge.textContent = n ? n : ''; badge.classList.toggle('hidden', !n); }
+  updateCoords();
+}
+
+// ================= Coordenadas (relativas a Ciudad Origen; este = X+, norte = Y+) =================
+// En el celular la tarjeta parte plegada (una línea); al tocarla se despliega. Se recuerda por navegador.
+let coordsOpen = null;
+function coordsPref() {
+  if (coordsOpen !== null) return coordsOpen;
+  try { const v = localStorage.getItem('tsf-coords'); if (v === '1' || v === '0') return (coordsOpen = v === '1'); } catch (e) { /* nada */ }
+  return (coordsOpen = !matchMedia('(max-width: 640px), (pointer: coarse)').matches);
+}
+export function toggleCoords() { coordsOpen = !coordsPref(); try { localStorage.setItem('tsf-coords', coordsOpen ? '1' : '0'); } catch (e) { /* nada */ } updateCoords(); }
+const rel = (x, y) => `${x - START.x}, ${START.y - y}`;
+// "36 casillas al NO" desde mi posición, con norte = arriba en la pantalla
+function towards(x, y) {
+  const dx = x - P.x, dn = P.y - y, d = Math.round(Math.hypot(dx, dn));
+  return d ? `${d} casilla${d === 1 ? '' : 's'} al ${cardinal(dx, dn)}` : 'aquí';
+}
+function nearestVillage() {
+  let best = null, bd = Infinity;
+  for (const f of feats.values()) if (f.type === 'village' && !f.start) { const d = Math.hypot(f.x - P.x, f.y - P.y); if (d < bd) { bd = d; best = f; } }
+  return best;
+}
+const MATE_ST = { lobby: 'eligiendo héroes', away: 'fuera de línea' };
+export function updateCoords() {
+  const el = $('#coords'); if (!el || !st.inGame) return;
+  const open = coordsPref();
+  let h = `<div class="cbar"><span>📍 <b>Tú:</b> ${rel(P.x, P.y)}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`;
+  if (open) {
+    const v = nearestVillage();
+    h += `<div class="crow">🏰 <b>Ciudad Origen:</b> 0, 0 · ${towards(START.x, START.y)}</div>`;
+    h += `<div class="crow">🏘️ ${v ? `<b>${esc(v.name)}:</b> ${rel(v.x, v.y)} · ${towards(v.x, v.y)}` : '<span class="mut">Aún no hay otras aldeas cerca</span>'}</div>`;
+    for (const o of net.others.values()) {
+      const col = mateColor(o.name), pos = o.status && !MATE_ST[o.status] && Number.isFinite(o.x);
+      h += `<div class="crow"><i class="cdot" style="background:${col}"></i><b>${esc(o.name)}:</b> ${pos ? `${rel(o.x, o.y)} · ${towards(o.x, o.y)}${o.online === false ? ' · 📴' : ''}` : `<span class="mut">${MATE_ST[o.status] || 'sin posición'}</span>`}</div>`;
+    }
+  }
+  el.innerHTML = h; el.classList.toggle('open', open);
 }
 
 // ================= Lista de jugadores de la sala =================
@@ -347,7 +385,7 @@ export function openBossConfirm(m, onFight) {
 // ================= Mapa =================
 function mapRender() {
   return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">Solo se ve lo que has explorado. Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
-  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
+  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq castle"></span>Ciudad Origen<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
   <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
 }
 function drawMinimap() {
@@ -361,10 +399,16 @@ function drawMinimap() {
   const vis = (x, y) => G.visited[ckey(Math.floor(x / CH), Math.floor(y / CH))];
   for (const f of feats.values()) {
     const i = f.x - P.x + R, j = f.y - P.y + R; if (i < 1 || j < 1 || i >= N - 1 || j >= N - 1 || !vis(f.x, f.y)) continue;
+    if (f.type === 'village' && f.start) continue;   // Ciudad Origen se dibuja aparte (castillo)
     if (f.type === 'village') { g.fillStyle = '#f2c14e'; g.fillRect(i - 1, j - 1, 3, 3); } else if (f.type === 'shrine' && !G.opened[f.id]) { g.fillStyle = '#c27bff'; g.fillRect(i, j, 2, 2); }
   }
   for (const m of monsters.values()) if (m.boss && vis(m.x, m.y)) { const i = m.x - P.x + R, j = m.y - P.y + R; g.fillStyle = '#ff3b3b'; g.fillRect(i - 1, j - 1, 3, 3); }
   // Marcas y amigos (si están fuera del área, se pegan al borde)
+  // Ciudad Origen: castillo dorado, más grande que las aldeas (siempre visible, pegado al borde si está lejos)
+  { const i = Math.max(6, Math.min(N - 7, START.x - P.x + R)), j = Math.max(6, Math.min(N - 7, START.y - P.y + R));
+    g.fillStyle = '#000'; g.fillRect(i - 5, j - 5, 11, 10); g.fillStyle = '#f2c14e';
+    for (const dx of [-4, -2, 0, 2, 4]) g.fillRect(i + dx, j - 4, 1, 2);
+    g.fillRect(i - 4, j - 2, 9, 6); g.fillStyle = '#6b4d0f'; g.fillRect(i - 1, j + 1, 3, 3); g.fillStyle = '#fff3c4'; g.fillRect(i - 3, j - 1, 1, 1); g.fillRect(i + 3, j - 1, 1, 1); }
   const edge = (x, y, col, s) => { const i = Math.max(2, Math.min(N - 3, x - P.x + R)), j = Math.max(2, Math.min(N - 3, y - P.y + R)); g.fillStyle = '#000'; g.fillRect(i - s, j - s, s * 2 + 1, s * 2 + 1); g.fillStyle = col; g.fillRect(i - s + 1, j - s + 1, s * 2 - 1, s * 2 - 1); };
   const now = Date.now();
   for (const p of net.pins.values()) if (p.until > now) edge(p.x, p.y, '#ff5fa2', 2);
@@ -416,5 +460,6 @@ export function initUI(h) {
   $('#bParty').onclick = () => { if (!st.busy) openParty(); };
   $('#bMap').onclick = () => { if (!st.busy) openMap(); };
   $('#bSocial').onclick = () => toggleSocial();
+  $('#coords').onclick = () => toggleCoords();
   $('#bSave').onclick = () => { toast(save('now') ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador'); };
 }

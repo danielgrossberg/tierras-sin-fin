@@ -90,7 +90,7 @@ export function makeItem(type, rarity, ilvl, rng = Math.random, legend = null) {
   if (legend) it.fx = legend;
   return it;
 }
-// Rareza al azar: mientras más lejos de Villa Origen (luck 0..1), mejores probabilidades
+// Rareza al azar: mientras más lejos de Ciudad Origen (luck 0..1), mejores probabilidades
 export function rollRarity(luck = 0, min = 'comun', rng = Math.random) {
   const w = { comun: 60 - 25 * luck, raro: 28 + 10 * luck, epico: 10 + 10 * luck, legendario: 2 + 5 * luck };
   const keys = RAR_KEYS.slice(RAR_KEYS.indexOf(min));

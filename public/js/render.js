@@ -1,6 +1,6 @@
 // Dibujo del mapa en Canvas 2D: chunks cacheados, sprites, otros jugadores, pines y flechas.
 'use strict';
-import { $, hash, shade, EF } from './util.js';
+import { $, hash, shade, EF, mateColor, hexA } from './util.js';
 import { TILE, CH, B, EN } from './data.js';
 import { G, P, START, st, leader } from './state.js';
 import { getChunk, biomeAt, feats, monsters, tileAt } from './world.js';
@@ -66,7 +66,9 @@ export function renderChunk(c) {
 }
 
 // ================= Helpers de dibujo =================
-function emoji(t, x, y, size, alpha) { ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.font = `${Math.round(size)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y); ctx.globalAlpha = 1; }
+// OJO: los emojis de color se dibujan con la transparencia del fillStyle actual. Si no se fija un relleno
+// opaco, heredan el de la sombra (rgba(0,0,0,.28)) y salen al 28%: por eso el héroe y los monstruos se veían transparentes.
+function emoji(t, x, y, size, alpha) { ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.fillStyle = '#000'; ctx.font = `${Math.round(size)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y); ctx.globalAlpha = 1; }
 function shadow(x, y, w) { ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x, y, w, w * .35, 0, 0, 7); ctx.fill(); }
 function label(txt, x, y, size, col) {
   ctx.font = `bold ${Math.round(size)}px system-ui,sans-serif,${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -82,6 +84,31 @@ function bubble(txt, x, y) {
   ctx.beginPath(); ctx.moveTo(x - 6, by + h - 1); ctx.lineTo(x + 6, by + h - 1); ctx.lineTo(x, by + h + 7); ctx.fill();
   ctx.fillStyle = '#1a1f36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx + w / 2, by + h / 2 + 1);
 }
+// Nombre sobre la cabeza en una "píldora" de color con borde negro
+function namePill(txt, x, y, bg, fg) {
+  ctx.font = `bold 12px system-ui,sans-serif,${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width + 12, h = 18;
+  rrect(x - w / 2, y - h / 2, w, h, 9); ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#000'; ctx.stroke();
+  ctx.fillStyle = fg; ctx.fillText(txt, x, y + 1);
+}
+// Jugador (propio o compañero): anillo de color con pulso, emoji con halo blanco y contorno oscuro, y nombre.
+// Todo dentro de save/restore con opacidad y filtro explícitos, para que nada se "arrastre" de otros dibujos.
+function heroSprite(X, Y, glyph, size, col, t, flip, alpha, name, nameFg) {
+  ctx.save();
+  ctx.globalAlpha = alpha; ctx.filter = 'none'; ctx.shadowColor = 'transparent';
+  const p = .5 + .5 * Math.sin(t / 280);
+  ctx.beginPath(); ctx.ellipse(X, Y + TS() * .4, TS() * .5, TS() * .18, 0, 0, 7);
+  ctx.fillStyle = hexA(col, .22 + .12 * p); ctx.fill();
+  ctx.lineWidth = 2.5 + 1.5 * p; ctx.strokeStyle = hexA(col, .7 + .3 * p); ctx.stroke();
+  ctx.translate(X, Y); if (flip) ctx.scale(-1, 1);
+  ctx.font = `${Math.round(size)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000';   // relleno opaco: si no, el emoji hereda la transparencia del anillo
+  ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = 6 * DPR; ctx.fillText(glyph, 0, 0);   // halo blanco
+  ctx.shadowColor = 'rgba(0,0,0,.95)'; ctx.shadowBlur = 2 * DPR; ctx.fillText(glyph, 0, 0);         // contorno oscuro
+  ctx.restore();
+  if (name) { ctx.save(); ctx.globalAlpha = alpha; namePill(name, X, Y - size * .82, col, nameFg); ctx.restore(); }
+}
+const TS = () => TILE * Z;
 const statusIcon = s => s === 'battle' ? '⚔️ ' : s === 'village' ? '🏘️ ' : '';
 const visibleOther = o => o.status && o.status !== 'lobby' && o.status !== 'away' && Number.isFinite(o.px);
 
@@ -89,13 +116,13 @@ const visibleOther = o => o.status && o.status !== 'lobby' && o.status !== 'away
 let hudRects = [], hudT = 0;
 function refreshHud(t) {
   if (t - hudT < 500) return; hudT = t;
-  hudRects = ['#hud', '#info', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(Boolean)
+  hudRects = ['#hud', '#info', '#coords', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(Boolean)
     .map(el => el.getBoundingClientRect()).filter(r => r.width && r.height);
 }
 const hitsBox = (x0, y0, x1, y1) => hudRects.some(r => x1 > r.left && x0 < r.right && y1 > r.top && y0 < r.bottom);
 const hitsHud = (x, y) => hitsBox(x - 26, y - 30, x + 26, y + 30);
 
-// Flecha en el borde de la pantalla apuntando a algo fuera de vista (amigo o Villa Origen).
+// Flecha en el borde de la pantalla apuntando a algo fuera de vista (compañero, misión o Ciudad Origen).
 // `placed` guarda las flechas ya dibujadas en este frame para que no se encimen.
 const offscreen = (X, Y) => X < 12 || X > W - 12 || Y < 12 || Y > H - 12;
 function edgeArrow(X, Y, icon, text, col, textCol, alpha, placed) {
@@ -145,7 +172,16 @@ export function draw(t) {
   const sprites = [];
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const f = feats.get(x + ',' + y); if (!f) continue;
-    if (f.type === 'village') sprites.push({ y, fn: () => {
+    if (f.type === 'village' && f.start) sprites.push({ y, fn: () => {
+      // Ciudad Origen: castillo grande, brillo dorado suave y nombre en dorado
+      const X = sx(x), Y = sy(y), r = TS * (1.25 + .08 * Math.sin(t / 500));
+      const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(242,193,78,.45)'); gr.addColorStop(1, 'rgba(242,193,78,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+      shadow(X, Y + TS * .5, TS * .7); emoji('🏰', X, Y - TS * .1, TS * 1.65);
+      ctx.font = `bold ${Math.max(13, Math.round(TS * .38))}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 4; ctx.strokeStyle = '#000c'; ctx.strokeText(f.name, X, Y - TS * 1.12); ctx.fillStyle = '#f2c14e'; ctx.fillText(f.name, X, Y - TS * 1.12);
+    } });
+    else if (f.type === 'village') sprites.push({ y, fn: () => {
       shadow(sx(x), sy(y) + TS * .38, TS * .55); emoji('🏘️', sx(x), sy(y), TS * 1.25);
       ctx.font = `bold ${Math.max(11, Math.round(TS * .3))}px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000a'; ctx.strokeText(f.name, sx(x), sy(y) - TS * .8); ctx.fillStyle = '#ffe6a0'; ctx.fillText(f.name, sx(x), sy(y) - TS * .8);
     } });
@@ -163,7 +199,8 @@ export function draw(t) {
         const r = TS * (.85 + .08 * Math.sin(t / 200)); const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(255,40,40,.55)'); gr.addColorStop(1, 'rgba(255,40,40,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
         shadow(X, Y + TS * .45, TS * .5); emoji(e, X, Y - Math.abs(Math.sin(t / 400)) * 3, TS * 1.35); emoji('👑', X, Y - TS * .85, TS * .45);
       } else {
-        shadow(X, Y + TS * .35, TS * .32); emoji(e, X, Y - Math.abs(Math.sin(t / 260 + m.hx)) * 3, TS * .82, m.stun > 0 ? .45 : 1);
+        ctx.beginPath(); ctx.ellipse(X, Y + TS * .36, TS * .38, TS * .14, 0, 0, 7); ctx.fillStyle = 'rgba(229,72,77,.22)'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,90,90,.6)'; ctx.stroke();  // rojo = enemigo
+        shadow(X, Y + TS * .35, TS * .28); emoji(e, X, Y - Math.abs(Math.sin(t / 260 + m.hx)) * 3, TS * .82, m.stun > 0 ? .45 : 1);
         if (m.group.length > 1) { ctx.fillStyle = '#000b'; ctx.beginPath(); ctx.arc(X + TS * .38, Y - TS * .3, TS * .17, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(TS * .24)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.group.length, X + TS * .38, Y - TS * .29); }
       }
     } });
@@ -192,30 +229,32 @@ export function draw(t) {
     if (!visibleOther(o)) continue;
     const X = sx(o.px), Y = sy(o.py);
     if (offscreen(X, Y)) { away.push(o); continue; }
-    sprites.push({ y: o.py, fn: () => {
-      const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .45 : 1;
-      shadow(X, Y + TS * .38, TS * .34);
-      ctx.fillStyle = 'rgba(127,224,255,.22)'; ctx.beginPath(); ctx.ellipse(X, Y + TS * .38, TS * .42, TS * .15, 0, 0, 7); ctx.fill();
-      emoji(o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), TS * .9, a);
-      ctx.globalAlpha = a; label(statusIcon(o.status) + o.name, X, Y - TS * .72, 12, '#7fe0ff'); ctx.globalAlpha = 1;
+    sprites.push({ y: o.py + .44, fn: () => {   // sobre lo demás de su casilla
+      const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .5 : 1;
+      shadow(X, Y + TS * .4, TS * .34);
+      heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * .95, mateColor(o.name), t, false, a,
+        statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18');
     } });
   }
   // Jugador propio
-  sprites.push({ y: P.py + .01, fn: () => {
+  sprites.push({ y: P.py + .45, fn: () => {    // sobre lo demás de su casilla
     const X = sx(P.px), Y = sy(P.py); const moving = Math.abs(P.x - P.px) + Math.abs(P.y - P.py) > .03;
-    shadow(X, Y + TS * .38, TS * .34); ctx.save(); ctx.translate(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0)); if (P.face > 0) ctx.scale(-1, 1); emoji(onWater ? '⛵' : leader().e, 0, onWater ? Math.sin(t / 400) * 2 : 0, TS * (onWater ? 1 : .9)); ctx.restore();
+    const bob = onWater ? Math.sin(t / 400) * 2 : -(moving ? Math.abs(Math.sin(t / 70)) * 4 : 0);
+    shadow(X, Y + TS * .4, TS * .36);
+    // 18% más grande que un monstruo normal (TS*.82), anillo dorado con pulso y nombre en dorado
+    heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00');
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
   // Globos de mensajes rápidos (encima de todo)
-  if (net.myBubble) bubble(net.myBubble.text, sx(P.px), sy(P.py) - TS * .6);
-  for (const o of net.others.values()) if (o.bubble && visibleOther(o) && !away.includes(o)) bubble(o.bubble.text, sx(o.px), sy(o.py) - TS * 1);
+  if (net.myBubble) bubble(net.myBubble.text, sx(P.px), sy(P.py) - TS * 1.25);
+  for (const o of net.others.values()) if (o.bubble && visibleOther(o) && !away.includes(o)) bubble(o.bubble.text, sx(o.px), sy(o.py) - TS * 1.25);
   if (!vign) { vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75); vign.addColorStop(0, 'rgba(0,0,0,0)'); vign.addColorStop(1, 'rgba(0,0,0,.5)'); }
   ctx.fillStyle = vign; ctx.fillRect(0, 0, W, H);
-  // Indicadores fuera de pantalla: primero Villa Origen (dorado), luego los amigos (celeste)
+  // Indicadores fuera de pantalla: primero Ciudad Origen (dorado), luego la misión y los compañeros (su color)
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
-  if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏘️', `Villa Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏰', `Ciudad Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
   // Misión seguida (morado)
   if (tq && tq.target) { const qx = sx(tq.target.x), qy = sy(tq.target.y); if (offscreen(qx, qy)) edgeArrow(qx, qy, QICON[tq.type], `Misión · ${Math.round(Math.hypot(tq.target.x - P.x, tq.target.y - P.y))} c`, '#c084fc', '#ead5ff', 1, placed); }
-  for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, '#7fe0ff', '#bff0ff', o.online === false ? .5 : 1, placed);
+  for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, mateColor(o.name), '#ffffff', o.online === false ? .5 : 1, placed);
 }

@@ -333,3 +333,14 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .danger.warn{background:#2a2412;border-color:#f2c14e;margin-top:4px}
 .danger.warn>b{color:var(--gold)}
 .danger.warn p{color:#efe3c2}
+
+/* ===== Coordenadas (tarjeta plegable) ===== */
+#coords{pointer-events:auto;cursor:pointer;background:rgba(15,18,32,.88);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:3px;max-width:calc(100vw - 168px - var(--sal) - var(--sar));max-height:max(72px,calc(100vh - 330px));overflow:auto;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+#coords:empty{display:none}
+#coords.open{justify-content:flex-start}
+#coords .cbar{display:flex;justify-content:space-between;align-items:center;gap:8px;white-space:nowrap}
+#coords .ctog{color:var(--gold);font-size:13px}
+#coords .crow{line-height:1.35;border-top:1px solid #ffffff14;padding-top:3px}
+#coords .cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;border:1px solid #000;vertical-align:middle}
+@media (min-width:900px) and (min-height:560px){#coords{font-size:13px;max-width:300px}}
+.sq.castle{background:#f2c14e;width:13px;height:13px;outline:2px solid #000;box-shadow:0 0 0 3px #f2c14e66}

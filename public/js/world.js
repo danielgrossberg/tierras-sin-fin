@@ -67,7 +67,7 @@ function makeChunk(cx, cy) {
     return null;
   };
   const inStart = Math.floor(START.x / CH) === cx && Math.floor(START.y / CH) === cy;
-  if (inStart) addFeat('village', START.x, START.y, { name: 'Villa Origen', start: 1 });
+  if (inStart) addFeat('village', START.x, START.y, { name: 'Ciudad Origen', start: 1 });
   else if (r() < .075) { const p = free(); if (p) addFeat('village', p.x, p.y, { name: vName(r) }); }
   let nc = r() < .38 ? 1 : 0; if (r() < .12) nc++;
   for (let k = 0; k < nc; k++) { const p = free(); if (p) addFeat('chest', p.x, p.y); }
