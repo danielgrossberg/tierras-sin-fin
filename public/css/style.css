@@ -344,3 +344,12 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 #coords .cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;border:1px solid #000;vertical-align:middle}
 @media (min-width:900px) and (min-height:560px){#coords{font-size:13px;max-width:300px}}
 .sq.castle{background:#f2c14e;width:13px;height:13px;outline:2px solid #000;box-shadow:0 0 0 3px #f2c14e66}
+
+/* ===== Versión 2 · Fase 1: tumba y 11 clases ===== */
+#coords .ctomb{color:#ffb3b3}
+#coords .crow.ctomb b{color:#ff8a8a}
+@media (max-width:640px){
+  .classes{grid-template-columns:repeat(2,1fr);max-height:none}
+  .cls small{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+}
+.tav{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}

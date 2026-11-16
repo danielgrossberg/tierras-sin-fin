@@ -1,13 +1,14 @@
 // Guardado local (localStorage). Todo en try/catch: si falla, se juega igual.
 'use strict';
 import { G, P, st } from './state.js';
+import { CL } from './data.js';
 import { pushSave } from './net.js';
 
 export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -32,6 +33,15 @@ export function migrate(o) {
     if (o.vv) o.vv = ren(o.vv);
     if (o.quests) o.quests = ren(o.quests);
   }
+  if (v < 6) {
+    // Versión 2: 6 clases nuevas. Se agregan al roster en nivel 1 (vida y magia se llenan al cargar: hp/mp = -1).
+    // El grupo, el líder y todo el resto del progreso quedan igual. Además: tumba (vacía).
+    const have = new Set(o.roster.map(h => h.cls));
+    for (const k of Object.keys(CL)) if (!have.has(k)) {
+      o.roster.push({ id: 'h' + o.roster.length, isHero: true, cls: k, name: CL[k].name, e: CL[k].e, lvl: 1, xp: 0, hp: -1, mp: -1, bonus: {}, buffs: {}, poison: 0, equip: {} });
+    }
+    o.tomb = o.tomb || null;
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
@@ -55,10 +65,22 @@ export function save(mode) {
 }
 // Escribe una partida (por ejemplo la que vino del servidor) como respaldo local
 export function writeLocal(code, name, data) { try { localStorage.setItem(saveKey(code, name), JSON.stringify(data)); } catch (e) { /* nada */ } }
+// Antes de migrar una partida de una versión anterior, se copia tal cual en "tsf:SALA:nombre:backup-vN"
+// (no se borra nunca), para poder recuperarla si algo saliera mal.
+export function backupIfOld(code, name, raw) {
+  try {
+    const o = typeof raw === 'string' ? JSON.parse(raw) : raw, v = (o && o.saveVersion) || 1;
+    if (!o || v >= SAVE_VERSION) return;
+    const k = saveKey(code, name) + ':backup-v' + v;
+    if (!localStorage.getItem(k)) localStorage.setItem(k, typeof raw === 'string' ? raw : JSON.stringify(raw));
+  } catch (e) { /* sin localStorage */ }
+}
 export function loadGame(code, name) {
   try {
     const s = localStorage.getItem(saveKey(code, name));
-    return s ? migrate(JSON.parse(s)) : null;
+    if (!s) return null;
+    backupIfOld(code, name, s);
+    return migrate(JSON.parse(s));
   } catch (e) { return null; }
 }
 // Partidas guardadas en este navegador para un nombre (en cualquier sala), la más reciente primero
@@ -67,7 +89,7 @@ export function listSaves(name) {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i), m = /^tsf:([A-Z]{4}):(.+)$/.exec(k || '');
-      if (!m || m[2].toLowerCase() !== low) continue;
+      if (!m || m[2].includes(':backup-') || m[2].toLowerCase() !== low) continue;
       try {
         const o = JSON.parse(localStorage.getItem(k));
         if (o && Array.isArray(o.roster) && Array.isArray(o.party)) out.push({ code: m[1], name: m[2], savedAt: o.savedAt || 0, steps: o.steps || 0, heroes: o.roster.filter((_, j) => o.party.includes(j)).map(h => h.e + ' Nv ' + h.lvl).join(' · ') });

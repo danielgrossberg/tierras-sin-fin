@@ -6,6 +6,7 @@ import { G, P, START, st, leader } from './state.js';
 import { getChunk, biomeAt, feats, monsters, tileAt } from './world.js';
 import { net } from './net.js';
 import { tracked, QICON } from './quests.js';
+import { tombMinutes } from './tomb.js';
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
 let W = 0, H = 0, DPR = 1, Z = 1.3, vign = null;
@@ -141,14 +142,18 @@ function edgeArrow(X, Y, icon, text, col, textCol, alpha, placed) {
   ctx.font = `bold 12px system-ui,sans-serif,${EF}`; const tw = ctx.measureText(text).width / 2 + 4;
   const labelAt = (x, y) => [Math.max(L + 24, Math.min(R - 24, x)), y > cy ? y - 30 : y + 31];
   const labelHits = (x, y) => { const [lx, ly] = labelAt(x, y); return hitsBox(lx - tw, ly - 9, lx + tw, ly + 9); };
-  const free = (x, y) => x >= L && x <= R && y >= T && y <= Bt && !hitsHud(x, y) && !labelHits(x, y) && !placed.some(p => Math.abs(p.x - x) < 150 && Math.abs(p.y - y) < 64); // 150: ancho del texto
+  // Choque con otra flecha: círculo contra círculo y texto contra texto (o contra el círculo de la otra)
+  const box = (x0, y0, x1, y1, q) => x1 > q[0] && x0 < q[2] && y1 > q[1] && y0 < q[3];
+  const clash = (x, y) => { const [lx, ly] = labelAt(x, y), me = [lx - tw, ly - 10, lx + tw, ly + 10], ci = [x - 24, y - 24, x + 24, y + 24];
+    return placed.some(p => box(...ci, p.c) || box(...me, p.l) || box(...me, p.c) || box(...ci, p.l)); };
+  const free = (x, y) => x >= L && x <= R && y >= T && y <= Bt && !hitsHud(x, y) && !labelHits(x, y) && !clash(x, y);
   search: for (let depth = 0; depth <= Math.max(W, H) / 2; depth += 24) {
     for (let k = 0; k <= 40; k++) for (const sg of k ? [1, -1] : [1]) {
       const x = ax + along[0] * sg * k * 8 + inward[0] * depth, y = ay + along[1] * sg * k * 8 + inward[1] * depth;
       if (free(x, y)) { ax = x; ay = y; break search; }
     }
   }
-  placed.push({ x: ax, y: ay });
+  { const [plx, ply] = labelAt(ax, ay); placed.push({ x: ax, y: ay, c: [ax - 24, ay - 24, ax + 24, ay + 24], l: [plx - tw, ply - 10, plx + tw, ply + 10] }); }
   ctx.save(); ctx.translate(ax, ay); ctx.globalAlpha = alpha;
   ctx.fillStyle = 'rgba(15,18,32,.88)'; ctx.strokeStyle = col; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, 0, 18, 0, 7); ctx.fill(); ctx.stroke();
@@ -236,6 +241,20 @@ export function draw(t) {
         statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18');
     } });
   }
+  // Tumba 🪦 propia (con brillo y "Tus objetos") y las de los compañeros ("🪦 de Nombre", no se pueden recoger)
+  const tombs = [];
+  if (G.tomb) tombs.push({ x: G.tomb.x, y: G.tomb.y, own: true });
+  for (const o of net.others.values()) if (Array.isArray(o.tomb)) tombs.push({ x: o.tomb[0], y: o.tomb[1], name: o.name });
+  for (const tb of tombs) {
+    if (tb.x < x0 || tb.x > x1 || tb.y < y0 || tb.y > y1) continue;
+    sprites.push({ y: tb.y, fn: () => {
+      const X = sx(tb.x), Y = sy(tb.y), r = TS * (.75 + .1 * Math.sin(t / 350));
+      const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, tb.own ? 'rgba(255,60,60,.5)' : 'rgba(180,180,200,.35)'); gr.addColorStop(1, 'rgba(255,60,60,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+      shadow(X, Y + TS * .32, TS * .3); emoji('🪦', X, Y, TS * .85);
+      label(tb.own ? 'Tus objetos' : '🪦 de ' + tb.name, X, Y - TS * .62, 11, tb.own ? '#ffb3b3' : '#d8dbe8');
+    } });
+  }
   // Jugador propio
   sprites.push({ y: P.py + .45, fn: () => {    // sobre lo demás de su casilla
     const X = sx(P.px), Y = sy(P.py); const moving = Math.abs(P.x - P.px) + Math.abs(P.y - P.py) > .03;
@@ -254,6 +273,8 @@ export function draw(t) {
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
   if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏰', `Ciudad Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  // Tumba (roja): distancia y minutos que quedan
+  if (G.tomb) { const tx = sx(G.tomb.x), ty = sy(G.tomb.y); if (offscreen(tx, ty)) edgeArrow(tx, ty, '🪦', `${Math.round(Math.hypot(G.tomb.x - P.x, G.tomb.y - P.y))} c · ${tombMinutes()} min`, '#ff4040', '#ffc2c2', 1, placed); }
   // Misión seguida (morado)
   if (tq && tq.target) { const qx = sx(tq.target.x), qy = sy(tq.target.y); if (offscreen(qx, qy)) edgeArrow(qx, qy, QICON[tq.type], `Misión · ${Math.round(Math.hypot(tq.target.x - P.x, tq.target.y - P.y))} c`, '#c084fc', '#ead5ff', 1, placed); }
   for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, mateColor(o.name), '#ffffff', o.online === false ? .5 : 1, placed);

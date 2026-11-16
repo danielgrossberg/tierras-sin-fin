@@ -61,7 +61,7 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 
 - **Moverse:** WASD / flechas, o la cruceta en pantalla (mantén presionado; puedes deslizar el dedo para cambiar de dirección).
 - **G** grupo · **M** mapa · **C** sala y mensajes · Combate: toca las opciones o teclas 1–9.
-- Al morir todo el grupo se vuelve a empezar desde nivel 1 en Ciudad Origen (ver "Reglas de la Etapa 2").
+- Si cae todo el grupo, despierta en Ciudad Origen con todo su progreso; los objetos quedan en una tumba 🪦 por 60 minutos (ver "Versión 2").
 - **Seguridad:** empezar una partida nueva (desde 🎒 Grupo o desde la elección de héroes cuando ya hay una guardada)
   pide escribir **CONFIRMAR**, para no borrar el avance por un toque accidental.
   Y si ya tienes una partida con tu nombre, **Crear sala nueva** avisa que empezarás desde cero en otro mundo
@@ -86,12 +86,7 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 ## Reglas de la Etapa 2
 
 ### Fase 0 (lista)
-- **Muerte = empezar de cero.** Si cae **todo** el grupo en un combate, se vuelve a Ciudad Origen y se pierde:
-  nivel y experiencia de todo el roster (también los de la taberna), oro, objetos, mejoras de herrería y
-  bonificaciones de santuarios. Se conserva: el mapa explorado, los cofres abiertos, los jefes derrotados,
-  el grupo y el líder. El oro y los objetos vuelven a los de una partida nueva, y los demás jugadores
-  de la sala reciben el aviso "💀 [nombre] cayó y vuelve a empezar desde Ciudad Origen".
-  Si cae solo una parte del grupo y el resto gana, los caídos siguen caídos hasta revivirlos (posada o Pluma Fénix).
+- ~~Muerte = empezar de cero~~ → **reemplazada en la Versión 2** por la regla de la tumba 🪦 (ver abajo).
 - **Flecha dorada a Ciudad Origen** 🏰 con la distancia, siempre visible cuando la villa está fuera de pantalla.
   Esquiva la cruceta, los botones y la flecha del amigo.
 - **Jefes con confirmación:** nunca inician el combate. Al tocarlos aparece una ventana con su nivel,
@@ -133,7 +128,7 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   equipo al 30% de su valor.
 - **Balance:** para compensar el equipo, el crecimiento de los enemigos por nivel subió de 13% a 15% (ATQ/DEF/MAG)
   y de 30% a 35% (PV). A nivel 1 no cambia nada; a nivel 10 los enemigos son ~6–10% más duros.
-- Al morir todo el grupo también se pierde el equipo (puesto y del inventario).
+- Al morir todo el grupo, el equipo (puesto y del inventario) queda en la tumba 🪦 (Versión 2).
 
 ### Fase C (lista): misiones, bote y portales
 - **Tablón de misiones** en cada aldea: 3 misiones generadas de forma determinista por aldea (mismas para todos
@@ -146,9 +141,38 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
     con una flecha morada en el borde de la pantalla, un ❗ sobre el objetivo y una marca en el mapa.
 - **Bote ⛵:** se compra por 300 de oro en aldeas costeras (mar a 3 casillas o menos). Permite navegar por el mar
   (las montañas siguen bloqueadas), con encuentros marinos (cangrejos, serpientes marinas y, muy rara vez, el Kraken,
-  que siempre pide confirmación). Se pierde si cae todo el grupo.
+  que siempre pide confirmación).
 - **Portales 🌀:** cada aldea visitada queda registrada; desde cualquier aldea se puede viajar a otra ya visitada por
   5 × nivel promedio en oro. Las aldeas descubiertas se conservan al morir.
+
+## Versión 2
+
+### Fase 1 (lista): 6 clases nuevas y muerte con tumba
+- **11 héroes en el roster** (se siguen eligiendo hasta 3 en la taberna). Nuevas, con habilidades en los niveles 1, 3, 6 y 10:
+  | Clase | Habilidades | Pasiva |
+  |---|---|---|
+  | 🪓 Bárbaro (Ulrik) | Hachazo · Furia · Torbellino · Golpe Desesperado | — |
+  | 🧛 Nigromante (Mordek) | Drenar Vida · Maldición · Alzar Esqueleto · Plaga | — |
+  | 🧙‍♂️ Druida (Silvano) | Raíces · Espinas · Forma de Oso · Ira de la Naturaleza | — |
+  | 🧔 Enano (Brom) | Martillazo · Piel de Piedra · Cerveza Enana · Golpe Sísmico | +25% de oro |
+  | 🧝‍♂️ Elfo (Aelar) | Espada Lunar · Canto del Bosque · Danza de Espadas · Luz de Luna | 15% de esquivar golpes físicos |
+  | 👺 Goblin (Grik) | Puñal Sucio · Trampa · Bomba Casera · Golpe de Suerte | +30% de botín; huye siempre de monstruos normales |
+- **Estados nuevos** con ícono en las tarjetas: 💫 aturdido, 🔮 maldición, 🌵 espinas, 🐻 forma de oso (PV temporales),
+  💀 invocación, 💚 regeneración, 🎵 canto del bosque, 😡 furia, 🪨 piel de piedra, 🪤 trampa.
+  (La regeneración la da la Forma de Oso: 6% de PV por turno.)
+- **Balance:** simulación automática (misma estrategia para todos). En trío —la clase + 2 al azar contra 3 monstruos
+  un nivel más arriba— las clases nuevas ganan 73–87% a nivel 5 y 90–100% a nivel 12, el mismo rango que las
+  originales (77–93% y 90–100%). Tras simular se bajó el ATQ base del Bárbaro (12→11) y se subieron los PV del Goblin (26→29).
+- **Muerte del grupo completo:** se despierta en **Ciudad Origen** con todos revividos y sin estados. Se conservan
+  niveles, experiencia, **oro**, herrería, santuarios, mapa, aldeas, misiones y bote. Los **objetos** (pociones,
+  éteres, plumas, el inventario y el **equipo puesto**) quedan en una **tumba 🪦** donde cayó el grupo:
+  - Al pisarla se recupera todo (el equipo vuelve a su héroe si la ranura sigue libre; si no, al inventario).
+  - Dura **60 minutos reales** desde la muerte (corre aunque se cierre el juego). Una sola tumba: si se vuelve a caer,
+    la anterior se pierde. Flecha roja con distancia y minutos, marca roja en el minimapa y línea en la tarjeta de coordenadas.
+  - Los compañeros ven "🪦 de [nombre]" y reciben el aviso "💀 El grupo de [nombre] cayó".
+- **Guardado:** `saveVersion` 6. Al cargar una partida de una versión anterior, primero se copia intacta en
+  `tsf:SALA:nombre:backup-vN` (no se borra) y luego se migra: se agregan los 6 héroes nuevos en nivel 1; el grupo
+  y todo el progreso quedan iguales (probado con una partida real de la versión publicada).
 
 ## Guardado en servidor con Neon
 
@@ -186,6 +210,7 @@ public/js/render.js    Dibujo del mapa, otros jugadores, pines, globos y flechas
 public/js/battle.js    Combate por turnos, participación y efectos del equipo
 public/js/items.js     Equipo: tipos, rarezas, legendarios, nombres, botín y armería
 public/js/quests.js    Misiones de aldea: generación determinista, progreso y recompensas
+public/js/tomb.js      Tumba 🪦: objetos del grupo caído, recuperación y vencimiento (60 min)
 public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

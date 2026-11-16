@@ -8,9 +8,10 @@ import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
-import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, writeLocal, SAVE_VERSION } from './storage.js';
+import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, writeLocal, backupIfOld, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onArrive, clearQuestCache } from './quests.js';
+import { onTomb, recoverTomb, tombExpired } from './tomb.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -34,6 +35,7 @@ function move(dir) {
     else if (f.type === 'shrine' && !G.opened[f.id]) useShrine(f);
   }
   // Misiones de entrega y exploración: se cumplen al pisar el lugar
+  if (onTomb() && recoverTomb()) { toast('🎒 ¡Recuperaste tus objetos!'); save('now'); }
   const done = onArrive(nx, ny);
   if (done.length) { feed(done.join('<br>')); save('now'); }
   const hit = moveMonsters(); updateHUD();
@@ -57,7 +59,7 @@ function openChest(f) {
     if (addItem(it)) { toast(`📦 Cofre: ${itemLabel(it)}<br><span style="font-size:13px;color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</span>`); save(); return; }
     toast('🎒 Inventario lleno: el cofre tenía equipo, pero no cabe');
   }
-  if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
+  if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40) * (heroes().some(h => h.cls === 'enano') ? 1.25 : 1)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
   else { const k = r < .8 ? 'pocion' : r < .93 ? 'eter' : 'pluma', n = k === 'pocion' ? 2 : 1; G.items[k] += n; toast(`📦 Cofre: ${IT[k].e} ${IT[k].n} ×${n}`); }
   save();
 }
@@ -68,7 +70,7 @@ function useShrine(f) {
 }
 // Estado que ven los demás
 const curStatus = () => getBT() ? 'battle' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus() });
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -122,6 +124,7 @@ function frame(t) {
     if (Math.abs(P.x - P.px) > 3 || Math.abs(P.y - P.py) > 3) { P.px = P.x; P.py = P.y; }
     for (const m of monsters.values()) { m.px += (m.x - m.px) * a; m.py += (m.y - m.py) * a; }
     lerpOthers(dt);
+    if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     draw(t);
     tick(t, myState);
   }
@@ -129,11 +132,13 @@ function frame(t) {
 }
 
 // ================= Partidas =================
+let lastTombCheck = 0;
+function checkTomb() { if (tombExpired()) { toast('⌛ Se acabaron los 60 minutos: los objetos de tu tumba 🪦 se perdieron'); save('now'); updateHUD(); } }
 function enterWorld() {
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
-  updateHUD(); updatePlayersUI(); save('now');
+  updateHUD(); updatePlayersUI(); checkTomb(); save('now');
 }
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
@@ -148,6 +153,7 @@ function continueGame(s) {
   if (!G.start) G.start = { x: START.x, y: START.y };
   G.vv = G.vv || {}; const sid = 'village@' + START.x + ',' + START.y;   // Ciudad Origen siempre está en el portal
   if (!G.vv[sid]) G.vv[sid] = { x: START.x, y: START.y, name: 'Ciudad Origen' };
+  for (const h of G.roster) { if (h.hp < 0) h.hp = S(h, 'mhp'); if (h.mp < 0) h.mp = S(h, 'mmp'); }   // héroes nuevos (Versión 2)
   P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
 }
 
@@ -191,6 +197,7 @@ async function enterRoom(code, name) {
   const canon = net.name || name;   // el servidor puede devolver el nombre con sus mayúsculas originales
   // ¿Qué partida usar? La más reciente entre la del servidor y la de este celular.
   const local = loadGame(code, canon) || (canon !== name ? loadGame(code, name) : null) || (mine ? loadGame(code, mine.name) : null);
+  if (net.serverSave) backupIfOld(code, canon, JSON.stringify(net.serverSave));   // copia intacta antes de migrar
   const server = net.serverSave ? migrate(net.serverSave) : null;
   if (server && (!local || (server.savedAt || 0) >= (local.savedAt || 0))) writeLocal(code, canon, server);
   else if (local) { writeLocal(code, canon, local); uploadSave(local); } // primera vez: se sube la partida local

@@ -17,14 +17,14 @@ export const SLOT_KEYS = Object.keys(SLOTS);
 
 // Tipos de objeto y qué clases los pueden usar
 export const TYPES = {
-  espada: { n: 'Espada', slot: 'weapon', e: '🗡️', cls: ['guerrero'], main: 'atk' },
-  hacha: { n: 'Hacha', slot: 'weapon', e: '🪓', cls: ['guerrero'], main: 'atk' },
-  baculo: { n: 'Báculo', slot: 'weapon', e: '🪄', cls: ['maga', 'sanadora'], main: 'mag' },
+  espada: { n: 'Espada', slot: 'weapon', e: '🗡️', cls: ['guerrero', 'elfo'], main: 'atk' },
+  hacha: { n: 'Hacha', slot: 'weapon', e: '🪓', cls: ['guerrero', 'barbaro', 'enano'], main: 'atk' },
+  baculo: { n: 'Báculo', slot: 'weapon', e: '🪄', cls: ['maga', 'sanadora', 'nigromante', 'druida'], main: 'mag' },
   arco: { n: 'Arco', slot: 'weapon', e: '🏹', cls: ['arquera'], main: 'atk' },
-  dagas: { n: 'Dagas', slot: 'weapon', e: '🔪', cls: ['picaro'], main: 'atk' },
-  pesada: { n: 'Coraza', slot: 'armor', e: '🛡️', cls: ['guerrero'], main: 'def', f: { def: 1.2, mhp: 1.5 } },
+  dagas: { n: 'Dagas', slot: 'weapon', e: '🔪', cls: ['picaro', 'goblin'], main: 'atk' },
+  pesada: { n: 'Coraza', slot: 'armor', e: '🛡️', cls: ['guerrero', 'enano'], main: 'def', f: { def: 1.2, mhp: 1.5 } },
   ligera: { n: 'Armadura ligera', slot: 'armor', e: '🦺', cls: ALL, main: 'def', f: { def: .9, mhp: 1 } },
-  tunica: { n: 'Túnica', slot: 'armor', e: '👘', cls: ['maga', 'sanadora'], main: 'def', f: { def: .7, mhp: .8, mmp: .6 } },
+  tunica: { n: 'Túnica', slot: 'armor', e: '👘', cls: ['maga', 'sanadora', 'nigromante', 'druida'], main: 'def', f: { def: .7, mhp: .8, mmp: .6 } },
   anillo: { n: 'Anillo', slot: 'acc', e: '💍', cls: ALL, main: null },
   amuleto: { n: 'Amuleto', slot: 'acc', e: '📿', cls: ALL, main: null },
 };

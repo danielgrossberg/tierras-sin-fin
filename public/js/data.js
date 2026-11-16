@@ -44,6 +44,19 @@ export const CL = {
     b: { mhp: 32, mmp: 10, atk: 8, def: 4, mag: 3, spd: 11 }, g: { mhp: 6, mmp: 1.5, atk: 1.9, def: 1, mag: .6, spd: 1.8 }, sk: ['robar', 'punalada', 'dagas', 'asesinar'] },
   sanadora: { n: 'Sanadora', name: 'Elena', e: '🧚‍♀️', d: 'Cura, revive y castiga a los no-muertos.', crit: .05,
     b: { mhp: 32, mmp: 20, atk: 5, def: 5, mag: 9, spd: 6 }, g: { mhp: 6, mmp: 3.6, atk: .8, def: 1.2, mag: 2.1, spd: 1 }, sk: ['curar', 'luz', 'curartodos', 'revivir', 'bendicion'] },
+  // ---- Versión 2: seis clases nuevas (habilidades en los niveles 1, 3, 6 y 10) ----
+  barbaro: { n: 'Bárbaro', name: 'Ulrik', e: '🪓', d: 'Mucho daño y poca defensa. Más peligroso con poca vida.', crit: .1,
+    b: { mhp: 40, mmp: 8, atk: 11, def: 4, mag: 2, spd: 7 }, g: { mhp: 8, mmp: 1.1, atk: 2.5, def: 1, mag: .3, spd: 1 }, sk: ['hachazo', 'furia', 'torbellinob', 'desesperado'] },
+  nigromante: { n: 'Nigromante', name: 'Mordek', e: '🧛', d: 'Magia oscura: roba vida, maldice e invoca esqueletos.', crit: .05,
+    b: { mhp: 30, mmp: 22, atk: 4, def: 4, mag: 10, spd: 6 }, g: { mhp: 5.5, mmp: 3.8, atk: .6, def: .9, mag: 2.3, spd: 1 }, sk: ['drenarvida', 'maldicion', 'esqueleto', 'plaga'] },
+  druida: { n: 'Druida', name: 'Silvano', e: '🧙‍♂️', d: 'Naturaleza: raíces, espinas y forma de oso.', crit: .06,
+    b: { mhp: 36, mmp: 18, atk: 7, def: 5, mag: 8, spd: 6 }, g: { mhp: 7, mmp: 3, atk: 1.5, def: 1.2, mag: 1.8, spd: 1 }, sk: ['raices', 'espinas', 'oso', 'ira'] },
+  enano: { n: 'Enano', name: 'Brom', e: '🧔', d: 'Tanque muy duro y lento. Con él en el grupo, +25% de oro.', crit: .06,
+    b: { mhp: 48, mmp: 10, atk: 9, def: 10, mag: 2, spd: 3 }, g: { mhp: 9.5, mmp: 1.4, atk: 2, def: 2.2, mag: .3, spd: .5 }, sk: ['martillazo', 'piedra', 'cerveza', 'sismico'] },
+  elfo: { n: 'Elfo', name: 'Aelar', e: '🧝‍♂️', d: 'Ágil: espada y magia. Esquiva el 15% de los golpes físicos.', crit: .1,
+    b: { mhp: 32, mmp: 16, atk: 8, def: 5, mag: 7, spd: 10 }, g: { mhp: 6, mmp: 2.6, atk: 1.7, def: 1.1, mag: 1.6, spd: 1.6 }, sk: ['lunar', 'canto', 'danza', 'luzluna'] },
+  goblin: { n: 'Goblin', name: 'Grik', e: '👺', d: 'Rápido, frágil y con suerte: +30% de botín y huye siempre de monstruos normales.', crit: .15,
+    b: { mhp: 29, mmp: 12, atk: 8, def: 3, mag: 4, spd: 12 }, g: { mhp: 5.4, mmp: 1.8, atk: 1.8, def: .8, mag: .8, spd: 1.9 }, sk: ['punalsucio', 'trampa', 'bomba', 'suerte'] },
 };
 
 // ================= Habilidades =================
@@ -70,6 +83,36 @@ export const SK = {
   curartodos: { n: 'Curar a Todos', mp: 10, lv: 5, t: 'allies', field: 1, d: 'Cura a todo el grupo' },
   revivir: { n: 'Revivir', mp: 14, lv: 7, t: 'dead', field: 1, d: 'Revive con 50% PV' },
   bendicion: { n: 'Bendición', mp: 12, lv: 10, t: 'none', d: '+35% defensa al grupo' },
+  // Bárbaro
+  hachazo: { n: 'Hachazo', mp: 3, lv: 1, t: 'enemy', d: 'Daño físico ×1.8' },
+  furia: { n: 'Furia', mp: 2, lv: 3, t: 'none', d: '+60% ATQ por 3 turnos (cuesta 10% de PV)' },
+  torbellinob: { n: 'Torbellino', mp: 8, lv: 6, t: 'enemies', d: 'Daño físico a todos' },
+  desesperado: { n: 'Golpe Desesperado', mp: 8, lv: 10, t: 'enemy', d: 'Más daño mientras menos PV le queden' },
+  // Nigromante
+  drenarvida: { n: 'Drenar Vida', mp: 4, lv: 1, t: 'enemy', d: 'Magia ×1.4 y se cura la mitad' },
+  maldicion: { n: 'Maldición', mp: 5, lv: 3, t: 'enemy', d: 'El enemigo recibe +30% de daño por 3 turnos' },
+  esqueleto: { n: 'Alzar Esqueleto', mp: 10, lv: 6, t: 'none', d: 'Un esqueleto aliado ataca al final de cada ronda (3 rondas)' },
+  plaga: { n: 'Plaga', mp: 14, lv: 10, t: 'enemies', d: 'Magia a todos y veneno' },
+  // Druida
+  raices: { n: 'Raíces', mp: 4, lv: 1, t: 'enemy', d: 'Daño leve; el enemigo pierde su próximo turno' },
+  espinas: { n: 'Espinas', mp: 5, lv: 3, t: 'none', d: 'Refleja 30% del daño que recibe (3 turnos)' },
+  oso: { n: 'Forma de Oso', mp: 8, lv: 6, t: 'none', d: '3 turnos: +50% PV temporales, +50% ATQ y regeneración; solo ataques físicos' },
+  ira: { n: 'Ira de la Naturaleza', mp: 14, lv: 10, t: 'enemies', d: 'Magia a todos y veneno' },
+  // Enano
+  martillazo: { n: 'Martillazo', mp: 3, lv: 1, t: 'enemy', d: 'Daño físico ×1.6, 30% de aturdir' },
+  piedra: { n: 'Piel de Piedra', mp: 4, lv: 3, t: 'none', d: '+60% DEF por 3 turnos' },
+  cerveza: { n: 'Cerveza Enana', mp: 5, lv: 6, t: 'none', d: 'Cura 35% PV y quita estados (1 vez por combate)' },
+  sismico: { n: 'Golpe Sísmico', mp: 10, lv: 10, t: 'enemies', d: 'Daño físico ×1.2 a todos' },
+  // Elfo
+  lunar: { n: 'Espada Lunar', mp: 3, lv: 1, t: 'enemy', d: 'Daño físico + mágico combinado' },
+  canto: { n: 'Canto del Bosque', mp: 6, lv: 3, t: 'none', d: '+30% VEL y +10% crítico al grupo (3 turnos)' },
+  danza: { n: 'Danza de Espadas', mp: 8, lv: 6, t: 'enemies', d: '3 golpes a enemigos al azar' },
+  luzluna: { n: 'Luz de Luna', mp: 14, lv: 10, t: 'enemies', d: 'Magia a todos, ×2 a no-muertos' },
+  // Goblin
+  punalsucio: { n: 'Puñal Sucio', mp: 3, lv: 1, t: 'enemy', d: 'Daño + veneno' },
+  trampa: { n: 'Trampa', mp: 4, lv: 3, t: 'none', d: 'El próximo enemigo que lo ataque recibe daño y queda aturdido' },
+  bomba: { n: 'Bomba Casera', mp: 8, lv: 6, t: 'enemies', d: 'Daño de fuego a todos' },
+  suerte: { n: 'Golpe de Suerte', mp: 6, lv: 10, t: 'enemy', d: 'Daño al azar entre ×0.5 y ×4' },
 };
 
 // ================= Objetos =================

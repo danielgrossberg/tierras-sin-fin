@@ -61,7 +61,7 @@ function makeRoom(code) {
   const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), emptySince: Date.now(), dirty: false };
   rooms.set(code, room); return room;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -110,7 +110,9 @@ function validState(d) {
   if (!isCoord(d.x) || !isCoord(d.y)) return null;
   if (!EMOJIS.has(d.leaderEmoji) || !BIOMES.has(d.biome) || !STATUSES.has(d.status)) return null;
   const lv = Number(d.avgLvl); if (!Number.isFinite(lv) || lv < 1 || lv > 999) return null;
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10 };
+  // Tumba 🪦 (opcional): [x, y] enteros
+  const tomb = Array.isArray(d.tomb) && d.tomb.length === 2 && isCoord(d.tomb[0]) && isCoord(d.tomb[1]) ? [d.tomb[0], d.tomb[1]] : null;
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;

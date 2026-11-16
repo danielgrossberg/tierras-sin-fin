@@ -8,6 +8,7 @@ import { boardQuest, accept, abandon, track, tracked, active, isActive, progress
 import { runSkill, useItem, skillCost } from './battle.js';
 import { INV_MAX, SLOTS, SLOT_KEYS, TYPES, RAR, STAT, LEGENDS, slotOf, canUse, sellPrice, buyPrice, statList, classesText, itemLabel, compare, addItem, shopStock, markBought } from './items.js';
 import { save } from './storage.js';
+import { tombMinutes } from './tomb.js';
 import { net, sendQuick, placePin } from './net.js';
 
 // Acciones que resuelve main.js (evita dependencias circulares con la pantalla de inicio)
@@ -61,9 +62,10 @@ const MATE_ST = { lobby: 'eligiendo héroes', away: 'fuera de línea' };
 export function updateCoords() {
   const el = $('#coords'); if (!el || !st.inGame) return;
   const open = coordsPref();
-  let h = `<div class="cbar"><span>📍 <b>Tú:</b> ${rel(P.x, P.y)}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`;
+  let h = `<div class="cbar"><span>📍 <b>Tú:</b> ${rel(P.x, P.y)}${G.tomb && !open ? ` · <span class="ctomb">🪦 ${tombMinutes()} min</span>` : ''}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`;
   if (open) {
     const v = nearestVillage();
+    if (G.tomb) h += `<div class="crow ctomb">🪦 <b>Tus objetos:</b> ${rel(G.tomb.x, G.tomb.y)} · ${towards(G.tomb.x, G.tomb.y)} · ${tombMinutes()} min</div>`;
     h += `<div class="crow">🏰 <b>Ciudad Origen:</b> 0, 0 · ${towards(START.x, START.y)}</div>`;
     h += `<div class="crow">🏘️ ${v ? `<b>${esc(v.name)}:</b> ${rel(v.x, v.y)} · ${towards(v.x, v.y)}` : '<span class="mut">Aún no hay otras aldeas cerca</span>'}</div>`;
     for (const o of net.others.values()) {
@@ -202,7 +204,7 @@ function boardHTML(f) {
 // ---- Muelle (solo aldeas costeras) ----
 function dockHTML(f) {
   if (!isCoastal(f)) return '';
-  return `<div class="sec"><h3>⛵ Muelle</h3><div class="shop"><span>${G.boat ? 'Ya tienes bote: camina hacia el mar para navegar.' : `<b>Bote</b> <small class="mut">navega por el mar (con encuentros marinos). Se pierde si cae todo el grupo.</small>`}</span>${G.boat ? '<span class="qon">✅ Tuyo</span>' : `<button class="btn sm" data-a="boat" ${G.gold < BOAT_PRICE ? 'disabled' : ''}>Comprar · ${BOAT_PRICE} oro</button>`}</div></div>`;
+  return `<div class="sec"><h3>⛵ Muelle</h3><div class="shop"><span>${G.boat ? 'Ya tienes bote: camina hacia el mar para navegar.' : `<b>Bote</b> <small class="mut">navega por el mar (con encuentros marinos).</small>`}</span>${G.boat ? '<span class="qon">✅ Tuyo</span>' : `<button class="btn sm" data-a="boat" ${G.gold < BOAT_PRICE ? 'disabled' : ''}>Comprar · ${BOAT_PRICE} oro</button>`}</div></div>`;
 }
 // ---- Portal: viajar a otra aldea ya visitada ----
 const travelCost = () => Math.round(5 * avgLvl());
@@ -369,7 +371,7 @@ function bossRender() {
     <div class="blv"><span>Nivel del jefe <b>${m.lvl}</b></span><span>Tu grupo <b>Nv ${al.toFixed(1)}</b></span></div>
     ${escort.length ? `<p class="mut small">Lo acompañan: ${escort.join(', ')}</p>` : ''}
     ${danger ? '<div class="bwarn">⚠️ Muy peligroso</div>' : ''}
-    <p class="bnote">Si todo tu grupo cae, vuelves a empezar desde cero.</p>
+    <p class="bnote">Si cae todo tu grupo, despertarás en Ciudad Origen y tus objetos quedarán en una tumba 🪦 por 60 minutos.</p>
     <div class="bbtns"><button class="btn gold big" data-a="fight">⚔️ Pelear</button><button class="btn big" data-a="retreat">🏃 Retirarse</button></div>
   </div>`;
 }
@@ -385,7 +387,7 @@ export function openBossConfirm(m, onFight) {
 // ================= Mapa =================
 function mapRender() {
   return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">Solo se ve lo que has explorado. Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
-  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq castle"></span>Ciudad Origen<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
+  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq" style="background:#ff3030;outline:1px solid #000"></span>🪦 Tumba<span class="sq castle"></span>Ciudad Origen<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
   <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
 }
 function drawMinimap() {
@@ -413,6 +415,7 @@ function drawMinimap() {
   const now = Date.now();
   for (const p of net.pins.values()) if (p.until > now) edge(p.x, p.y, '#ff5fa2', 2);
   const tq = tracked(); if (tq && tq.target) edge(tq.target.x, tq.target.y, '#c084fc', 2);
+  if (G.tomb) edge(G.tomb.x, G.tomb.y, '#ff3030', 3);   // 🪦 tus objetos
   for (const o of net.others.values()) if (o.status && o.status !== 'lobby' && o.status !== 'away') edge(o.x, o.y, '#7fe0ff', 2);
   g.fillStyle = '#000'; g.fillRect(R - 2, R - 2, 5, 5); g.fillStyle = '#fff'; g.fillRect(R - 1, R - 1, 3, 3);
 }
