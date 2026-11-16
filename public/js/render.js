@@ -1,10 +1,10 @@
 // Dibujo del mapa en Canvas 2D: chunks cacheados, sprites, otros jugadores, pines y flechas.
 'use strict';
-import { $, hash, shade, EF, mateColor, hexA } from './util.js';
+import { $, hash, shade, EF, hexA } from './util.js';
 import { TILE, CH, B, EN } from './data.js';
 import { G, P, START, st, leader } from './state.js';
-import { getChunk, biomeAt, feats, monsters, tileAt } from './world.js';
-import { net } from './net.js';
+import { getChunk, biomeAt, feats, monsters, tileAt, nearestVillage } from './world.js';
+import { net, mateColor } from './net.js';
 import { tracked, QICON } from './quests.js';
 import { tombMinutes } from './tomb.js';
 
@@ -273,6 +273,8 @@ export function draw(t) {
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
   if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏰', `Ciudad Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  // Aldea más cercana (gris)
+  { const v = nearestVillage(P.x, P.y); if (v) { const ax = sx(v.x), ay = sy(v.y); if (offscreen(ax, ay)) edgeArrow(ax, ay, '🏘️', `${v.name} · ${Math.round(Math.hypot(v.x - P.x, v.y - P.y))} c`, '#9aa3b5', '#e2e6ef', 1, placed); } }
   // Tumba (roja): distancia y minutos que quedan
   if (G.tomb) { const tx = sx(G.tomb.x), ty = sy(G.tomb.y); if (offscreen(tx, ty)) edgeArrow(tx, ty, '🪦', `${Math.round(Math.hypot(G.tomb.x - P.x, G.tomb.y - P.y))} c · ${tombMinutes()} min`, '#ff4040', '#ffc2c2', 1, placed); }
   // Misión seguida (morado)

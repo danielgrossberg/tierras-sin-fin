@@ -1,15 +1,16 @@
 // Interfaz: HUD, toasts, avisos online, modales (aldea, grupo, mapa) y panel de la sala.
 'use strict';
-import { $, esc, dirArrow, cardinal, mateColor } from './util.js';
+import { $, esc, dirArrow, cardinal } from './util.js';
 import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip } from './state.js';
-import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround } from './world.js';
+import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
 import { INV_MAX, SLOTS, SLOT_KEYS, TYPES, RAR, STAT, LEGENDS, slotOf, canUse, sellPrice, buyPrice, statList, classesText, itemLabel, compare, addItem, shopStock, markBought } from './items.js';
 import { save } from './storage.js';
 import { tombMinutes } from './tomb.js';
-import { net, sendQuick, placePin } from './net.js';
+import { paintMap, relCoords } from './minimap.js';
+import { net, sendQuick, placePin, mateColor } from './net.js';
 
 // Acciones que resuelve main.js (evita dependencias circulares con la pantalla de inicio)
 export const hooks = { onNewGame: null, onExit: null };
@@ -29,7 +30,7 @@ const connIcon = () => !st.online ? '⚪' : net.status === 'on' ? '🟢' : '🟡
 const connText = () => !st.online ? 'Sin conexión' : net.status === 'on' ? 'Conectado' : 'Reconectando…';
 export function updateHUD() {
   if (!st.inGame || st.titleOpen) return;
-  $('#hud').innerHTML = heroes().map(h => { const mh = S(h, 'mhp'), mm = S(h, 'mmp'); return `<div class="mini ${h.hp <= 0 ? 'dead' : ''}"><span class="em emoji">${h.e}</span><div style="flex:1;min-width:0"><div class="nm">${h.name} <span class="mut">Nv ${h.lvl}</span> ${h.poison > 0 ? '☠️' : ''}</div><div class="bar"><i style="width:${100 * h.hp / mh}%"></i></div><div class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></div></div></div>`; }).join('');
+  $('#hudHeroes').innerHTML = heroes().map(h => { const mh = S(h, 'mhp'), mm = S(h, 'mmp'); return `<div class="mini ${h.hp <= 0 ? 'dead' : ''}"><span class="em emoji">${h.e}</span><div style="flex:1;min-width:0"><div class="nm">${h.name} <span class="mut">Nv ${h.lvl}</span> ${h.poison > 0 ? '☠️' : ''}</div><div class="bar"><i style="width:${100 * h.hp / mh}%"></i></div><div class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></div></div></div>`; }).join('');
   const b = tileAt(P.x, P.y).b;
   const n = [...net.others.values()].filter(o => o.online !== false).length;
   $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
@@ -53,11 +54,7 @@ function towards(x, y) {
   const dx = x - P.x, dn = P.y - y, d = Math.round(Math.hypot(dx, dn));
   return d ? `${d} casilla${d === 1 ? '' : 's'} al ${cardinal(dx, dn)}` : 'aquí';
 }
-function nearestVillage() {
-  let best = null, bd = Infinity;
-  for (const f of feats.values()) if (f.type === 'village' && !f.start) { const d = Math.hypot(f.x - P.x, f.y - P.y); if (d < bd) { bd = d; best = f; } }
-  return best;
-}
+const nearestVillage = () => nearestV(P.x, P.y);
 const MATE_ST = { lobby: 'eligiendo héroes', away: 'fuera de línea' };
 export function updateCoords() {
   const el = $('#coords'); if (!el || !st.inGame) return;
@@ -384,42 +381,30 @@ export function openBossConfirm(m, onFight) {
   });
 }
 
-// ================= Mapa =================
+// ================= Mapa (grande) y mini-minimapa =================
 function mapRender() {
-  return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">Solo se ve lo que has explorado. Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
-  <canvas id="mm"></canvas><div class="legend"><span class="sq" style="background:#fff"></span>Tú<span class="sq" style="background:#7fe0ff"></span>Amigos<span class="sq" style="background:#ff5fa2"></span>Marcas<span class="sq" style="background:#c084fc"></span>Misión<span class="sq" style="background:#ff3030;outline:1px solid #000"></span>🪦 Tumba<span class="sq castle"></span>Ciudad Origen<span class="sq" style="background:#f2c14e"></span>Aldea<span class="sq" style="background:#ff3b3b"></span>Jefe<span class="sq" style="background:#c27bff"></span>Santuario</div>
+  return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">📍 <b>Tú: ${relCoords(P.x, P.y)}</b> · Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
+  <canvas id="mm"></canvas><div class="legend">
+    <span><i class="lg me"></i>Tú</span><span><i class="lg mate"></i>Compañeros</span><span>🏰 Ciudad Origen</span><span><i class="lg near"></i>Aldea más cercana</span><span><i class="lg vil"></i>Aldeas</span>
+    <span>👑 Jefe</span><span>🪦 Tumba</span><span><i class="lg" style="background:#c084fc"></i>Misión</span><span><i class="lg" style="background:#ff5fa2"></i>Marcas</span><span><i class="lg" style="background:#c27bff"></i>Santuario</span></div>
+  <p class="mut small" style="text-align:center;margin:4px 0 0">Solo se ve lo explorado. Lo que está fuera del mapa aparece en el borde con una flechita.</p>
   <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
 }
-function drawMinimap() {
-  const c = $('#mm'); if (!c) return; const R = 90, N = R * 2 + 1; c.width = N; c.height = N; const g = c.getContext('2d'); const img = g.createImageData(N, N), d = img.data;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = P.x - R + i, y = P.y - R + j, cx = Math.floor(x / CH), cy = Math.floor(y / CH), k = ckey(cx, cy), o = (j * N + i) * 4; let col = [14, 17, 30];
-    if (G.visited[k]) { const ch = getChunk(cx, cy); const t = ch.tiles[(y - cy * CH) * CH + (x - cx * CH)]; col = RGB[t.b]; if (t.o && BLOCKO.has(t.o)) col = col.map(v => v * .72); }
-    d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
-  }
-  g.putImageData(img, 0, 0);
-  const vis = (x, y) => G.visited[ckey(Math.floor(x / CH), Math.floor(y / CH))];
-  for (const f of feats.values()) {
-    const i = f.x - P.x + R, j = f.y - P.y + R; if (i < 1 || j < 1 || i >= N - 1 || j >= N - 1 || !vis(f.x, f.y)) continue;
-    if (f.type === 'village' && f.start) continue;   // Ciudad Origen se dibuja aparte (castillo)
-    if (f.type === 'village') { g.fillStyle = '#f2c14e'; g.fillRect(i - 1, j - 1, 3, 3); } else if (f.type === 'shrine' && !G.opened[f.id]) { g.fillStyle = '#c27bff'; g.fillRect(i, j, 2, 2); }
-  }
-  for (const m of monsters.values()) if (m.boss && vis(m.x, m.y)) { const i = m.x - P.x + R, j = m.y - P.y + R; g.fillStyle = '#ff3b3b'; g.fillRect(i - 1, j - 1, 3, 3); }
-  // Marcas y amigos (si están fuera del área, se pegan al borde)
-  // Ciudad Origen: castillo dorado, más grande que las aldeas (siempre visible, pegado al borde si está lejos)
-  { const i = Math.max(6, Math.min(N - 7, START.x - P.x + R)), j = Math.max(6, Math.min(N - 7, START.y - P.y + R));
-    g.fillStyle = '#000'; g.fillRect(i - 5, j - 5, 11, 10); g.fillStyle = '#f2c14e';
-    for (const dx of [-4, -2, 0, 2, 4]) g.fillRect(i + dx, j - 4, 1, 2);
-    g.fillRect(i - 4, j - 2, 9, 6); g.fillStyle = '#6b4d0f'; g.fillRect(i - 1, j + 1, 3, 3); g.fillStyle = '#fff3c4'; g.fillRect(i - 3, j - 1, 1, 1); g.fillRect(i + 3, j - 1, 1, 1); }
-  const edge = (x, y, col, s) => { const i = Math.max(2, Math.min(N - 3, x - P.x + R)), j = Math.max(2, Math.min(N - 3, y - P.y + R)); g.fillStyle = '#000'; g.fillRect(i - s, j - s, s * 2 + 1, s * 2 + 1); g.fillStyle = col; g.fillRect(i - s + 1, j - s + 1, s * 2 - 1, s * 2 - 1); };
-  const now = Date.now();
-  for (const p of net.pins.values()) if (p.until > now) edge(p.x, p.y, '#ff5fa2', 2);
-  const tq = tracked(); if (tq && tq.target) edge(tq.target.x, tq.target.y, '#c084fc', 2);
-  if (G.tomb) edge(G.tomb.x, G.tomb.y, '#ff3030', 3);   // 🪦 tus objetos
-  for (const o of net.others.values()) if (o.status && o.status !== 'lobby' && o.status !== 'away') edge(o.x, o.y, '#7fe0ff', 2);
-  g.fillStyle = '#000'; g.fillRect(R - 2, R - 2, 5, 5); g.fillStyle = '#fff'; g.fillRect(R - 1, R - 1, 3, 3);
+export function openMap() { openModal(mapRender, a => { if (a === 'close') closeModal(); }, () => paintMap($('#mm'), 90, { labels: true, full: true })); }
+
+// Mini-minimapa (esquina izquierda, bajo los héroes): plegable; al tocarlo se abre el mapa grande
+let miniOpen = null, miniT = 0;
+function miniPref() {
+  if (miniOpen !== null) return miniOpen;
+  try { const v = localStorage.getItem('tsf-mini'); if (v === '1' || v === '0') return (miniOpen = v === '1'); } catch (e) { /* nada */ }
+  return (miniOpen = !matchMedia('(max-height: 480px)').matches);   // en horizontal parte plegado
 }
-export function openMap() { openModal(mapRender, a => { if (a === 'close') closeModal(); }, drawMinimap); }
+export function updateMini(t) {
+  const box = $('#minimap'); if (!box || !st.inGame) return;
+  const open = miniPref(); box.classList.toggle('open', open);
+  if (open && (t === undefined || t - miniT > 300)) { miniT = t || 0; paintMap($('#mini'), 18); }
+}
+function toggleMini() { miniOpen = !miniPref(); try { localStorage.setItem('tsf-mini', miniOpen ? '1' : '0'); } catch (e) { /* nada */ } updateMini(); }
 
 // ================= Confirmación para borrar la partida =================
 // Para evitar perder todo por un toque accidental, hay que escribir la palabra CONFIRMAR.
@@ -464,5 +449,8 @@ export function initUI(h) {
   $('#bMap').onclick = () => { if (!st.busy) openMap(); };
   $('#bSocial').onclick = () => toggleSocial();
   $('#coords').onclick = () => toggleCoords();
+  $('#mini').onclick = () => { if (!st.busy) openMap(); };
+  $('#miniTog').onclick = e => { e.stopPropagation(); toggleMini(); };
+  $('#miniBtn').onclick = () => toggleMini();
   $('#bSave').onclick = () => { toast(save('now') ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador'); };
 }

@@ -174,6 +174,19 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   `tsf:SALA:nombre:backup-vN` (no se borra) y luego se migra: se agregan los 6 héroes nuevos en nivel 1; el grupo
   y todo el progreso quedan iguales (probado con una partida real de la versión publicada).
 
+### Fase 2 (lista): flechas y minimapa
+- **Flechas en el borde** cuando el objetivo está fuera de pantalla, con ícono y distancia: 🏰 Ciudad Origen (dorada,
+  siempre), 🏘️ aldea más cercana (gris), cada compañero (su color), misión seguida (morada) y tumba 🪦 (roja, con minutos).
+  Se separan entre sí (círculo y texto) y esquivan el HUD, la cruceta y los botones.
+- **Colores de compañeros** distintos para cada jugador de la sala y los mismos en todos los celulares
+  (se asignan por orden alfabético de los nombres de la sala).
+- **Mapa grande (🗺️):** tus coordenadas arriba; castillo de Ciudad Origen; aldea más cercana resaltada (con nombre) y las
+  demás más tenues; compañeros con punto de color, nombre y coordenadas aunque estén fuera de lo explorado; jefes
+  conocidos 👑; tumba, misión, marcas y santuarios; leyenda. Lo que queda fuera del recuadro aparece en el borde con una flechita.
+- **Mini-minimapa** bajo las tarjetas de los héroes: alrededores, tu posición, compañeros y la dirección de Ciudad
+  Origen. Al tocarlo se abre el mapa grande. Se pliega con ▾ (queda un botón 🧭) y el navegador lo recuerda;
+  en el celular horizontal parte plegado para no chocar con los botones.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -211,6 +224,7 @@ public/js/battle.js    Combate por turnos, participación y efectos del equipo
 public/js/items.js     Equipo: tipos, rarezas, legendarios, nombres, botín y armería
 public/js/quests.js    Misiones de aldea: generación determinista, progreso y recompensas
 public/js/tomb.js      Tumba 🪦: objetos del grupo caído, recuperación y vencimiento (60 min)
+public/js/minimap.js   Dibujo del mapa grande y del mini-minimapa
 public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

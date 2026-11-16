@@ -353,3 +353,20 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
   .cls small{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 }
 .tav{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+
+/* ===== Versión 2 · Fase 2: mini-minimapa y leyenda ===== */
+#hud{gap:0}
+#hudHeroes{display:flex;flex-direction:column;gap:5px}
+#minimap{pointer-events:auto;position:relative;margin-top:8px;width:132px}
+#minimap canvas{display:none;width:132px;height:132px;border-radius:12px;border:2px solid var(--line);box-shadow:0 4px 14px #0008;cursor:pointer;image-rendering:pixelated;background:#0e1120}
+#minimap.open canvas{display:block}
+#miniTog{display:none;position:absolute;right:-6px;top:-6px;width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:rgba(23,27,46,.95);color:var(--gold);font-size:13px;padding:0;line-height:1}
+#minimap.open #miniTog{display:block}
+#miniBtn{width:48px;height:44px;padding:0;font-size:22px;background:rgba(32,38,63,.88)}
+#minimap.open #miniBtn{display:none}
+@media (min-width:900px) and (min-height:560px){#minimap,#minimap canvas{width:180px}#minimap canvas{height:180px}}
+.legend{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 12px;font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.lg{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid #000}
+.lg.me{background:#fff}.lg.mate{background:linear-gradient(90deg,#4da3ff 50%,#46c37b 50%)}
+.lg.near{background:#ffd84d;border-radius:2px;outline:1.5px solid #fff}.lg.vil{background:rgba(242,193,78,.55);border-radius:2px}

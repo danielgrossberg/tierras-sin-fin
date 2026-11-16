@@ -125,6 +125,12 @@ export function findStart() {
 }
 
 // ================= Movimiento de monstruos =================
+// Aldea ya generada más cercana a (x, y), sin contar Ciudad Origen
+export function nearestVillage(x, y) {
+  let best = null, bd = Infinity;
+  for (const f of feats.values()) if (f.type === 'village' && !f.start) { const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; best = f; } }
+  return best;
+}
 export const inVillage = () => feats.get(P.x + ',' + P.y)?.type === 'village';
 function canMonsterGo(x, y) { if (isBlocked(x, y) || mpos.has(x + ',' + y)) return false; const f = feats.get(x + ',' + y); return !(f && f.type === 'village'); }
 export function moveMonsters() {

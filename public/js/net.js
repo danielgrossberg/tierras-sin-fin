@@ -1,7 +1,7 @@
 // Capa online (Socket.io): sala, presencia de otros jugadores, mensajes rápidos y pines.
 // Regla de oro: nada de aquí puede bloquear la partida. Si no hay servidor, se juega solo.
 'use strict';
-import { esc, dirArrow } from './util.js';
+import { esc, dirArrow, MATE_COLORS } from './util.js';
 import { QUICK, PIN_TTL } from './data.js';
 import { P } from './state.js';
 
@@ -171,6 +171,15 @@ function onNotice(d) {
   else if (d.type === 'level') fire('feed', `⭐ <b>${esc(d.name)}</b> sube de nivel: ${esc(d.text)}`);
   else if (d.type === 'boss') fire('feed', `👑 <b>${esc(d.name)}</b> derrotó al jefe ${esc(d.text)}`);
   else if (d.type === 'death') fire('feed', `💀 El grupo de <b>${esc(d.name)}</b> cayó`);
+}
+
+// Color de cada jugador de la sala: según su lugar en la lista alfabética de TODOS los nombres de la sala
+// (incluido el propio), así cada uno tiene un color distinto y es el mismo en todos los celulares.
+export function mateColor(name) {
+  const names = [...new Set([net.name, ...net.others.keys()].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  let i = names.indexOf(name);
+  if (i < 0) { i = 0; for (const c of String(name)) i = (i * 31 + c.codePointAt(0)) >>> 0; }
+  return MATE_COLORS[i % MATE_COLORS.length];
 }
 
 // Interpolación de los otros jugadores (se llama en cada frame)

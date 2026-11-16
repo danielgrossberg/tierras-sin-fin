@@ -6,7 +6,7 @@ import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_G
 import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
-import { initUI, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
+import { initUI, updateMini, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
 import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, writeLocal, backupIfOld, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
@@ -126,6 +126,7 @@ function frame(t) {
     lerpOthers(dt);
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     draw(t);
+    updateMini(t);
     tick(t, myState);
   }
   requestAnimationFrame(frame);
@@ -138,7 +139,7 @@ function enterWorld() {
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
-  updateHUD(); updatePlayersUI(); checkTomb(); save('now');
+  updateHUD(); updatePlayersUI(); checkTomb(); updateMini(); save('now');
 }
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
