@@ -275,6 +275,35 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Guardado:** `saveVersion` 8: `dungeons` (por entrada: pisos vistos, cofres abiertos, jefe, completada, piso más
   profundo) e `inDun` (si recargas adentro, vuelves al mismo piso y lugar).
 
+### Fase 2 (lista): talentos y clases avanzadas
+- **Talentos** en los niveles **5, 10, 20 y 30**: cada héroe elige 1 de 2 pasivas (⚔️ ofensiva o 🛡️ defensiva/utilidad)
+  en 🎒 Grupo → Héroes. Al subir de nivel aparece el aviso y el botón 🎒 muestra un **!** rojo. En la **posada** se
+  reinician pagando **20 × nivel** de oro. Datos en `TAL` (`public/js/data.js`).
+- **Clases avanzadas** al nivel **15** (1 de 2, no se puede cambiar): cambia el título y el ícono, ajusta un poco el
+  crecimiento de stats desde el nivel 15 y da 2 habilidades (niveles 15 y 22). Datos en `ADV`.
+- **Estados nuevos** (con ícono en las tarjetas): 💠 escudo · ✨ anula el próximo golpe · 🎯 marcado (+40% daño
+  recibido) · ⏩ actúa primero · 💢 frenesí (2 ataques) · 🩸 robo de vida 30% · 🌙 +30% esquivar · 👤 esquiva todo ·
+  💜 agonía (daño creciente) · 🪔 runa de fuego (los golpes queman) · ⚡ siguiente golpe crítico · 🔥 quemadura
+  (ya existía, ahora también la aplican habilidades).
+- Los estimados de los botones incluyen los talentos (por ejemplo "Golpe Certero" o "Quemadura").
+
+| Clase | Nv 5 | Nv 10 | Nv 20 | Nv 30 |
+|---|---|---|---|---|
+| Guerrero | Sed de Sangre (+10% ATQ, 5% robo) / Piel de Hierro (+15% DEF) | Golpe Certero (Golpe Fuerte y Titánico +25%) / Vitalidad (+15% PV) | Furia del Guerrero (+8% crít.) / Bastión (escudo 15% PV al empezar) | Masacre (+15% ATQ) / Inquebrantable (1 vez queda con 1 PV) |
+| Maga | Mente Afilada (+12% MAG) / Reserva Arcana (+20% PM) | Quemadura (Bola de Fuego quema) / Eco Mágico (15% no gasta PM) | Tormenta Arcana (Ventisca y Meteoro +20%) / Barrera (escudo 20% PV) | Poder Absoluto (+15% MAG) / Meditación (+3 PM por turno) |
+| Arquera | Ojo Agudo (+6% crít.) / Pies Ligeros (+10% esquivar) | Veneno Potente (+50% veneno) / Rapidez (+15% VEL) | Puntería (+12% ATQ) / Instinto (+15% PV) | Disparo Letal (críticos ×2.25) / Camuflaje (+15% esquivar) |
+| Pícaro | Filo Oculto (+8% crít.) / Manos Rápidas (Robar +25%) | Venenos (+50% veneno) / Evasión (+12% esquivar) | Ejecutor (+20% a enemigos con <50% PV) / Botín Extra (+20% oro) | Críticos Letales (×2.25) / Sombra Viva (+15% esquivar) |
+| Sanadora | Luz Ardiente (Luz Sagrada +30%) / Manos Benditas (+20% curación) | Fervor (+12% MAG) / Eco Sagrado (15% no gasta PM) | Ira Celestial (+8% crít., +10% ATQ) / Aura de Vida (regenera 4% PV) | Milagro (+30% curación) / Ángel Guardián (1 vez queda con 1 PV) |
+| Bárbaro | Sed de Sangre (6% robo) / Piel Gruesa (+15% PV) | Ira Creciente (+25% ATQ con <50% PV) / Rugido (Furia no cuesta vida) | Hacha Pesada (+12% ATQ) / Aguante (+12% DEF) | Carnicero (+8% crít., críticos ×2) / Imparable (1 vez queda con 1 PV) |
+| Nigromante | Hambre Oscura (Drenar Vida cura 100%) / Velo Sombrío (+12% DEF) | Peste (+50% veneno) / Huesos Fuertes (esqueleto +2 rondas) | Poder Oscuro (+15% MAG) / Alma Robada (+3 PM por turno) | Maldición Profunda (+50% en vez de +30%) / Inmortal (1 vez queda con 1 PV) |
+| Druida | Espinas Afiladas (reflejan 50%) / Savia (regenera 3% PV) | Furia Salvaje (oso +25% ATQ) / Raíces Profundas (Raíces +60%) | Ira de Gaia (Ira de la Naturaleza +25%) / Corteza (+15% DEF) | Naturaleza Salvaje (+12% ATQ y MAG) / Renacer (1 vez queda con 1 PV) |
+| Enano | Martillo Pesado (Martillazo aturde 50%) / Roca Viva (+15% DEF) | Fuerza de la Montaña (+12% ATQ) / Barba de Hierro (escudo 15% PV) | Golpe Rúnico (+8% crít., +10% ATQ) / Cerveza Doble (2 usos) | Bolsa de Oro (+20% oro) / Fortaleza (+20% PV) |
+| Elfo | Hoja Lunar (Espada Lunar +25%) / Gracia Élfica (+10% esquivar) | Agilidad (+15% VEL) / Canto Sanador (Canto cura 10% PV) | Ojo del Bosque (+8% crít.) / Sabiduría Antigua (+12% MAG) | Danza Perfecta (Danza da 4 golpes) / Espíritu Libre (+15% esquivar) |
+| Goblin | Pólvora Extra (Bomba +30%) / Bolsillos Hondos (+15% oro) | Suerte de Goblin (+8% crít.) / Escurridizo (+10% esquivar) | Golpe Afortunado (Golpe de Suerte mín. ×1.5) / Trampero (detecta 90% de trampas) | Rata Lista (+15% ATQ, +10% VEL) / Esquivo (+15% esquivar) |
+
+- **Guardado:** `saveVersion` 9: cada héroe guarda `tal` (opción elegida por nivel) y `adv` (clase avanzada). Las
+  partidas viejas cargan con todo vacío y los héroes que ya pasaron esos niveles los eligen al entrar.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:

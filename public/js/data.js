@@ -113,6 +113,155 @@ export const SK = {
   trampa: { n: 'Trampa', mp: 4, lv: 3, t: 'none', d: 'El próximo enemigo que lo ataque recibe daño y queda aturdido' },
   bomba: { n: 'Bomba Casera', mp: 8, lv: 6, t: 'enemies', d: 'Daño de fuego a todos' },
   suerte: { n: 'Golpe de Suerte', mp: 6, lv: 10, t: 'enemy', d: 'Daño al azar entre ×0.5 y ×4' },
+  // ---- Versión 3 · Fase 2: habilidades de las clases avanzadas (niveles 15 y 22) ----
+  escudosag: { n: 'Escudo Sagrado', mp: 8, lv: 15, t: 'none', d: 'Escudo al aliado más débil' },
+  juicio: { n: 'Juicio', mp: 12, lv: 22, t: 'enemy', d: 'Daño sagrado; ×2 a no-muertos' },
+  muroesc: { n: 'Muro de Escudos', mp: 10, lv: 15, t: 'none', d: '+35% DEF y un escudo pequeño al grupo' },
+  carga: { n: 'Carga', mp: 14, lv: 22, t: 'enemy', d: 'Daño físico ×2.8 y aturde' },
+  infierno: { n: 'Infierno', mp: 16, lv: 15, t: 'enemies', d: 'Magia a todos y quemadura' },
+  novasolar: { n: 'Nova Solar', mp: 22, lv: 22, t: 'enemy', d: 'Magia ×4 a uno' },
+  acelerar: { n: 'Acelerar', mp: 10, lv: 15, t: 'none', d: 'El grupo actúa primero por 2 turnos' },
+  detener: { n: 'Detener el Tiempo', mp: 14, lv: 22, t: 'enemy', d: 'El enemigo pierde 2 turnos (jefes: 1)' },
+  marca: { n: 'Marca de Caza', mp: 6, lv: 15, t: 'enemy', d: 'El enemigo recibe +40% de daño (3 turnos)' },
+  tormenta: { n: 'Tormenta de Flechas', mp: 14, lv: 22, t: 'enemies', d: '5 flechas a enemigos al azar' },
+  perforante: { n: 'Disparo Perforante', mp: 8, lv: 15, t: 'enemy', d: 'Daño físico ×1.8 que ignora la DEF' },
+  tiromortal: { n: 'Tiro Mortal', mp: 18, lv: 22, t: 'enemy', d: '×4 con crítico seguro' },
+  sombra: { n: 'Sombra', mp: 6, lv: 15, t: 'none', d: 'Esquiva todo hasta su próximo turno y su siguiente golpe es crítico' },
+  milcortes: { n: 'Mil Cortes', mp: 16, lv: 22, t: 'enemies', d: '8 cortes rápidos a enemigos al azar' },
+  saqueo: { n: 'Saqueo', mp: 6, lv: 15, t: 'enemy', d: 'Golpe ×1.4 y roba siempre el doble de oro' },
+  golpebajo: { n: 'Golpe Bajo', mp: 10, lv: 22, t: 'enemy', d: 'Daño ×1.6 y aturde seguro' },
+  resmasiva: { n: 'Resurrección Masiva', mp: 22, lv: 15, t: 'none', d: 'Revive a todos los caídos con 30% PV' },
+  santuario: { n: 'Santuario', mp: 12, lv: 22, t: 'none', d: 'Regeneración al grupo (3 turnos)' },
+  profecia: { n: 'Profecía', mp: 12, lv: 15, t: 'none', d: 'Anula el próximo golpe a cada aliado' },
+  juiciodiv: { n: 'Juicio Divino', mp: 18, lv: 22, t: 'enemies', d: 'Magia a todos; ×2 a no-muertos' },
+  frenesi: { n: 'Frenesí', mp: 8, lv: 15, t: 'none', d: '2 ataques por turno durante 3 turnos' },
+  rabia: { n: 'Rabia Sangrienta', mp: 10, lv: 22, t: 'none', d: '30% de robo de vida (3 turnos)' },
+  atronador: { n: 'Grito Atronador', mp: 10, lv: 15, t: 'enemies', d: 'Daño leve a todos y 30% de aturdir a cada uno' },
+  estandarte: { n: 'Estandarte', mp: 12, lv: 22, t: 'none', d: '+35% ATQ al grupo por 4 turnos' },
+  ejercito: { n: 'Ejército', mp: 16, lv: 15, t: 'none', d: 'Invoca 2 esqueletos (3 rondas)' },
+  cadaver: { n: 'Explosión de Cadáver', mp: 12, lv: 22, t: 'none', d: '3 rondas: cada enemigo que muere daña a los demás' },
+  pacto: { n: 'Pacto de Sangre', mp: 0, lv: 15, t: 'none', d: 'Pierde 20% PV y recupera 40% PM' },
+  agonia: { n: 'Agonía', mp: 12, lv: 22, t: 'enemy', d: 'Daño creciente durante 3 turnos' },
+  osomayor: { n: 'Forma de Oso Ancestral', mp: 10, lv: 15, t: 'none', d: '5 turnos: +70% PV temporales, +50% ATQ y regeneración' },
+  terremoto: { n: 'Terremoto', mp: 16, lv: 22, t: 'enemies', d: 'Daño físico a todos y 30% de aturdir' },
+  cadena: { n: 'Cadena de Rayos', mp: 12, lv: 15, t: 'enemy', d: 'Magia ×1.7 que rebota en 2 enemigos más' },
+  lluviasan: { n: 'Lluvia Sanadora', mp: 16, lv: 22, t: 'allies', d: 'Cura al grupo y regenera 2 turnos' },
+  montana: { n: 'Golpe de Montaña', mp: 14, lv: 15, t: 'enemy', d: 'Daño físico ×3 y aturde' },
+  avalancha: { n: 'Avalancha', mp: 18, lv: 22, t: 'enemies', d: 'Daño físico ×1.5 a todos' },
+  runafuego: { n: 'Runa de Fuego', mp: 10, lv: 15, t: 'none', d: 'Los golpes físicos del grupo queman (3 turnos)' },
+  runapiedra: { n: 'Runa de Piedra', mp: 14, lv: 22, t: 'none', d: 'Escudo de 20% PV a todo el grupo' },
+  torbelfico: { n: 'Torbellino Élfico', mp: 14, lv: 15, t: 'enemies', d: '6 golpes a enemigos al azar' },
+  pasosombrio: { n: 'Paso Sombrío', mp: 6, lv: 22, t: 'none', d: 'Esquiva todo hasta su próximo turno' },
+  estrella: { n: 'Estrella Fugaz', mp: 14, lv: 15, t: 'enemy', d: 'Magia ×3' },
+  velo: { n: 'Velo Lunar', mp: 12, lv: 22, t: 'none', d: '+30% de esquivar al grupo (2 turnos)' },
+  granbomba: { n: 'Gran Bomba', mp: 16, lv: 15, t: 'enemies', d: 'Bomba ×2 a todos y quemadura' },
+  mina: { n: 'Mina', mp: 8, lv: 22, t: 'none', d: 'Daña fuerte al próximo enemigo que actúe' },
+  soborno: { n: 'Soborno', mp: 4, lv: 15, t: 'enemy', d: 'Paga oro y un enemigo (no jefe) se va; da la experiencia igual' },
+  monedas: { n: 'Lluvia de Monedas', mp: 12, lv: 22, t: 'enemies', d: 'Daño a todos según el oro que tienes' },
+};
+
+// ================= Clases avanzadas (Versión 3 · Fase 2) =================
+// Al nivel 15 cada héroe elige 1 de 2. Cambia el título y el ícono, ajusta un poco el crecimiento
+// de stats desde el nivel 15 (g: multiplicador) y da 2 habilidades (niveles 15 y 22).
+export const ADV = {
+  paladin: { cls: 'guerrero', n: 'Paladín', e: '😇', d: 'Protege al grupo con luz sagrada.', g: { def: 1.1, mag: 1.6, atk: .95 }, sk: ['escudosag', 'juicio'] },
+  caballero: { cls: 'guerrero', n: 'Caballero', e: '🏇', d: 'Muro de acero que carga contra el enemigo.', g: { def: 1.2, mhp: 1.1, spd: .9 }, sk: ['muroesc', 'carga'] },
+  piromante: { cls: 'maga', n: 'Piromante', e: '🔥', d: 'Fuego que arrasa a todos.', g: { mag: 1.15, mhp: .95 }, sk: ['infierno', 'novasolar'] },
+  cronomante: { cls: 'maga', n: 'Cronomante', e: '⏳', d: 'Controla el tiempo del combate.', g: { spd: 1.3, mmp: 1.15 }, sk: ['acelerar', 'detener'] },
+  cazadora: { cls: 'arquera', n: 'Cazadora', e: '🏹', d: 'Marca a su presa y la acribilla.', g: { atk: 1.1, spd: 1.1 }, sk: ['marca', 'tormenta'] },
+  francotiradora: { cls: 'arquera', n: 'Francotiradora', e: '🎯', d: 'Un disparo, una baja.', g: { atk: 1.2, def: .9 }, sk: ['perforante', 'tiromortal'] },
+  asesino: { cls: 'picaro', n: 'Asesino', e: '🗡️', d: 'Desaparece y golpea donde duele.', g: { atk: 1.15, spd: 1.1, mhp: .95 }, sk: ['sombra', 'milcortes'] },
+  ladron: { cls: 'picaro', n: 'Ladrón Maestro', e: '💰', d: 'Nada se le escapa.', g: { spd: 1.2, def: 1.05 }, sk: ['saqueo', 'golpebajo'] },
+  sacerdotisa: { cls: 'sanadora', n: 'Sacerdotisa', e: '👼', d: 'Devuelve la vida a todo el grupo.', g: { mag: 1.1, mmp: 1.15 }, sk: ['resmasiva', 'santuario'] },
+  oraculo: { cls: 'sanadora', n: 'Oráculo', e: '🔮', d: 'Ve el golpe antes de que llegue.', g: { mag: 1.15, def: 1.05 }, sk: ['profecia', 'juiciodiv'] },
+  berserker: { cls: 'barbaro', n: 'Berserker', e: '💢', d: 'Golpea dos veces y se cura con la sangre.', g: { atk: 1.15, def: .9, mhp: 1.05 }, sk: ['frenesi', 'rabia'] },
+  senorguerra: { cls: 'barbaro', n: 'Señor de la Guerra', e: '🚩', d: 'Su grito aturde y su estandarte inspira.', g: { mhp: 1.1, def: 1.1 }, sk: ['atronador', 'estandarte'] },
+  senormuertos: { cls: 'nigromante', n: 'Señor de los Muertos', e: '☠️', d: 'Un ejército de huesos a su servicio.', g: { mag: 1.1, mmp: 1.1 }, sk: ['ejercito', 'cadaver'] },
+  brujo: { cls: 'nigromante', n: 'Brujo', e: '🦹', d: 'Paga con sangre por un poder terrible.', g: { mag: 1.2, mhp: .95 }, sk: ['pacto', 'agonia'] },
+  guardian: { cls: 'druida', n: 'Guardián de la Tierra', e: '🐻', d: 'El oso ancestral que hace temblar el suelo.', g: { mhp: 1.15, def: 1.1 }, sk: ['osomayor', 'terremoto'] },
+  chaman: { cls: 'druida', n: 'Chamán de Tormentas', e: '⛈️', d: 'Rayos que saltan y lluvia que cura.', g: { mag: 1.15, mmp: 1.05 }, sk: ['cadena', 'lluviasan'] },
+  rompemontanas: { cls: 'enano', n: 'Rompemontañas', e: '⛏️', d: 'Golpes que parten la roca.', g: { atk: 1.15 }, sk: ['montana', 'avalancha'] },
+  runico: { cls: 'enano', n: 'Herrero Rúnico', e: '🔨', d: 'Runas que encienden y protegen al grupo.', g: { def: 1.1, mag: 1.5 }, sk: ['runafuego', 'runapiedra'] },
+  danzante: { cls: 'elfo', n: 'Danzante de Espadas', e: '⚔️', d: 'Una tormenta de acero imposible de tocar.', g: { atk: 1.1, spd: 1.15 }, sk: ['torbelfico', 'pasosombrio'] },
+  archimago: { cls: 'elfo', n: 'Archimago Élfico', e: '🌟', d: 'Estrellas y velos de luz de luna.', g: { mag: 1.2 }, sk: ['estrella', 'velo'] },
+  bombardero: { cls: 'goblin', n: 'Bombardero', e: '💣', d: 'Si explota, mejor.', g: { atk: 1.05, mag: 1.3 }, sk: ['granbomba', 'mina'] },
+  reygoblin: { cls: 'goblin', n: 'Rey Goblin', e: '👑', d: 'Todo se arregla con oro.', g: { spd: 1.1, mhp: 1.1 }, sk: ['soborno', 'monedas'] },
+};
+export const ADV_LVL = 15;
+export const advOf = cls => Object.keys(ADV).filter(k => ADV[k].cls === cls);
+
+// ================= Talentos (Versión 3 · Fase 2) =================
+// En los niveles 5, 10, 20 y 30 cada héroe elige 1 de 2 pasivas: [ofensiva, defensiva o de utilidad].
+// fx: efectos que leen state.js (stats en %) y battle.js. Las claves están explicadas en README.md.
+export const TAL_LVLS = [5, 10, 20, 30];
+const T = (id, n, d, fx) => ({ id, n, d, fx });
+export const TAL = {
+  guerrero: {
+    5: [T('sangre', 'Sed de Sangre', '+10% ATQ y 5% de robo de vida', { atkP: .1, ls: 5 }), T('hierro', 'Piel de Hierro', '+15% DEF', { defP: .15 })],
+    10: [T('certero', 'Golpe Certero', 'Golpe Fuerte y Golpe Titánico hacen +25%', { skB: { golpe: .25, titanico: .25 } }), T('vital', 'Vitalidad', '+15% PV máximos', { mhpP: .15 })],
+    20: [T('furiag', 'Furia del Guerrero', '+8% de crítico', { crit: 8 }), T('bastion', 'Bastión', 'Empieza cada combate con un escudo de 15% PV', { startShield: .15 })],
+    30: [T('masacre', 'Masacre', '+15% ATQ', { atkP: .15 }), T('inque', 'Inquebrantable', 'Una vez por combate queda con 1 PV en vez de caer', { lastStand: 1 })],
+  },
+  maga: {
+    5: [T('afilada', 'Mente Afilada', '+12% MAG', { magP: .12 }), T('reserva', 'Reserva Arcana', '+20% PM máximos', { mmpP: .2 })],
+    10: [T('quema', 'Quemadura', 'Bola de Fuego quema 3 turnos', { skBurn: { fuego: 1 } }), T('ecomag', 'Eco Mágico', '15% de no gastar PM', { mpSave: .15 })],
+    20: [T('tormarc', 'Tormenta Arcana', 'Ventisca y Meteoro hacen +20%', { skB: { ventisca: .2, meteoro: .2 } }), T('barrera', 'Barrera', 'Empieza cada combate con un escudo de 20% PV', { startShield: .2 })],
+    30: [T('absoluto', 'Poder Absoluto', '+15% MAG', { magP: .15 }), T('medita', 'Meditación', 'Recupera 3 PM al empezar su turno', { mpRegen: 3 })],
+  },
+  arquera: {
+    5: [T('agudo', 'Ojo Agudo', '+6% de crítico', { crit: 6 }), T('ligeros', 'Pies Ligeros', '+10% de esquivar golpes físicos', { dodge: 10 })],
+    10: [T('venpot', 'Veneno Potente', 'El veneno que aplica hace +50%', { poisonP: .5 }), T('rapidez', 'Rapidez', '+15% VEL', { spdP: .15 })],
+    20: [T('punteria', 'Puntería', '+12% ATQ', { atkP: .12 }), T('instinto', 'Instinto', '+15% PV máximos', { mhpP: .15 })],
+    30: [T('letal', 'Disparo Letal', 'Los críticos hacen ×2.25', { critDmg: .5 }), T('camuflaje', 'Camuflaje', '+15% de esquivar golpes físicos', { dodge: 15 })],
+  },
+  picaro: {
+    5: [T('filo', 'Filo Oculto', '+8% de crítico', { crit: 8 }), T('manos', 'Manos Rápidas', 'Robar acierta +25%', { stealP: .25 })],
+    10: [T('venenos', 'Venenos', 'El veneno que aplica hace +50%', { poisonP: .5 }), T('evasion', 'Evasión', '+12% de esquivar golpes físicos', { dodge: 12 })],
+    20: [T('ejecutor', 'Ejecutor', '+20% de daño a enemigos con menos de 50% PV', { execP: .2 }), T('botin', 'Botín Extra', '+20% de oro en los combates', { goldP: .2 })],
+    30: [T('critlet', 'Críticos Letales', 'Los críticos hacen ×2.25', { critDmg: .5 }), T('sombraviva', 'Sombra Viva', '+15% de esquivar golpes físicos', { dodge: 15 })],
+  },
+  sanadora: {
+    5: [T('luzard', 'Luz Ardiente', 'Luz Sagrada hace +30%', { skB: { luz: .3 } }), T('benditas', 'Manos Benditas', '+20% de curación', { healP: .2 })],
+    10: [T('fervor', 'Fervor', '+12% MAG', { magP: .12 }), T('ecosag', 'Eco Sagrado', '15% de no gastar PM', { mpSave: .15 })],
+    20: [T('ira_s', 'Ira Celestial', '+8% de crítico y +10% ATQ', { crit: 8, atkP: .1 }), T('aura', 'Aura de Vida', 'Regenera 4% PV al empezar su turno', { regen: .04 })],
+    30: [T('milagro', 'Milagro', '+30% de curación', { healP: .3 }), T('angel', 'Ángel Guardián', 'Una vez por combate queda con 1 PV en vez de caer', { lastStand: 1 })],
+  },
+  barbaro: {
+    5: [T('sangreb', 'Sed de Sangre', '6% de robo de vida', { ls: 6 }), T('gruesa', 'Piel Gruesa', '+15% PV máximos', { mhpP: .15 })],
+    10: [T('ira_b', 'Ira Creciente', '+25% ATQ con menos de 50% PV', { lowHpAtk: .25 }), T('rugido', 'Rugido', 'Furia ya no cuesta vida', { furyFree: 1 })],
+    20: [T('pesada', 'Hacha Pesada', '+12% ATQ', { atkP: .12 }), T('aguante', 'Aguante', '+12% DEF', { defP: .12 })],
+    30: [T('carnicero', 'Carnicero', '+8% de crítico y críticos ×2', { crit: 8, critDmg: .25 }), T('imparable', 'Imparable', 'Una vez por combate queda con 1 PV en vez de caer', { lastStand: 1 })],
+  },
+  nigromante: {
+    5: [T('hambre', 'Hambre Oscura', 'Drenar Vida cura el 100% del daño', { drainFull: 1 }), T('velo_n', 'Velo Sombrío', '+12% DEF', { defP: .12 })],
+    10: [T('peste', 'Peste', 'El veneno que aplica hace +50%', { poisonP: .5 }), T('huesos', 'Huesos Fuertes', 'El esqueleto dura 2 rondas más', { summonT: 2 })],
+    20: [T('oscuro', 'Poder Oscuro', '+15% MAG', { magP: .15 }), T('alma', 'Alma Robada', 'Recupera 3 PM al empezar su turno', { mpRegen: 3 })],
+    30: [T('maldprof', 'Maldición Profunda', 'Su Maldición hace +50% de daño recibido (en vez de +30%)', { curseP: .2 }), T('inmortal', 'Inmortal', 'Una vez por combate queda con 1 PV en vez de caer', { lastStand: 1 })],
+  },
+  druida: {
+    5: [T('afiladas', 'Espinas Afiladas', 'Espinas refleja 50% (en vez de 30%)', { thornsP: .2 }), T('savia', 'Savia', 'Regenera 3% PV al empezar su turno', { regen: .03 })],
+    10: [T('salvaje', 'Furia Salvaje', 'En forma de oso, +25% ATQ extra', { bearP: .25 }), T('raicesp', 'Raíces Profundas', 'Raíces hace +60%', { skB: { raices: .6 } })],
+    20: [T('gaia', 'Ira de Gaia', 'Ira de la Naturaleza hace +25%', { skB: { ira: .25 } }), T('corteza', 'Corteza', '+15% DEF', { defP: .15 })],
+    30: [T('natsalv', 'Naturaleza Salvaje', '+12% ATQ y MAG', { atkP: .12, magP: .12 }), T('renacer', 'Renacer', 'Una vez por combate queda con 1 PV en vez de caer', { lastStand: 1 })],
+  },
+  enano: {
+    5: [T('martpes', 'Martillo Pesado', 'Martillazo aturde 50% de las veces', { stunUp: .2 }), T('roca', 'Roca Viva', '+15% DEF', { defP: .15 })],
+    10: [T('fuerzam', 'Fuerza de la Montaña', '+12% ATQ', { atkP: .12 }), T('barba', 'Barba de Hierro', 'Empieza cada combate con un escudo de 15% PV', { startShield: .15 })],
+    20: [T('runag', 'Golpe Rúnico', '+8% de crítico y +10% ATQ', { crit: 8, atkP: .1 }), T('cerveza2', 'Cerveza Doble', 'Cerveza Enana se puede usar 2 veces por combate', { beer2: 1 })],
+    30: [T('bolsa', 'Bolsa de Oro', '+20% de oro en los combates', { goldP: .2 }), T('fortaleza', 'Fortaleza', '+20% PV máximos', { mhpP: .2 })],
+  },
+  elfo: {
+    5: [T('hoja', 'Hoja Lunar', 'Espada Lunar hace +25%', { skB: { lunar: .25 } }), T('gracia', 'Gracia Élfica', '+10% de esquivar golpes físicos', { dodge: 10 })],
+    10: [T('agil', 'Agilidad', '+15% VEL', { spdP: .15 }), T('cantosan', 'Canto Sanador', 'Canto del Bosque también cura 10% PV al grupo', { songHeal: .1 })],
+    20: [T('ojobosque', 'Ojo del Bosque', '+8% de crítico', { crit: 8 }), T('sabia', 'Sabiduría Antigua', '+12% MAG', { magP: .12 })],
+    30: [T('danzap', 'Danza Perfecta', 'Danza de Espadas da 4 golpes', { danceExtra: 1 }), T('espiritu', 'Espíritu Libre', '+15% de esquivar golpes físicos', { dodge: 15 })],
+  },
+  goblin: {
+    5: [T('polvora', 'Pólvora Extra', 'Bomba Casera hace +30%', { skB: { bomba: .3 } }), T('hondos', 'Bolsillos Hondos', '+15% de oro en los combates', { goldP: .15 })],
+    10: [T('suerteg', 'Suerte de Goblin', '+8% de crítico', { crit: 8 }), T('escurri', 'Escurridizo', '+10% de esquivar golpes físicos', { dodge: 10 })],
+    20: [T('afortun', 'Golpe Afortunado', 'Golpe de Suerte nunca baja de ×1.5', { luckyMin: 1 }), T('trampero', 'Trampero', 'Detecta 90% de las trampas de las mazmorras', { trapDet: 1 })],
+    30: [T('rata', 'Rata Lista', '+15% ATQ y +10% VEL', { atkP: .15, spdP: .1 }), T('esquivo', 'Esquivo', '+15% de esquivar golpes físicos', { dodge: 15 })],
+  },
 };
 
 // ================= Objetos =================
@@ -188,7 +337,8 @@ export const QUICK = [
   { id: 'ok', t: '👍' },
   { id: 'risa', t: '😂' },
 ];
-export const LEADER_EMOJIS = Object.values(CL).map(c => c.e);
+// Emojis de líder válidos: los de las clases y los de las clases avanzadas
+export const LEADER_EMOJIS = [...Object.values(CL).map(c => c.e), ...Object.values(ADV).map(a => a.e)];
 export const MAX_PARTY = 3;
 export const MAX_PLAYERS = 4;
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin I ni O (ni números)

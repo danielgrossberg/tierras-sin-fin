@@ -1,7 +1,21 @@
 // Estado compartido entre módulos y funciones de los héroes.
 // G es siempre el mismo objeto: al empezar o cargar partida se reemplaza su contenido.
 'use strict';
-import { CL, SK } from './data.js';
+import { CL, SK, ADV, ADV_LVL, TAL, TAL_LVLS } from './data.js';
+
+// ================= Talentos y clase avanzada (Versión 3 · Fase 2) =================
+// h.tal = { 5: 0|1, 10: 0|1, … } (índice de la opción elegida) · h.adv = 'paladin' | null
+export const talList = h => { const t = TAL[h.cls], out = []; if (t && h.tal) for (const L of TAL_LVLS) { const i = h.tal[L]; if (i === 0 || i === 1) out.push(t[L][i]); } return out; };
+// Suma de un efecto numérico de los talentos elegidos (0 si no tiene)
+export function talFx(h, k) { if (!h || !h.isHero) return 0; let s = 0; for (const t of talList(h)) if (typeof t.fx[k] === 'number') s += t.fx[k]; return s; }
+// Efectos por habilidad: skB (más daño) y skBurn (quema)
+export function talSk(h, kind, sk) { if (!h || !h.isHero) return 0; let s = 0; for (const t of talList(h)) if (t.fx[kind] && t.fx[kind][sk]) s += t.fx[kind][sk]; return s; }
+// Talento o clase avanzada pendiente de elegir
+export const pendingTal = h => TAL[h.cls] ? TAL_LVLS.find(L => h.lvl >= L && !(h.tal && (h.tal[L] === 0 || h.tal[L] === 1))) || null : null;
+export const pendingAdv = h => h.lvl >= ADV_LVL && !h.adv;
+export const hasPending = h => !!(pendingTal(h) || pendingAdv(h));
+// Título de la clase (avanzada si la tiene)
+export const clsName = h => (h.adv && ADV[h.adv] ? ADV[h.adv].n : CL[h.cls].n);
 
 export const G = {};
 export function setG(o) { for (const k of Object.keys(G)) delete G[k]; Object.assign(G, o); }
@@ -23,7 +37,11 @@ export function hs(h, k) {
   const c = CL[h.cls];
   // Un héroe de otro jugador (combate cooperativo) trae sus propias mejoras de herrería (upA/upD)
   const ua = h.upA != null ? h.upA : G.upA, ud = h.upD != null ? h.upD : G.upD;
-  return Math.round(c.b[k] + c.g[k] * (h.lvl - 1)) + (h.bonus[k] || 0) + (k === 'atk' ? ua * 2 : k === 'def' ? ud * 2 : 0) + eqSum(h, k);
+  // Clase avanzada: el crecimiento cambia un poco desde el nivel 15
+  const a = h.adv && ADV[h.adv], ag = a && a.g[k] ? c.g[k] * (a.g[k] - 1) * Math.max(0, h.lvl - ADV_LVL) : 0;
+  const v = Math.round(c.b[k] + c.g[k] * (h.lvl - 1) + ag) + (h.bonus[k] || 0) + (k === 'atk' ? ua * 2 : k === 'def' ? ud * 2 : 0) + eqSum(h, k);
+  const p = talFx(h, k + 'P');   // talentos: +% a un stat
+  return p ? Math.round(v * (1 + p)) : v;
 }
 export const S = (u, k) => u.isHero ? hs(u, k) : u[k];
 // Tras cambiar equipo, la vida/magia actual no puede pasar del nuevo máximo
@@ -36,13 +54,13 @@ export function changeEquip(h, fn) {
   clampHero(h);
 }
 export function mkHero(cls, i) {
-  const h = { id: 'h' + i, isHero: true, cls, name: CL[cls].name, e: CL[cls].e, lvl: 1, xp: 0, hp: 0, mp: 0, bonus: {}, buffs: {}, poison: 0, equip: {} };
+  const h = { id: 'h' + i, isHero: true, cls, name: CL[cls].name, e: CL[cls].e, lvl: 1, xp: 0, hp: 0, mp: 0, bonus: {}, buffs: {}, poison: 0, equip: {}, tal: {}, adv: null };
   h.hp = hs(h, 'mhp'); h.mp = hs(h, 'mmp'); return h;
 }
 export const heroes = () => G.party.map(i => G.roster[i]);
 export const alive = a => a.filter(u => u.hp > 0);
 export const need = l => Math.round(12 * Math.pow(l, 1.7));
-export const learned = h => CL[h.cls].sk.filter(k => SK[k].lv <= h.lvl);
+export const learned = h => [...CL[h.cls].sk, ...(h.adv && ADV[h.adv] ? ADV[h.adv].sk : [])].filter(k => SK[k].lv <= h.lvl);
 export function gainXP(h, x) {
   const msgs = []; h.xp += Math.round(x);
   while (h.xp >= need(h.lvl)) {
@@ -50,6 +68,9 @@ export function gainXP(h, x) {
     if (h.hp > 0) h.hp += S(h, 'mhp') - om; h.mp += S(h, 'mmp') - omm;
     msgs.push(`⭐ <b>${h.name}</b> sube a nivel ${h.lvl}`);
     for (const k of CL[h.cls].sk) if (SK[k].lv === h.lvl) msgs.push(`✨ ${h.name} aprende <b>${SK[k].n}</b>`);
+    if (h.adv && ADV[h.adv]) for (const k of ADV[h.adv].sk) if (SK[k].lv === h.lvl) msgs.push(`✨ ${h.name} aprende <b>${SK[k].n}</b>`);
+    if (TAL_LVLS.includes(h.lvl)) msgs.push(`🌟 ${h.name} puede elegir un <b>talento</b> (🎒 Grupo)`);
+    if (h.lvl === ADV_LVL && !h.adv) msgs.push(`👑 ${h.name} puede elegir su <b>clase avanzada</b> (🎒 Grupo)`);
   }
   return msgs;
 }

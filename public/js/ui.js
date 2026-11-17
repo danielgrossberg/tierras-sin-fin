@@ -2,7 +2,8 @@
 'use strict';
 import { $, esc, dirArrow, cardinal, cardinalWord, zoneOf } from './util.js';
 import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
-import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip } from './state.js';
+import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip, talList, pendingTal, pendingAdv, hasPending, clsName, talSk, talFx } from './state.js';
+import { ADV, ADV_LVL, TAL, TAL_LVLS, advOf } from './data.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
@@ -42,6 +43,8 @@ export function updateHUD() {
   const where = inDungeon() ? `🕳️ ${esc(D.cave.name)} · piso ${D.f + 1}/${D.cave.floors} · Nv ~${D.cave.lvl + D.f}` : `${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}`;
   $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${where}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
     + (tracked() ? `<div class="qline">${QICON[tracked().type]} ${tracked().title} · <b>${progressText(tracked())}</b></div>` : '');
+  // 🎒 con aviso si algún héroe del grupo tiene un talento o una clase avanzada por elegir
+  const pb = $('#partyBadge'); if (pb) pb.classList.toggle('hidden', !heroes().some(hasPending));
   updateCoords();
 }
 
@@ -125,7 +128,8 @@ function villageRender() {
   const f = VF, cost = restCost(), ilvl = zoneLvl(f), stock = shopStock(f, ilvl), inv = G.inventory, full = inv.length >= INV_MAX;
   return `<h2>🏘️ ${f.name}</h2><p class="mut" style="margin:0">Refugio seguro: los monstruos no entran aquí. Tienes <b class="goldt">💰 ${G.gold}</b> de oro.</p>
   ${VMSG ? `<div class="pend" style="margin-top:10px">${VMSG}</div>` : ''}
-  <div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div></div>
+  <div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div>
+    ${heroes().filter(h => talList(h).length).map(h => { const i = G.roster.indexOf(h), c = talResetCost(h); return `<div class="shop"><span>🔄 <b>Reiniciar talentos</b> de ${h.e} ${h.name} <small class="mut">vuelve a elegirlos en 🎒 Grupo</small></span><button class="btn sm" data-a="talreset" data-k="${i}" ${G.gold < c ? 'disabled' : ''}>${c} oro</button></div>`; }).join('')}</div>
   <div class="sec"><h3>🛒 Tienda</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < IT[k].p ? 'disabled' : ''}>Comprar · ${IT[k].p} oro</button></span></div>`).join('')}</div>
   <div class="sec"><h3>⚔️ Armería <small class="mut">equipo común de la zona · Nv ${ilvl}</small></h3>
     ${stock.map(({ it, sold }, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small class="mut">${statList(it.st).join(' · ')} · ${classesText(it)}</small></span>${sold ? '<span class="mut small">Vendido</span>' : `<button class="btn sm" data-a="buyeq" data-k="${i}" ${G.gold < buyPrice(it) || full ? 'disabled' : ''}>Comprar · ${buyPrice(it)} oro</button>`}</div>`).join('')}
@@ -138,7 +142,7 @@ function villageRender() {
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div></div>
   <div class="sec"><h3>🍺 Taberna</h3><p class="mut" style="margin:0 0 8px;font-size:13px">Toca para sumar o sacar héroes del grupo (máximo 3). Los que esperan aquí ganan el 10% de la experiencia.</p>
-    <div class="tav">${G.roster.map((h, i) => `<button class="tavh ${G.party.includes(i) ? 'on' : ''}" data-a="tog" data-k="${i}"><span class="emoji">${h.e}</span><b>${h.name}</b><small>${CL[h.cls].n} · Nv ${h.lvl}</small><small>${G.party.includes(i) ? '✅ En el grupo' : 'Esperando'}</small></button>`).join('')}</div></div>
+    <div class="tav">${G.roster.map((h, i) => `<button class="tavh ${G.party.includes(i) ? 'on' : ''}" data-a="tog" data-k="${i}"><span class="emoji">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}${hasPending(h) ? " 🌟" : ""}</small><small>${G.party.includes(i) ? '✅ En el grupo' : 'Esperando'}</small></button>`).join('')}</div></div>
   <div class="row end"><button class="btn" data-a="close">Salir de la aldea</button></div>`;
 }
 function villageAct(a, k) {
@@ -146,6 +150,7 @@ function villageAct(a, k) {
   if (a === 'close') { closeModal(); return; }
   if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y }; save('now'); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.'; }
   if (a === 'buy') { if (G.gold >= IT[k].p) { G.gold -= IT[k].p; G.items[k]++; save('now'); } }
+  if (a === 'talreset') { const h = G.roster[+k], c = h && talResetCost(h); if (h && G.gold >= c) { G.gold -= c; changeEquip(h, () => { h.tal = {}; }); save('now'); VMSG = `🔄 Talentos de ${h.name} reiniciados. Elígelos de nuevo en 🎒 Grupo → Héroes.`; } }
   if (a === 'upA' || a === 'upD') { const key = a === 'upA' ? 'upA' : 'upD', c = upCost(G[key]); if (G.gold >= c) { G.gold -= c; G[key]++; save('now'); VMSG = a === 'upA' ? '🗡️ ¡Armas afiladas!' : '🛡️ ¡Armaduras reforzadas!'; } }
   if (a === 'buyeq') {
     const s = shopStock(VF, zoneLvl(VF))[+k];
@@ -305,7 +310,7 @@ let PA = null, NGC = false, PT = 'heroes', PH = null, PI = null, PF = false;
 const score = it => Object.entries(it.st).reduce((a, [k, v]) => a + v * (k === 'mhp' ? 1 / 3 : k === 'mmp' ? .5 : ['crit', 'ls', 'pres'].includes(k) ? .4 : 1), 0);
 // Elegir héroe para un objeto o una habilidad de apoyo (Versión 3 · Fase 0.4): tarjetas con PV/PM y vista previa
 const hv = h => ({ hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), poison: h.poison || 0 });
-const cardOf = h => ({ h, e: h.e, name: esc(h.name), sub: `${CL[h.cls].n} · Nv ${h.lvl}`, H: hv(h) });
+const cardOf = h => ({ h, e: h.e, name: esc(h.name), sub: `${clsName(h)} · Nv ${h.lvl}`, H: hv(h) });
 function pendHTML() {
   if (!PA) return '';
   let rows;
@@ -326,19 +331,43 @@ function pendHTML() {
     <button class="btn full" data-a="cancel">Cancelar</button></div>`;
 }
 const eqLine = x => `<div class="eqline">${SLOT_KEYS.map(sl => { const it = x.equip && x.equip[sl]; return it ? `<span class="emoji" title="${it.n}" style="border-color:${RAR[it.r].c}">${TYPES[it.t].e}</span>` : `<span class="emoji empty" title="${SLOTS[sl].n} vacía">${SLOTS[sl].i}</span>`; }).join('')}</div>`;
+// ---- Talentos y clase avanzada (Versión 3 · Fase 2) ----
+const talResetCost = h => 20 * h.lvl;
+let ADVSEL = null;   // { i (héroe), k (clase elegida, falta confirmar) }
+function growthText(a) { const N = { mhp: 'PV', mmp: 'PM', atk: 'ATQ', def: 'DEF', mag: 'MAG', spd: 'VEL' }; return Object.entries(a.g).map(([k, v]) => `${N[k]} ${v > 1 ? '▲' : '▼'}`).join(' · '); }
+function advHTML(x, i) {
+  if (x.adv && ADV[x.adv]) return '';
+  if (x.lvl < ADV_LVL) return `<div class="talrow lock">🔒 Clase avanzada a nivel ${ADV_LVL}</div>`;
+  const sel = ADVSEL && ADVSEL.i === i ? ADVSEL.k : null;
+  return `<div class="advbox"><b>👑 Elige su clase avanzada</b> <small class="mut">(no se puede cambiar)</small>
+    <div class="advopts">${advOf(x.cls).map(k => { const a = ADV[k]; return `<button class="advc ${sel === k ? 'on' : ''}" data-a="advsel" data-k="${i}:${k}"><span class="emoji advi">${a.e}</span><b>${a.n}</b><small>${a.d}</small>
+      <small class="advsk">${a.sk.map(s => `✨ ${SK[s].n} <span class="mut">(Nv ${SK[s].lv})</span>: ${SK[s].d}`).join('<br>')}</small><small class="mut">${growthText(a)}</small></button>`; }).join('')}</div>
+    ${sel ? `<button class="btn gold full" data-a="advok" data-k="${i}:${sel}">Confirmar: ${ADV[sel].e} ${ADV[sel].n}</button>` : ''}</div>`;
+}
+function talHTML(x, i) {
+  const t = TAL[x.cls]; if (!t) return '';
+  return `<div class="tals"><b class="talh">🌟 Talentos</b>${TAL_LVLS.map(L => {
+    if (x.lvl < L) return `<div class="talrow lock">🔒 Nv ${L}</div>`;
+    const c = x.tal && x.tal[L];
+    if (c === 0 || c === 1) return `<div class="talrow"><span class="talL">Nv ${L}</span> <b>${t[L][c].n}</b> <small class="mut">${t[L][c].d}</small></div>`;
+    return `<div class="talpick"><span class="talL">Nv ${L} · elige uno:</span><div class="talopts">${t[L].map((o, j) => `<button class="talc" data-a="tal" data-k="${i}:${L}:${j}"><b>${j ? '🛡️' : '⚔️'} ${o.n}</b><small>${o.d}</small></button>`).join('')}</div></div>`;
+  }).join('')}</div>`;
+}
 function heroesTab() {
-  let h = pendHTML() + '<div class="hgrid">' + heroes().map(x => {
+  const pend = heroes().filter(hasPending);
+  let h = pendHTML() + (pend.length ? `<div class="pend">🌟 ${pend.map(x => `<b>${x.name}</b>`).join(', ')} ${pend.length > 1 ? 'tienen' : 'tiene'} ${pend.some(pendingAdv) ? 'una clase avanzada o un talento' : 'un talento'} por elegir. Baja hasta su tarjeta.</div>` : '') + '<div class="hgrid">' + heroes().map(x => {
     const i = G.roster.indexOf(x), mh = S(x, 'mhp'), mm = S(x, 'mmp');
-    return `<div class="pc ${x.hp <= 0 ? 'dead' : ''}"><div class="hd"><span class="emoji">${x.e}</span><div style="flex:1"><b>${x.name}</b> ${G.leader === i ? '<span class="goldt">★ Líder</span>' : ''}<div class="mut" style="font-size:12px">${CL[x.cls].n} · Nivel ${x.lvl}${x.hp <= 0 ? ' · <span style="color:#ff6b6b">Caído</span>' : ''}</div></div>${G.leader !== i ? `<button class="btn sm" data-a="leader" data-k="${i}">Líder</button>` : ''}</div>
+    return `<div class="pc ${x.hp <= 0 ? 'dead' : ''} ${hasPending(x) ? 'haspend' : ''}"><div class="hd"><span class="emoji">${x.e}</span><div style="flex:1"><b>${x.name}</b> ${G.leader === i ? '<span class="goldt">★ Líder</span>' : ''}<div class="mut" style="font-size:12px">${clsName(x)}${x.adv ? ` <span class="advtag">${CL[x.cls].n}</span>` : ''} · Nivel ${x.lvl}${x.hp <= 0 ? ' · <span style="color:#ff6b6b">Caído</span>' : ''}</div></div>${G.leader !== i ? `<button class="btn sm" data-a="leader" data-k="${i}">Líder</button>` : ''}</div>
     ${eqLine(x)}
     <div style="font-size:11px;margin-top:6px" class="mut">PV ${x.hp}/${mh}</div><div class="bar"><i style="width:${100 * x.hp / mh}%"></i></div>
     <div style="font-size:11px;margin-top:3px" class="mut">PM ${x.mp}/${mm}</div><div class="bar mp"><i style="width:${100 * x.mp / mm}%"></i></div>
     <div style="font-size:11px;margin-top:3px" class="mut">XP ${x.xp}/${need(x.lvl)}</div><div class="bar xp"><i style="width:${100 * x.xp / need(x.lvl)}%"></i></div>
     <div class="stats"><div>ATQ<b>${S(x, 'atk')}</b></div><div>DEF<b>${S(x, 'def')}</b></div><div>MAG<b>${S(x, 'mag')}</b></div><div>VEL<b>${S(x, 'spd')}</b></div></div>
-    <div class="skl">${CL[x.cls].sk.map(k => { const s = SK[k], c = skillCost(x, k); return s.lv <= x.lvl ? `✨ <b>${s.n}</b> <span class="mut">${c} PM</span>${s.field && x.hp > 0 ? ` <button class="btn sm" data-a="fskill" data-k="${i}:${k}" ${x.mp < c ? 'disabled' : ''}>Usar</button>` : ''}` : `<span class="no">🔒 ${s.n} (Nv ${s.lv})</span>`; }).join('<br>')}</div></div>`;
+    <div class="skl">${[...CL[x.cls].sk, ...(x.adv && ADV[x.adv] ? ADV[x.adv].sk : [])].map(k => { const s = SK[k], c = skillCost(x, k); return s.lv <= x.lvl ? `✨ <b>${s.n}</b> <span class="mut">${c} PM</span>${s.field && x.hp > 0 ? ` <button class="btn sm" data-a="fskill" data-k="${i}:${k}" ${x.mp < c ? 'disabled' : ''}>Usar</button>` : ''}` : `<span class="no">🔒 ${s.n} (Nv ${s.lv})</span>`; }).join('<br>')}</div>
+    ${advHTML(x, i)}${talHTML(x, i)}</div>`;
   }).join('') + '</div>';
   const res = G.roster.filter((_, i) => !G.party.includes(i));
-  if (res.length) h += `<h3>Esperando en la taberna</h3><p class="mut" style="font-size:13px;margin:0">${res.map(x => `${x.e} ${x.name} (${CL[x.cls].n}, Nv ${x.lvl})`).join(' · ')}<br>Cámbialos en la taberna de cualquier aldea.</p>`;
+  if (res.length) h += `<h3>Esperando en la taberna</h3><p class="mut" style="font-size:13px;margin:0">${res.map(x => `${x.e} ${x.name} (${clsName(x)}, Nv ${x.lvl})`).join(' · ')}<br>Cámbialos en la taberna de cualquier aldea.</p>`;
   return h;
 }
 function itemsTab() {
@@ -412,6 +441,21 @@ async function partyAct(a, k) {
   if (a === 'qtrack') track(k);
   if (a === 'qdrop') { if (QD !== k) QD = k; else { abandon(k); QD = null; save(); } }
   if (a === 'cancel') PA = null;
+  // Talentos y clase avanzada
+  if (a === 'tal') {
+    const [hi, L, j] = k.split(':').map(Number), h = G.roster[hi];
+    if (h && TAL[h.cls] && TAL[h.cls][L] && h.lvl >= L && !(h.tal && (h.tal[L] === 0 || h.tal[L] === 1))) {
+      changeEquip(h, () => { h.tal = h.tal || {}; h.tal[L] = j; }); save('now'); toast(`🌟 ${h.name}: ${TAL[h.cls][L][j].n}`);
+    }
+  }
+  if (a === 'advsel') { const [hi, ak] = k.split(':'); ADVSEL = { i: +hi, k: ak }; }
+  if (a === 'advok') {
+    const [hi, ak] = k.split(':'), h = G.roster[+hi];
+    if (h && ADV[ak] && ADV[ak].cls === h.cls && h.lvl >= ADV_LVL && !h.adv) {
+      changeEquip(h, () => { h.adv = ak; }); h.e = ADV[ak].e; ADVSEL = null; save('now');
+      toast(`👑 ${h.name} ahora es <b>${ADV[ak].n}</b> ${ADV[ak].e}<br><span style="font-size:13px">Nueva habilidad: ${SK[ADV[ak].sk[0]].n}</span>`);
+    }
+  }
   if (a === 'ngcancel') NGC = false;
   if (a === 'leader') G.leader = +k;
   if (a === 'fskill') {

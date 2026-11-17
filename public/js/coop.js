@@ -4,7 +4,7 @@
 // - El servidor solo organiza la sesión y reenvía los mensajes (ver server.js).
 'use strict';
 import { $, esc } from './util.js';
-import { CL, SK, IT, EN, BG } from './data.js';
+import { CL, SK, IT, EN, BG, ADV, LEADER_EMOJIS } from './data.js';
 import { G, P, START, st, S, heroes, learned, gainXP } from './state.js';
 import { spawnNearby, visitAround, monsters, mpos } from './world.js';
 import { net, coopAsk, coopSend, notice } from './net.js';
@@ -14,7 +14,7 @@ import { save } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onVictory } from './quests.js';
 import { createTomb } from './tomb.js';
-import { heroFx } from './state.js';
+import { heroFx, talFx, talSk, clsName } from './state.js';
 import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { inDungeon } from './dungeon.js';
@@ -33,7 +33,8 @@ export function coopVs() {
 export const inCoopBattle = () => !!(coop.guest && coop.guest.started);
 
 // Héroe que se manda a la sesión (con sus mejoras de herrería)
-const snap = h => ({ id: h.id, cls: h.cls, name: h.name, e: h.e, lvl: h.lvl, hp: h.hp, mp: h.mp, bonus: h.bonus, equip: h.equip, poison: h.poison || 0, upA: G.upA, upD: G.upD });
+// tal/adv: talentos y clase avanzada (Versión 3 · Fase 2) · gold: para Lluvia de Monedas
+const snap = h => ({ id: h.id, cls: h.cls, name: h.name, e: h.e, lvl: h.lvl, hp: h.hp, mp: h.mp, bonus: h.bonus, equip: h.equip, poison: h.poison || 0, upA: G.upA, upD: G.upD, tal: h.tal || {}, adv: h.adv || null, gold: G.gold });
 const onlineMates = () => [...net.others.values()].filter(o => o.online !== false && o.status && o.status !== 'lobby' && o.status !== 'away');
 export const canAskHelp = () => st.online && net.status === 'on' && onlineMates().length > 0;
 
@@ -42,7 +43,7 @@ function chooseHero(title, sub, cb) {
   const list = G.party.map(i => G.roster[i]);
   openModal(() => `<h2>${title}</h2><p class="mut" style="margin:0 0 8px">${sub}</p>
     <div class="pick">${list.map((h, i) => { const dead = h.hp <= 0, mh = S(h, 'mhp'), mm = S(h, 'mmp');
-      return `<button class="pickc ${dead ? 'dead' : ''}" data-a="pick" data-k="${i}" ${dead ? 'disabled' : ''}><span class="emoji pe">${h.e}</span><b>${h.name}</b><small>${CL[h.cls].n} · Nv ${h.lvl}</small>
+      return `<button class="pickc ${dead ? 'dead' : ''}" data-a="pick" data-k="${i}" ${dead ? 'disabled' : ''}><span class="emoji pe">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}</small>
         <span class="bar"><i style="width:${100 * h.hp / mh}%"></i></span><span class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></span><small>${dead ? '💀 Caído' : `PV ${h.hp}/${mh} · PM ${h.mp}/${mm}`}</small></button>`; }).join('')}</div>
     <div class="row end"><button class="btn" data-a="back">Volver</button></div>`,
   (a, k) => { if (a === 'back') { closeModal(); return; } if (a === 'pick') { const h = list[+k]; if (!h || h.hp <= 0) return; closeModal(); cb(h); } });
@@ -86,7 +87,7 @@ function openHostLobby() {
       stopLobbyTick(); closeModal();
       const guests = r.lobby.guests;
       // Nombre y emoji llegan desde la red: el servidor ya los limpia; aquí se vuelve a quitar cualquier <>&"
-      const remotes = guests.map((g, i) => Object.assign({}, g.hero, { id: 'r' + i + '_' + g.hero.id, isHero: true, remote: true, owner: g.name, name: String(g.hero.name || 'Héroe').replace(/[<>&"']/g, '').slice(0, 16), e: CL[g.hero.cls] && Object.values(CL).some(c => c.e === g.hero.e) ? g.hero.e : (CL[g.hero.cls] ? CL[g.hero.cls].e : '🙂'), buffs: {}, xp: 0, defending: false, stun: 0, tmp: 0, trap: 0, bonus: g.hero.bonus || {}, equip: g.hero.equip || {} }));
+      const remotes = guests.map((g, i) => Object.assign({}, g.hero, { id: 'r' + i + '_' + g.hero.id, isHero: true, remote: true, owner: g.name, name: String(g.hero.name || 'Héroe').replace(/[<>&"']/g, '').slice(0, 16), adv: ADV[g.hero.adv] && ADV[g.hero.adv].cls === g.hero.cls ? g.hero.adv : null, e: CL[g.hero.cls] && LEADER_EMOJIS.includes(g.hero.e) ? g.hero.e : (CL[g.hero.cls] ? CL[g.hero.cls].e : '🙂'), buffs: {}, xp: 0, defending: false, stun: 0, tmp: 0, trap: 0, bonus: g.hero.bonus || {}, equip: g.hero.equip || {} }));
       const ctl = { id: H.id, me: st.name, gone: new Set(), waiters: new Map(),
         send: state => coopSend('battle:state', state),
         end: res => { coopSend('battle:end', res); coop.host = null; },
@@ -215,7 +216,8 @@ function guestMenu(stage, data) {
     m.innerHTML = '<div class="res">✅ Acción enviada. Esperando al anfitrión…</div>';
   };
   // Estimados (Fase 0.5): con los stats de mi héroe, sus mejoras activas y la defensa de los enemigos que manda el anfitrión
-  const A = { atk: S(h, 'atk') * atkMulB(me.buffs), atkRaw: S(h, 'atk'), mag: S(h, 'mag'), hp: me.hp, mhp: me.mhp, critMul: heroFx(h, 'umbra') ? 2.5 : 1.75 };
+  const A = { atk: S(h, 'atk') * atkMulB(me.buffs), atkRaw: S(h, 'atk'), mag: S(h, 'mag'), hp: me.hp, mhp: me.mhp, critMul: (heroFx(h, 'umbra') ? 2.5 : 1.75) + talFx(h, 'critDmg'),
+    boost: k => talSk(h, 'skB', k), burnSk: k => talSk(h, 'skBurn', k), gold: G.gold, heal: talFx(h, 'healP'), steal: talFx(h, 'stealP'), lucky: talFx(h, 'luckyMin'), dance: talFx(h, 'danceExtra'), beer2: talFx(h, 'beer2') };
   const tOf = e => ({ def: Number(e.def) || 0, hp: e.hp, mhp: e.mhp, curse: !!e.cu, undead: !!e.ud, boss: !!e.boss });
   const est = k => estimate(k, A, s.enemies.filter(e => e.hp > 0).map(tOf));
   const hvOf = x => ({ hp: x.hp, mhp: x.mhp, mp: x.mp, mmp: x.mmp, poison: x.poison || 0 });

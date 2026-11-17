@@ -9,7 +9,7 @@
 'use strict';
 import { mulberry, hashI, pick, esc } from './util.js';
 import { EN, CAVE } from './data.js';
-import { G, P, START, st, S, heroes, alive, avgLvl } from './state.js';
+import { G, P, START, st, S, heroes, alive, avgLvl, talFx } from './state.js';
 import { spawnNearby, visitAround } from './world.js';
 import { startBattle } from './battle.js';
 import { openModal, closeModal, openBossConfirm, toast, feed, updateHUD } from './ui.js';
@@ -123,7 +123,7 @@ function updateVision() {
     if (lineClear(D.x, D.y, x, y)) { D.vis.add(idx(x, y)); D.seen[idx(x, y)] = 1; }
   }
   // Trampas: con Pícaro o Goblin en el grupo, 50% de detectarlas al verlas por primera vez
-  for (const t of D.fl.traps) if (D.vis.has(idx(t.x, t.y)) && !D.trapSeen.has(t.id)) D.trapSeen.set(t.id, hasScout() && Math.random() < .5);
+  for (const t of D.fl.traps) if (D.vis.has(idx(t.x, t.y)) && !D.trapSeen.has(t.id)) D.trapSeen.set(t.id, hasScout() && Math.random() < (heroes().some(h => talFx(h, 'trapDet')) ? .9 : .5));   // talento Trampero: 90%
   dunProg(D.cave.id).seen[D.f] = enc(D.seen);
 }
 export const isVisible = (x, y) => D.vis.has(idx(x, y));

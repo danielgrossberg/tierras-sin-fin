@@ -1,14 +1,14 @@
 // Guardado local (localStorage). Todo en try/catch: si falla, se juega igual.
 'use strict';
 import { G, P, st } from './state.js';
-import { CL } from './data.js';
+import { CL, ADV } from './data.js';
 import { pushSave } from './net.js';
 
 export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -50,6 +50,10 @@ export function migrate(o) {
     // Versión 3 · Fase 1: progreso de las mazmorras y mazmorra actual (ninguna). Todo lo demás queda igual.
     o.dungeons = o.dungeons || {}; o.inDun = o.inDun || null;
   }
+  if (v < 9) {
+    // Versión 3 · Fase 2: talentos y clase avanzada por héroe (vacíos: los héroes que ya pasaron los niveles 5/10/15/20/30 los eligen al entrar)
+    for (const h of o.roster) { h.tal = h.tal || {}; h.adv = h.adv || null; }
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
@@ -59,7 +63,7 @@ export function migrate(o) {
   o.dungeons = o.dungeons && typeof o.dungeons === 'object' ? o.dungeons : {};
   if (o.inDun && !(o.inDun.cave && o.inDun.cave.id)) o.inDun = null;
   o.quests = Array.isArray(o.quests) ? o.quests : []; o.vv = o.vv || {}; o.board = o.board || {}; o.extraFeats = Array.isArray(o.extraFeats) ? o.extraFeats : [];
-  for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; }
+  for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; h.tal = h.tal && typeof h.tal === 'object' ? h.tal : {}; if (h.adv && !ADV[h.adv]) h.adv = null; h.shield = 0; h.ward = 0; }
   o.saveVersion = SAVE_VERSION;
   return o;
 }

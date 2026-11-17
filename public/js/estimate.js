@@ -11,12 +11,15 @@ export const poisonTick = mhp => Math.max(1, Math.round(mhp * .07));
 
 // A (atacante): { atk (con mejoras), atkRaw, mag, hp, mhp, critMul }
 // T (objetivo): { def (con mejoras), hp, mhp, curse, undead, boss }
-const fin = (v, T) => (T.curse ? Math.round(v * 1.3) : v);   // Maldición: +30% de daño recibido
+// Maldición (+30%, o más con talento) y Marca de Caza (+40%) sobre el daño recibido
+const fin = (v, T) => { if (T.curse) v = Math.round(v * (T.curseM || 1.3)); if (T.mark) v = Math.round(v * 1.4); return v; };
 const both = f => [f(.9), f(1.1)];
-export const physR = (A, T, m, crit) => both(r => fin(Math.round(Math.max(1, (A.atk * m - T.def * .5) * r) * (crit ? A.critMul : 1)), T));
-export const magR = (A, T, m) => both(r => fin(Math.max(1, Math.round((A.mag * m - T.def * .2) * r)), T));
+// A.bo: multiplicador de la habilidad en curso (talentos); lo fija estimate()
+export const physR = (A, T, m, crit, pierce) => both(r => fin(Math.round(Math.max(1, (A.atk * m - (pierce ? 0 : T.def) * .5) * r) * (A.bo || 1) * (crit ? A.critMul : 1)), T));
+export const magR = (A, T, m) => both(r => fin(Math.max(1, Math.round((A.mag * m - T.def * .2) * r * (A.bo || 1))), T));
 const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
 const P = m => (A, T) => physR(A, T, m), M = m => (A, T) => magR(A, T, m);
+const bomb = k => (A, T) => both(r => fin(Math.max(1, Math.round((Math.max(A.atkRaw, A.mag) * k - T.def * .3) * r * (A.bo || 1))), T));
 
 // Daño a un objetivo
 const ONE = {
@@ -26,20 +29,30 @@ const ONE = {
   lunar: (A, T) => add(physR(A, T, .8), magR(A, T, .8)),
   halcon: (A, T) => physR(A, T, 2.4, true),
   desesperado: (A, T) => physR(A, T, 1.4 + 2.6 * (1 - A.hp / A.mhp)),
-  suerte: (A, T) => [physR(A, T, .5)[0], physR(A, T, 4)[1]],
+  suerte: (A, T) => [physR(A, T, A.lucky ? 1.5 : .5)[0], physR(A, T, 4)[1]],
+  // Versión 3 · Fase 2
+  juicio: (A, T) => { const k = T.undead ? 2 : 1; return add(physR(A, T, 1.1 * k), magR(A, T, 1.1 * k)); },
+  carga: P(2.8), novasolar: M(4), perforante: (A, T) => physR(A, T, 1.8, false, true), tiromortal: (A, T) => physR(A, T, 2.3, true),
+  saqueo: P(1.4), golpebajo: P(1.6), montana: P(3), estrella: M(3), cadena: M(1.7),
 };
 // Varios golpes: [golpes, daño de cada uno]
-const MULTI = { doble: [2, P(.9), '🏹'], danza: [3, P(.8), '🗡️'] };
+const MULTI = { doble: [2, P(.9), '🏹'], danza: [3, P(.8), '🗡️'], tormenta: [5, P(.9), '🏹'], milcortes: [8, P(.6), '🗡️'], torbelfico: [6, P(.8), '⚔️'] };
+const RANDOM_HITS = new Set(['danza', 'tormenta', 'milcortes', 'torbelfico']);
 // A todos los enemigos
 const AOE = {
   torbellino: P(1.1), torbellinob: P(1.1), lluvia: P(.9), sismico: P(1.2), dagas: P(.7),
   ventisca: M(1.1), meteoro: M(2), plaga: M(1), ira: M(1.2),
   luzluna: (A, T) => magR(A, T, T.undead ? 2.4 : 1.2),
-  bomba: (A, T) => both(r => fin(Math.max(1, Math.round((Math.max(A.atkRaw, A.mag) - T.def * .3) * r)), T)),
+  bomba: bomb(1),
+  infierno: M(1.3), juiciodiv: (A, T) => magR(A, T, T.undead ? 2.6 : 1.3), atronador: P(.6), terremoto: P(1.2), avalancha: P(1.5), granbomba: bomb(2),
+  monedas: (A, T) => both(r => fin(Math.max(1, Math.round((A.atkRaw * .6 + Math.sqrt(Math.max(0, A.gold || 0)) * 1.2 - T.def * .3) * r * (A.bo || 1))), T)),
 };
-const MAGIC = new Set(['fuego', 'rayo', 'drenarvida', 'raices', 'luz', 'ventisca', 'meteoro', 'plaga', 'ira', 'luzluna', 'bomba']);
+const MAGIC = new Set(['fuego', 'rayo', 'drenarvida', 'raices', 'luz', 'ventisca', 'meteoro', 'plaga', 'ira', 'luzluna', 'bomba',
+  'novasolar', 'estrella', 'cadena', 'infierno', 'juiciodiv', 'granbomba', 'monedas']);
 // Veneno que dejan: turnos (y probabilidad si no es seguro)
 const DOT = { flechaven: [4, 1], punalsucio: [3, 1], plaga: [3, 1], ira: [3, 1], dagas: [3, .5] };
+// Quemadura (6% de la vida máx. por turno, 3 turnos)
+const BURN = new Set(['infierno', 'granbomba']);
 
 const rng = ([lo, hi]) => (lo === hi ? `${lo}` : `${lo}–${hi}`);
 const avgOf = (list, f) => { if (!list.length) return null; const rs = list.map(f); return [Math.round(rs.reduce((a, r) => a + r[0], 0) / rs.length), Math.round(rs.reduce((a, r) => a + r[1], 0) / rs.length)]; };
@@ -49,8 +62,10 @@ const critNote = A => `crítico ×${A.critMul === 2.5 ? '2.5' : '1.75'}`;
 
 // Estimado de una acción ('atk' o una habilidad) para el héroe A contra los enemigos vivos Ts.
 // Devuelve { line, note, enemy(T) → texto del botón del objetivo, ally(H) → texto, revive(H) → texto }
-export function estimate(k, A, Ts) {
+export function estimate(k, A0, Ts) {
   const out = { line: '', note: '' };
+  // Talentos que mejoran esta habilidad (+%) y los que la hacen quemar
+  const A = Object.assign({}, A0, { bo: 1 + (A0.boost ? A0.boost(k) || 0 : 0) });
   if (ONE[k]) {
     const f = ONE[k], avg = avgOf(Ts, T => f(A, T));
     out.line = avg ? `${MAGIC.has(k) ? '✨' : '⚔️'} Daño ≈ ${rng(avg)}` : '';
@@ -66,16 +81,26 @@ export function estimate(k, A, Ts) {
     if (k === 'raices') out.line += ' · 💫 pierde su turno';
     if (k === 'asesinar') out.line += ' · elimina si tiene <25% PV';
     if (k === 'drenarvida' && avg) out.line += ` · 💚 +${Math.round((avg[0] + avg[1]) / 4)}`;
-    if (k === 'luz' || k === 'luzluna') out.line += ' (más a no-muertos)';
+    if (k === 'luz' || k === 'luzluna' || k === 'juicio') out.line += ' (más a no-muertos)';
+    if (k === 'carga' || k === 'montana' || k === 'golpebajo') out.line += ' · 💫 aturde';
+    if (k === 'perforante') out.line += ' · ignora la DEF';
+    if (k === 'cadena') out.line += ' · rebota en 2 más';
+    if (k === 'saqueo') out.line += ' · 💰 roba el doble';
   } else if (MULTI[k]) {
-    const [n, f, ic] = MULTI[k], avg = avgOf(Ts, T => f(A, T));
-    out.line = avg ? `${ic} ${n} × ≈ ${rng(avg)}${k === 'danza' ? ' al azar' : ''}` : '';
+    const [n0, f, ic] = MULTI[k], n = n0 + (k === 'danza' && A.dance ? A.dance : 0), avg = avgOf(Ts, T => f(A, T));
+    out.line = avg ? `${ic} ${n} × ≈ ${rng(avg)}${RANDOM_HITS.has(k) ? ' al azar' : ''}` : '';
     out.note = critNote(A);
     if (k === 'doble') out.enemy = T => { const r = f(A, T); return left(T, [r[0] * 2, r[1] * 2]); };
   } else if (AOE[k]) {
     const f = AOE[k], avg = avgOf(Ts, T => f(A, T));
     out.line = avg ? `💥 ≈ ${rng(avg)} a cada enemigo` : '';
     if (!MAGIC.has(k)) out.note = critNote(A);
+    if (k === 'atronador' || k === 'terremoto') out.line += ' · 30% 💫';
+    if (k === 'juiciodiv') out.line += ' (×2 a no-muertos)';
+  }
+  if ((BURN.has(k) || (A0.burnSk && A0.burnSk(k))) && Ts.length) {
+    const avgM = Ts.reduce((a, T) => a + T.mhp, 0) / Ts.length;
+    out.line += ` · 🔥 +${Math.max(1, Math.round(avgM * .06))} por turno durante 3 turnos`;
   }
   if (DOT[k]) {
     const [n, p] = DOT[k], avgM = Ts.length ? Ts.reduce((a, T) => a + T.mhp, 0) / Ts.length : 0;
@@ -85,10 +110,10 @@ export function estimate(k, A, Ts) {
   // Curación y efectos sin daño
   const hpT = (H, n) => healTo(H, n);
   switch (k) {
-    case 'curar': { const n = Math.round(A.mag * 2.2 + 12); out.line = `💚 Cura ≈ ${n} · quita veneno`; out.ally = H => hpT(H, n); break; }
-    case 'curartodos': { const n = Math.round(A.mag * 1.5 + 8); out.line = `💚 ≈ ${n} a cada uno`; break; }
+    case 'curar': { const n = Math.round((A.mag * 2.2 + 12) * (1 + (A.heal || 0))); out.line = `💚 Cura ≈ ${n} · quita veneno`; out.ally = H => hpT(H, n); break; }
+    case 'curartodos': { const n = Math.round((A.mag * 1.5 + 8) * (1 + (A.heal || 0))); out.line = `💚 ≈ ${n} a cada uno`; break; }
     case 'revivir': out.line = '🪶 Revive con 50% PV'; out.revive = H => `💀 → ≈ ${Math.round(H.mhp * .5)}/${H.mhp} PV`; break;
-    case 'cerveza': out.line = `💚 Cura ≈ ${Math.round(A.mhp * .35)} y quita estados · 1 vez`; break;
+    case 'cerveza': out.line = `💚 Cura ≈ ${Math.round(A.mhp * .35 * (1 + (A.heal || 0)))} y quita estados · ${A.beer2 ? '2 veces' : '1 vez'}`; break;
     case 'grito': out.line = '+35% ATQ al grupo · 3 turnos'; break;
     case 'bendicion': out.line = '+35% DEF al grupo · 3 turnos'; break;
     case 'furia': out.line = `+60% ATQ · 3 turnos · cuesta ${Math.max(1, Math.round(A.mhp * .1))} PV`; break;
@@ -102,7 +127,36 @@ export function estimate(k, A, Ts) {
       const avg = avgOf(Ts, T => both(r => fin(Math.max(1, Math.round((A.mag * .9 + A.atkRaw * .4 - T.def * .4) * r)), T)));
       out.line = `💀 ≈ ${avg ? rng(avg) : '?'} por ronda · 3 rondas`; break;
     }
-    case 'robar': out.line = '💰 65% de robar oro u objetos'; out.enemy = T => `PV ${T.hp}/${T.mhp}`; break;
+    case 'robar': out.line = `💰 ${Math.round((.65 + (A.steal || 0)) * 100)}% de robar oro u objetos`; out.enemy = T => `PV ${T.hp}/${T.mhp}`; break;
+    // ---- Versión 3 · Fase 2
+    case 'escudosag': out.line = `💠 Escudo ≈ ${Math.round(A.mag * 1.5)} + 25% PV al aliado más débil`; break;
+    case 'muroesc': out.line = '+35% DEF y 💠 escudo de 10% PV al grupo · 3 turnos'; break;
+    case 'acelerar': out.line = '⏩ El grupo actúa primero · 2 turnos'; break;
+    case 'detener': out.line = '⏳ Pierde 2 turnos (jefes: 1)'; out.enemy = T => `PV ${T.hp}/${T.mhp} · pierde ${T.boss ? 1 : 2} turno${T.boss ? '' : 's'}`; break;
+    case 'marca': out.line = '🎯 +40% de daño recibido · 3 turnos'; out.enemy = T => `PV ${T.hp}/${T.mhp}${T.mark ? ' · ya marcado' : ''}`; break;
+    case 'sombra': out.line = '👤 Esquiva todo 1 turno · ⚡ siguiente golpe crítico'; break;
+    case 'resmasiva': out.line = '🪶 Revive a todos los caídos con 30% PV'; break;
+    case 'santuario': out.line = '💚 Regenera 6% PV por turno al grupo · 3 turnos'; break;
+    case 'profecia': out.line = '✨ Anula el próximo golpe a cada aliado'; break;
+    case 'frenesi': out.line = '💢 2 ataques por turno · 3 turnos'; break;
+    case 'rabia': out.line = '🩸 30% de robo de vida · 3 turnos'; break;
+    case 'estandarte': out.line = '🚩 +35% ATQ al grupo · 4 turnos'; break;
+    case 'ejercito': { const avg = avgOf(Ts, T => both(r => fin(Math.max(1, Math.round((A.mag * .9 + A.atkRaw * .4 - T.def * .4) * r)), T))); out.line = `💀💀 2 × ≈ ${avg ? rng(avg) : '?'} por ronda · 3 rondas`; break; }
+    case 'cadaver': out.line = `💥 Cada enemigo que muere hace ≈ ${Math.round(A.mag * .9)} a los demás · 3 rondas`; break;
+    case 'pacto': out.line = `🩸 −${Math.max(1, Math.round(A.mhp * .2))} PV → +40% PM`; break;
+    case 'agonia': { const b = Math.max(1, Math.round(A.mag * .8 * A.bo)); out.line = `💜 ${b} → ${Math.round(b * 1.5)} → ${b * 2} en 3 turnos`; break; }
+    case 'osomayor': out.line = `🐻 +${Math.round(A.mhp * .7)} PV temporales · +50% ATQ · 5 turnos`; break;
+    case 'lluviasan': { const n = Math.round((A.mag * 1.3 + 10) * (1 + (A.heal || 0))); out.line = `💚 ≈ ${n} a cada uno + regeneración 2 turnos`; break; }
+    case 'runafuego': out.line = '🪔 Los golpes físicos del grupo queman · 3 turnos'; break;
+    case 'runapiedra': out.line = '💠 Escudo de 20% PV a todo el grupo'; break;
+    case 'pasosombrio': out.line = '👤 Esquiva todo hasta su próximo turno'; break;
+    case 'velo': out.line = '🌙 +30% de esquivar al grupo · 2 turnos'; break;
+    case 'mina': { const avg = avgOf(Ts, T => physR(A, T, 2)); out.line = `💣 ≈ ${avg ? rng(avg) : '?'} al próximo enemigo que actúe`; break; }
+    case 'soborno': {
+      const ok = Ts.filter(T => !T.boss); const c = ok.length ? Math.round(ok.reduce((a, T) => a + 10 + T.g * 3, 0) / ok.length) : 0;
+      out.line = ok.length ? `💰 Cuesta ≈ ${c} oro · el enemigo se va` : 'Los jefes no aceptan sobornos';
+      out.enemy = T => T.boss ? '👑 No acepta sobornos' : `💰 ${Math.round(10 + T.g * 3)} oro${(A.gold || 0) < Math.round(10 + T.g * 3) ? ' · no te alcanza' : ''}`; break;
+    }
     default: out.line = '';
   }
   return out;
