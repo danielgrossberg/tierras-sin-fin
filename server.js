@@ -17,7 +17,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const EMPTY_TTL = 30 * 60 * 1000;   // una sala vacía se borra a los 30 minutos
 const GRACE = 15 * 1000;            // tiempo para reconectar antes de "salir" de la sala
 const MAX_ROOMS = 1000;
-const STATUSES = new Set(['map', 'battle', 'village']);
+const STATUSES = new Set(['map', 'battle', 'village', 'dungeon']);
 const BIOMES = new Set(Object.keys(B));
 const EMOJIS = new Set(LEADER_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
@@ -87,7 +87,7 @@ function loadChat(room) {
   })();
   return room.chatLoad;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -172,7 +172,9 @@ function validState(d) {
   const tomb = Array.isArray(d.tomb) && d.tomb.length === 2 && isCoord(d.tomb[0]) && isCoord(d.tomb[1]) ? [d.tomb[0], d.tomb[1]] : null;
   // "👑 vs Jefe" mientras dura un combate cooperativo
   const vs = typeof d.vs === 'string' ? cleanText(d.vs, 30) || null : null;
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs };
+  // "🕳️ en Cripta de Valdor (piso 2)" mientras está en una mazmorra
+  const dun = typeof d.dun === 'string' ? cleanText(d.dun, 40) || null : null;
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;

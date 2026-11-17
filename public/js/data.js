@@ -144,6 +144,9 @@ export const EN = {
   esqueleto: { n: 'Esqueleto', e: '💀', hp: 26, atk: 13, def: 5, spd: 7, xp: 14, g: 12, undead: 1 },
   demonio: { n: 'Demonio', e: '👹', hp: 40, atk: 15, def: 6, mag: 10, spd: 8, xp: 20, g: 18, sk: ['fuego'], min: 4 },
   fantasma: { n: 'Fantasma', e: '👻', hp: 22, atk: 6, def: 2, mag: 13, spd: 9, xp: 13, g: 10, sk: ['drenar'], undead: 1, magic: 1 },
+  // Versión 3 · Fase 1: monstruos de cueva
+  golem: { n: 'Gólem', e: '🗿', hp: 40, atk: 12, def: 11, spd: 2, xp: 16, g: 12, sk: ['brutal'], min: 2 },
+  minero: { n: 'Minero Fantasma', e: '👻', hp: 22, atk: 10, def: 3, mag: 9, spd: 8, xp: 12, g: 14, sk: ['drenar'], undead: 1, tint: 'sepia(1) saturate(2.5) brightness(1.1)' },
   serpmar: { n: 'Serpiente Marina', e: '🐍', hp: 26, atk: 12, def: 4, spd: 9, xp: 12, g: 10, sk: ['veneno'], tint: 'hue-rotate(160deg) saturate(1.4)' },
   // Jefes
   ogro: { n: 'Ogro Rey', e: '👹', hp: 100, atk: 16, def: 6, mag: 4, spd: 5, xp: 85, g: 110, sk: ['brutal'], boss: 1, tint: 'hue-rotate(90deg)' },
@@ -151,7 +154,19 @@ export const EN = {
   dragon: { n: 'Dragón Glacial', e: '🐉', hp: 95, atk: 15, def: 7, mag: 14, spd: 8, xp: 90, g: 120, sk: ['fuego', 'brutal'], boss: 1 },
   kraken: { n: 'Kraken', e: '🐙', hp: 95, atk: 14, def: 6, mag: 10, spd: 6, xp: 90, g: 110, sk: ['veneno', 'brutal'], boss: 1 },
   reyesq: { n: 'Rey Esqueleto', e: '💀', hp: 85, atk: 13, def: 7, mag: 12, spd: 7, xp: 85, g: 110, sk: ['drenar', 'fuego'], undead: 1, boss: 1, tint: 'drop-shadow(0 0 12px #ff3030)' },
+  // Jefes de mazmorra (Versión 3 · Fase 1)
+  liche: { n: 'Señor de la Cripta', e: '💀', hp: 95, atk: 13, def: 7, mag: 14, spd: 7, xp: 100, g: 125, sk: ['drenar', 'fuego'], undead: 1, boss: 1, tint: 'drop-shadow(0 0 12px #a855f7)' },
+  reinaarana: { n: 'Reina Araña', e: '🕷️', hp: 100, atk: 15, def: 6, spd: 9, xp: 100, g: 120, sk: ['veneno', 'brutal'], boss: 1, tint: 'hue-rotate(300deg) saturate(2) drop-shadow(0 0 10px #ff3060)' },
+  golemrey: { n: 'Gólem Ancestral', e: '🗿', hp: 120, atk: 16, def: 10, spd: 3, xp: 105, g: 130, sk: ['brutal'], boss: 1, tint: 'sepia(.6) saturate(2) drop-shadow(0 0 10px #f2c14e)' },
 };
+// ================= Mazmorras (Versión 3 · Fase 1) =================
+// Tipo de cueva: monstruos, jefe, nombres ({V} = nombre inventado) y colores del piso
+export const CAVE = {
+  cripta: { n: 'Cripta', pool: ['esqueleto', 'zombi', 'fantasma', 'murcielago'], boss: 'liche', names: ['Cripta de {V}', 'Catacumbas de {V}', 'Cripta Olvidada', 'Cripta del Silencio'], wall: '#241f2c', floor: '#4b4655', line: '#5d5768' },
+  gruta: { n: 'Gruta', pool: ['arana', 'murcielago', 'serpiente', 'golem'], boss: 'reinaarana', names: ['Gruta de {V}', 'Gruta Sombría', 'Cueva de los Ecos', 'Cueva de {V}'], wall: '#1b2620', floor: '#3e4b40', line: '#4f5d50' },
+  mina: { n: 'Mina', pool: ['minero', 'golem', 'murcielago', 'rata'], boss: 'golemrey', names: ['Mina de {V}', 'Mina Olvidada', 'Minas Profundas', 'Socavón de {V}'], wall: '#2e2419', floor: '#5a4a38', line: '#6c5a45' },
+};
+BG.CAVE = 'linear-gradient(#07060b,#221d2b 44%,#3a3444 45%,#110f16)';
 export const POOL = { GRASS: ['rata', 'jabali', 'abeja', 'lobo'], FOREST: ['arana', 'lobo', 'oso', 'murcielago'], DESERT: ['escorpion', 'serpiente', 'momia'], SNOW: ['loboartico', 'osopolar', 'espectro'], SWAMP: ['sapo', 'cocodrilo', 'zombi'], SAND: ['cangrejo', 'serpiente', 'rata'], ASH: ['esqueleto', 'demonio', 'fantasma'] };
 // En el mar (con bote): encuentros al azar, menos frecuentes; muy rara vez el Kraken
 export const SEA_POOL = ['cangrejo', 'serpmar', 'serpmar'];

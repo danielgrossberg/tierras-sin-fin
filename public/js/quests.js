@@ -11,9 +11,9 @@ import { rollLoot, addItem, itemLabel } from './items.js';
 
 export const MAX_ACTIVE = 5;
 export const SLOTS_PER_BOARD = 3;
-const TMULT = { hunt: 1, deliver: 1.3, explore: 1.2, boss: 2.5 };
-export const QICON = { hunt: '🏹', deliver: '✉️', explore: '🧭', boss: '👑' };
-export const QNAME = { hunt: 'Caza', deliver: 'Entrega', explore: 'Exploración', boss: 'Jefe' };
+const TMULT = { hunt: 1, deliver: 1.3, explore: 1.2, boss: 2.5, dungeon: 2.8 };
+export const QICON = { hunt: '🏹', deliver: '✉️', explore: '🧭', boss: '👑', dungeon: '🕳️' };
+export const QNAME = { hunt: 'Caza', deliver: 'Entrega', explore: 'Exploración', boss: 'Jefe', dungeon: 'Mazmorra' };
 const DIRS = ['este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste', 'norte', 'noreste'];
 export const compass = (dx, dy) => DIRS[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8];
 
@@ -66,6 +66,7 @@ export function boardQuest(v, slot) {
     if (!q) { q = genQuest(v, slot, n); cache.set(key, q); }
     // Si el jefe de la misión ya fue derrotado (y no está aceptada), el puesto pasa a la siguiente misión
     if (q.type === 'boss' && G.defeated[q.bossId] !== undefined && !isActive(q.id)) { renew(v, slot); continue; }
+    if (q.type === 'dungeon' && G.dungeons && G.dungeons[q.caveId] && G.dungeons[q.caveId].done && !isActive(q.id)) { renew(v, slot); continue; }
     return q;
   }
   return null;
@@ -74,9 +75,18 @@ function renew(v, slot) { G.board = G.board || {}; const b = G.board[vid(v)] || 
 export function clearQuestCache() { cache.clear(); }
 function genQuest(v, slot, n) {
   const rng = mulberry(hashI(v.x * 31 + slot * 977, v.y * 17 + n * 7919, st.seed + 5003));
-  const r = rng(), want = r < .35 ? 'hunt' : r < .6 ? 'deliver' : r < .8 ? 'explore' : 'boss';
+  const r = rng(); let want = r < .35 ? 'hunt' : r < .6 ? 'deliver' : r < .8 ? 'explore' : 'boss';
+  // Versión 3 · Fase 1: ~15% de los puestos pasan a ser "Completa la mazmorra X". Usa un generador aparte
+  // para que el resto de las misiones de cada tablón siga siendo la misma de antes.
+  const rd = mulberry(hashI(v.x * 13 + slot * 101, v.y * 29 + n * 37, st.seed + 7177));
+  if (want !== 'boss' && rd() < .15) want = 'dungeon';
   const base = { id: vid(v) + '#' + slot + '#' + n, slot, from: { x: v.x, y: v.y, name: v.name } };
   let q = null;
+  if (want === 'dungeon') {
+    const t = scan(v, 25, 150, rd, c => { const f = featIn(c, 'cave'); return f && !(G.dungeons && G.dungeons[f.id] && G.dungeons[f.id].done) ? f : null; }, true, 400);
+    if (t) q = { type: 'dungeon', target: { x: t.x, y: t.y, name: t.name }, caveId: t.id, title: `Completa la mazmorra ${t.name}`, desc: `${t.name} (${t.floors} pisos) está al ${compass(t.x - v.x, t.y - v.y)} de ${v.name}. Derrota a su jefe.` };
+    else want = r < .35 ? 'hunt' : r < .6 ? 'deliver' : 'explore';
+  }
   if (want === 'deliver') {
     const t = scan(v, 40, 120, rng, c => featIn(c, 'village', vid(v))) || forceFeat(v, 'village', 40, 120, rng);
     if (t) q = { type: 'deliver', target: { x: t.x, y: t.y, name: t.name }, title: `Lleva una carta a ${t.name}`, desc: `Una carta urgente para ${t.name}, al ${compass(t.x - v.x, t.y - v.y)}.` };
@@ -95,7 +105,7 @@ function genQuest(v, slot, n) {
   // Recompensas: escalan con el peligro del objetivo y con el tipo
   const lvl = dangerAt(q.target ? q.target.x : v.x, q.target ? q.target.y : v.y), m = TMULT[q.type];
   q.lvl = lvl;
-  q.reward = { gold: Math.round((20 + lvl * 12) * m), xp: Math.round((15 + lvl * 10) * m), gear: q.type === 'boss' ? 1 : q.type === 'hunt' ? .3 : .25 };
+  q.reward = { gold: Math.round((20 + lvl * 12) * m), xp: Math.round((15 + lvl * 10) * m), gear: q.type === 'boss' || q.type === 'dungeon' ? 1 : q.type === 'hunt' ? .3 : .25 };
   return Object.assign(base, q);
 }
 
@@ -123,7 +133,7 @@ function complete(q) {
   const party = heroes().filter(h => h.hp > 0), each = party.length ? q.reward.xp / party.length : 0, lines = [];
   for (const h of party) lines.push(...gainXP(h, each));
   let gear = '';
-  if (Math.random() < q.reward.gear) { const it = rollLoot(q.lvl, 0, q.type === 'boss' ? 'raro' : 'comun'); gear = addItem(it) ? ' · ' + itemLabel(it) : ' · (inventario lleno)'; }
+  if (Math.random() < q.reward.gear) { const it = rollLoot(q.lvl, 0, q.type === 'boss' || q.type === 'dungeon' ? 'raro' : 'comun'); gear = addItem(it) ? ' · ' + itemLabel(it) : ' · (inventario lleno)'; }
   return [`📜 <b>¡Misión cumplida!</b> ${q.title}<br><span style="font-size:14px">+${q.reward.gold} oro · +${q.reward.xp} XP${gear}</span>`, ...lines];
 }
 // Tras ganar un combate: avanza las cacerías y completa los jefes
@@ -133,6 +143,12 @@ export function onVictory(enemies, m) {
     if (q.type === 'hunt') { q.have = Math.min(q.need, q.have + enemies.filter(e => e.key === q.key).length); if (q.have >= q.need) out.push(...complete(q)); }
     else if (q.type === 'boss' && m && m.id === q.bossId) out.push(...complete(q));
   }
+  return out;
+}
+// Al completar una mazmorra (jefe derrotado)
+export function onDungeonDone(caveId) {
+  const out = [];
+  for (const q of [...active()]) if (q.type === 'dungeon' && q.caveId === caveId) out.push(...complete(q));
   return out;
 }
 // Al pisar una casilla: entregas y exploraciones

@@ -469,13 +469,14 @@ async function victory() {
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
   // Equipo: 15% en combates normales; los jefes siempre sueltan uno (mínimo Raro)
   if (m.boss || Math.random() < .15 * loot) {
-    const luck = Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400);
+    const luck = m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400);
     const it = rollLoot(m.lvl, luck, m.boss ? 'raro' : 'comun');
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>`
       : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
   }
   if (team.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
-  if (!m.sea) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }  // los del mar no se registran
+  if (!m.sea && !m.dun) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }  // los del mar y de mazmorra no se registran
+  if (m.onWin) lines.push(...(m.onWin() || []));   // mazmorras: el monstruo cae y, si era el jefe, se completa
   // Misiones: cacerías y jefes
   lines.push(...onVictory(BT.enemies, m));
   // Avisos para los demás jugadores de la sala
@@ -501,9 +502,10 @@ async function coopFinish(res) {
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
   G.gold += gold; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter');
-  const it = rollLoot(m.lvl, Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
+  const it = rollLoot(m.lvl, m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
   lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
-  monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps;
+  if (!m.dun) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }
+  if (m.onWin) lines.push(...(m.onWin() || []));
   lines.push(...onVictory(BT.enemies, m));
   notice('boss', BT.enemies[0].name);
   log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
@@ -518,7 +520,9 @@ async function defeat() {
     <span class="mut">Conservas niveles, experiencia, oro y mejoras. Tienes <b>60 minutos</b> para volver a la tumba 🪦 y recuperar tus objetos y tu equipo.</span>
     ${old ? '<br><span style="color:#ff8a8a">⚠️ Tu tumba anterior y sus objetos se pierden.</span>' : ''}</div>`;
   await waitButton('Despertar');
-  const t = createTomb(P.x, P.y);
+  // En una mazmorra, la tumba queda en la entrada (afuera) y se sale de la mazmorra
+  const spot = BT.m.onLose ? BT.m.onLose() : { x: P.x, y: P.y };
+  const t = createTomb(spot.x, spot.y);
   for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; h.burn = 0; h.stun = 0; h.tmp = 0; h.trap = 0; h.buffs = {}; h.defending = false; }
   BT.m.stun = 8;   // el monstruo queda donde estaba (con vida llena) y no persigue por unos pasos
   P.x = P.px = START.x; P.y = P.py = START.y; spawnNearby(); visitAround();

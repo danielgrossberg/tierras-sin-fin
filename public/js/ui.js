@@ -16,6 +16,7 @@ import { initChat, toggleSocial, closeSocial, refreshSocial } from './chat.js';
 import { VIS, cycleVis, visMode } from './prefs.js';
 import { estimate, itemTargets, heroCardHTML } from './estimate.js';
 export { toggleSocial, closeSocial };
+import { D, inDungeon } from './dungeon.js';
 
 // Acciones que resuelve main.js (evita dependencias circulares con la pantalla de inicio)
 export const hooks = { onNewGame: null, onExit: null };
@@ -38,7 +39,8 @@ export function updateHUD() {
   $('#hudHeroes').innerHTML = heroes().map(h => { const mh = S(h, 'mhp'), mm = S(h, 'mmp'); return `<div class="mini ${h.hp <= 0 ? 'dead' : ''}"><span class="em emoji">${h.e}</span><div style="flex:1;min-width:0"><div class="nm">${h.name} <span class="mut">Nv ${h.lvl}</span> ${h.poison > 0 ? '☠️' : ''}</div><div class="bar"><i style="width:${100 * h.hp / mh}%"></i></div><div class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></div></div></div>`; }).join('');
   const b = tileAt(P.x, P.y).b;
   const n = [...net.others.values()].filter(o => o.online !== false).length;
-  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
+  const where = inDungeon() ? `🕳️ ${esc(D.cave.name)} · piso ${D.f + 1}/${D.cave.floors} · Nv ~${D.cave.lvl + D.f}` : `${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}`;
+  $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${where}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
     + (tracked() ? `<div class="qline">${QICON[tracked().type]} ${tracked().title} · <b>${progressText(tracked())}</b></div>` : '');
   updateCoords();
 }
@@ -63,7 +65,10 @@ const MATE_ST = { lobby: 'eligiendo héroes', away: 'fuera de línea' };
 export function updateCoords() {
   const el = $('#coords'); if (!el || !st.inGame) return;
   const open = coordsPref();
-  let h = `<div class="cbar"><span>📍 <b>Tú:</b> ${rel(P.x, P.y)}${G.tomb && !open ? ` · <span class="ctomb">🪦 ${tombMinutes()} min</span>` : ''}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`;
+  let h = inDungeon()
+    ? `<div class="cbar"><span>🕳️ <b>Piso ${D.f + 1}/${D.cave.floors}</b>${G.tomb && !open ? ` · <span class="ctomb">🪦 ${tombMinutes()} min</span>` : ''}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`
+    : `<div class="cbar"><span>📍 <b>Tú:</b> ${rel(P.x, P.y)}${G.tomb && !open ? ` · <span class="ctomb">🪦 ${tombMinutes()} min</span>` : ''}</span><span class="ctog">${open ? '▴' : '▾'}</span></div>`;
+  if (open && inDungeon()) h += `<div class="crow">🕳️ <b>${esc(D.cave.name)}</b> · entrada en ${rel(P.x, P.y)}</div>`;
   if (open) {
     const v = nearestVillage();
     if (G.tomb) h += `<div class="crow ctomb">🪦 <b>Tus objetos:</b> ${rel(G.tomb.x, G.tomb.y)} · ${towards(G.tomb.x, G.tomb.y)} · ${tombMinutes()} min</div>`;
@@ -78,7 +83,7 @@ export function updateCoords() {
 }
 
 // ================= Lista de jugadores de la sala =================
-const STATUS = { battle: '⚔️ en combate', village: '🏘️ en aldea', map: '🧭 explorando', lobby: '⏳ eligiendo héroes' };
+const STATUS = { battle: '⚔️ en combate', village: '🏘️ en aldea', map: '🧭 explorando', lobby: '⏳ eligiendo héroes', dungeon: '🕳️ en una mazmorra' };
 export function playersHTML(onlyOthers) {
   const rows = [];
   if (!onlyOthers && st.inGame) {
@@ -88,9 +93,9 @@ export function playersHTML(onlyOthers) {
   for (const o of net.others.values()) {
     const away = o.status === 'away', lobby = o.status === 'lobby' || away, off = o.online === false;
     const bi = B[o.biome] || B.GRASS;
-    const where = lobby ? '' : `${bi.i} ${bi.n}`;
+    const where = lobby || o.status === 'dungeon' ? '' : `${bi.i} ${bi.n}`;
     const dist = !lobby && st.inGame ? `<span class="pd">${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c ${dirArrow(o.x - P.x, o.y - P.y)}</span>` : '';
-    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : o.vs ? '👑 vs ' + esc(o.vs) : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
+    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : o.vs ? '👑 vs ' + esc(o.vs) : o.status === 'dungeon' && o.dun ? '🕳️ en ' + esc(o.dun) : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
   }
   if (!rows.length || (rows.length === 1 && !onlyOthers && st.inGame)) rows.push(`<div class="mut pempty">${st.online ? 'Comparte el código <b>' + esc(st.room) + '</b> para que tu amigo entre.' : 'Modo sin conexión.'}</div>`);
   return rows.join('');
@@ -480,10 +485,13 @@ export function openBossConfirm(m, onFight) {
 
 // ================= Mapa (grande) y mini-minimapa =================
 function mapRender() {
+  if (inDungeon()) return `<h2>🕳️ ${esc(D.cave.name)}</h2><p class="mut" style="margin:0">Piso <b>${D.f + 1} de ${D.cave.floors}</b> · solo se ve lo que ya recorriste</p>
+    <canvas id="mm"></canvas><div class="legend"><span><i class="lg me"></i>Tú</span><span>🪜 Escaleras</span><span>📦 Cofre</span><span>⚠️ Trampa vista</span><span>👑 Jefe</span><span>🌀 Salida</span></div>
+    <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
   return `<h2>🗺️ Mapa del mundo</h2><p class="mut" style="margin:0">📍 <b>Tú: ${relCoords(P.x, P.y)}</b> · Sala <b>${esc(st.room)}</b> · ${G.steps} pasos · ${G.bosses || 0} jefes derrotados</p>
   <canvas id="mm"></canvas><div class="legend">
     <span><i class="lg me"></i>Tú</span><span><i class="lg mate"></i>Compañeros</span><span>🏰 Ciudad Origen</span><span><i class="lg near"></i>Aldea más cercana</span><span><i class="lg vil"></i>Aldeas</span>
-    <span>👑 Jefe</span><span>🪦 Tumba</span><span><i class="lg" style="background:#c084fc"></i>Misión</span><span><i class="lg" style="background:#ff5fa2"></i>Marcas</span><span><i class="lg" style="background:#c27bff"></i>Santuario</span></div>
+    <span>👑 Jefe</span><span>🕳️ Mazmorra</span><span>🪦 Tumba</span><span><i class="lg" style="background:#c084fc"></i>Misión</span><span><i class="lg" style="background:#ff5fa2"></i>Marcas</span><span><i class="lg" style="background:#c27bff"></i>Santuario</span></div>
   <p class="mut small" style="text-align:center;margin:4px 0 0">Solo se ve lo explorado. Lo que está fuera del mapa aparece en el borde con una flechita.</p>
   <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
 }

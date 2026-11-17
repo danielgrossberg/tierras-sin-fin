@@ -492,4 +492,6 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 #b-boss .bbn span{color:var(--gold);font-size:13px;white-space:nowrap}
 #b-boss .ebar.big{width:100%;height:22px;margin-top:4px}
 #b-boss .ebar.big .ehp{font-size:13px}
+/* ===== Versión 3 · Fase 1: mazmorras ===== */
+.dundone{margin:10px auto 0;background:#173a24;border:1px solid #46c37b;color:#c8f5d6;border-radius:10px;padding:7px 12px;font-weight:700;display:inline-block}
 @media (max-height:480px){#b-boss{padding:3px 8px;margin-top:3px}#b-boss .bbn{font-size:13px}#b-boss .ebar.big{height:18px}}

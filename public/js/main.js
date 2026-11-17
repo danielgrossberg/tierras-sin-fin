@@ -13,11 +13,13 @@ import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onArrive, clearQuestCache } from './quests.js';
 import { onTomb, recoverTomb, tombExpired } from './tomb.js';
 import { initCoop, coopVs, inCoopBattle } from './coop.js';
+import { inDungeon, dungeonMove, openCaveMenu, resumeDungeon, dunLabel, dunLerp, resetDungeon } from './dungeon.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
 let lastBiome = null, lastToastStep = -99;
 function move(dir) {
+  if (inDungeon()) { dungeonMove(dir); return; }   // Versión 3 · Fase 1: dentro de una mazmorra
   const [dx, dy] = DIRS[dir]; if (dx) P.face = dx;
   const nx = P.x + dx, ny = P.y + dy;
   const m = mpos.get(nx + ',' + ny);
@@ -32,6 +34,7 @@ function move(dir) {
   const f = feats.get(nx + ',' + ny);
   if (f) {
     if (f.type === 'village') openVillage(f);
+    else if (f.type === 'cave') openCaveMenu(f);
     else if (f.type === 'chest' && !G.opened[f.id]) openChest(f);
     else if (f.type === 'shrine' && !G.opened[f.id]) useShrine(f);
   }
@@ -70,8 +73,8 @@ function useShrine(f) {
   toast(`⛩️ Santuario antiguo<br><span style="font-size:14px">${b[2]} para todos los héroes · grupo restaurado</span>`); save();
 }
 // Estado que ven los demás
-const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs() });
+const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : inDungeon() ? 'dungeon' : (inVillage() || modalIs('village')) ? 'village' : 'map';
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel() });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -124,6 +127,7 @@ function frame(t) {
     const a = 1 - Math.exp(-dt * 20); P.px += (P.x - P.px) * a; P.py += (P.y - P.py) * a;
     if (Math.abs(P.x - P.px) > 3 || Math.abs(P.y - P.py) > 3) { P.px = P.x; P.py = P.y; }
     for (const m of monsters.values()) { m.px += (m.x - m.px) * a; m.py += (m.y - m.py) * a; }
+    if (inDungeon()) dunLerp(a);
     lerpOthers(dt);
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     draw(t);
@@ -143,20 +147,21 @@ function enterWorld() {
   updateHUD(); updatePlayersUI(); checkTomb(); updateMini(); save('now');
 }
 function newGame(sel) {
-  st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
+  st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
 }
 function continueGame(s) {
-  clearQuestCache(); setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld();
+  clearQuestCache(); setG(migrate(s)); st.seed = roomSeed(st.room); Object.assign(START, G.start || findStart()); resetWorld(); resetDungeon();
   if (!G.start) G.start = { x: START.x, y: START.y };
   G.vv = G.vv || {}; const sid = 'village@' + START.x + ',' + START.y;   // Ciudad Origen siempre está en el portal
   if (!G.vv[sid]) G.vv[sid] = { x: START.x, y: START.y, name: 'Ciudad Origen' };
   for (const h of G.roster) { if (h.hp < 0) h.hp = S(h, 'mhp'); if (h.mp < 0) h.mp = S(h, 'mmp'); }   // héroes nuevos (Versión 2)
   P.x = G.pos ? G.pos.x : START.x; P.y = G.pos ? G.pos.y : START.y; enterWorld();
+  if (G.inDun) resumeDungeon();   // estaba dentro de una mazmorra: vuelve al mismo piso y lugar
 }
 
 // ================= Pantalla de inicio =================

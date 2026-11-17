@@ -8,6 +8,8 @@ import { net, mateColor } from './net.js';
 import { tracked, QICON } from './quests.js';
 import { tombMinutes } from './tomb.js';
 import { mateOnMap, othersBubbles, chatMuted } from './prefs.js';
+import { D, DW, DH, VISION, inDungeon, isSeen, isVisible, dunProg, caveDone } from './dungeon.js';
+import { CAVE } from './data.js';
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
 let W = 0, H = 0, DPR = 1, Z = 1.3, vign = null;
@@ -114,7 +116,7 @@ function heroSprite(X, Y, glyph, size, col, t, flip, alpha, name, nameFg) {
   if (name) { ctx.save(); ctx.globalAlpha = alpha; namePill(name, X, Y - size * .82, col, nameFg); ctx.restore(); }
 }
 const TS = () => TILE * Z;
-const statusIcon = s => s === 'battle' ? '⚔️ ' : s === 'village' ? '🏘️ ' : '';
+const statusIcon = s => s === 'battle' ? '⚔️ ' : s === 'village' ? '🏘️ ' : s === 'dungeon' ? '🕳️ ' : '';
 const visibleOther = o => o.status && o.status !== 'lobby' && o.status !== 'away' && Number.isFinite(o.px);
 
 // Rectángulos del HUD (se leen del DOM cada medio segundo, no en cada frame)
@@ -169,7 +171,85 @@ function edgeArrow(X, Y, icon, text, col, textCol, alpha, placed) {
 }
 
 // ================= Frame principal =================
+// ================= Mazmorra (Versión 3 · Fase 1) =================
+// El piso se dibuja una vez en un canvas aparte; en cada frame se pone encima la niebla:
+// negro = sin explorar · penumbra = ya visto · claro = dentro de tu visión (~5 casillas)
+function floorCanvas(fl) {
+  if (fl.can) return fl.can;
+  const T = TILE, C = CAVE[fl.kind] || CAVE.cripta, can = document.createElement('canvas'); can.width = DW * T; can.height = DH * T;
+  const g = can.getContext('2d'), seed = st.seed + fl.f * 17;
+  for (let y = 0; y < DH; y++) for (let x = 0; x < DW; x++) {
+    const px = x * T, py = y * T, h1 = hash(x, y, seed + 1), h2 = hash(x, y, seed + 2), floor = fl.grid[y * DW + x] === 1;
+    if (floor) {
+      g.fillStyle = shade(C.floor, (h1 - .5) * .14); g.fillRect(px, py, T, T);
+      g.strokeStyle = shade(C.floor, -.22); g.lineWidth = 1; g.strokeRect(px + .5, py + .5, T - 1, T - 1);
+      if (h2 < .18) { g.fillStyle = shade(C.floor, -.28); g.fillRect(px + 6 + Math.floor(h1 * 16), py + 8 + Math.floor(h2 * 60), 3, 3); }
+    } else {
+      g.fillStyle = shade(C.wall, (h1 - .5) * .12); g.fillRect(px, py, T, T);
+      // Cara del muro (si abajo hay suelo): ladrillos más claros
+      if (y + 1 < DH && fl.grid[(y + 1) * DW + x] === 1) {
+        g.fillStyle = C.line; g.fillRect(px, py + T * .45, T, T * .55);
+        g.strokeStyle = shade(C.line, -.3); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, py + T * .72); g.lineTo(px + T, py + T * .72);
+        g.moveTo(px + (h1 < .5 ? T * .3 : T * .65), py + T * .45); g.lineTo(px + (h1 < .5 ? T * .3 : T * .65), py + T * .72); g.stroke();
+      }
+    }
+  }
+  fl.can = can; return can;
+}
+function drawDungeon(t) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  const TS = TILE * Z, fl = D.fl, pr = dunProg(D.cave.id);
+  const camX = Math.round(D.px * TS + TS / 2 - W / 2), camY = Math.round(D.py * TS + TS / 2 - H / 2);
+  ctx.drawImage(floorCanvas(fl), -camX, -camY, DW * TS, DH * TS);
+  const sx = x => x * TS - camX + TS / 2, sy = y => y * TS - camY + TS / 2;
+  const x0 = Math.max(0, Math.floor(camX / TS) - 1), y0 = Math.max(0, Math.floor(camY / TS) - 1), x1 = Math.min(DW - 1, Math.ceil((camX + W) / TS) + 1), y1 = Math.min(DH - 1, Math.ceil((camY + H) / TS) + 1);
+  // Objetos del piso (solo si ya se vieron); monstruos solo si están a la vista
+  const sprites = [], seen = (x, y) => isSeen(x, y);
+  const stairs = (p, up) => { if (p && seen(p.x, p.y)) sprites.push({ y: p.y, fn: () => { const X = sx(p.x), Y = sy(p.y); ctx.fillStyle = 'rgba(242,193,78,.18)'; ctx.fillRect(X - TS / 2, Y - TS / 2, TS, TS); emoji('🪜', X, Y, TS * .85); label(up ? (D.f === 0 ? 'Salida' : 'Subir') : 'Bajar', X, Y - TS * .62, 11, up ? '#ffe6a0' : '#9fd8ff'); } }); };
+  stairs(fl.up, true); stairs(fl.down, false);
+  if (fl.exit && pr.done && seen(fl.exit.x, fl.exit.y)) sprites.push({ y: fl.exit.y, fn: () => { const X = sx(fl.exit.x), Y = sy(fl.exit.y), r = TS * (.7 + .08 * Math.sin(t / 250)); const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(127,224,255,.6)'); gr.addColorStop(1, 'rgba(127,224,255,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill(); emoji('🌀', X, Y, TS * .9); label('Salida', X, Y - TS * .65, 11, '#bff0ff'); } });
+  for (const c of fl.chests) if (!pr.ch[c.id] && seen(c.x, c.y)) sprites.push({ y: c.y, fn: () => { shadow(sx(c.x), sy(c.y) + TS * .3, TS * .3); emoji('📦', sx(c.x), sy(c.y) + Math.sin(t / 300 + c.x) * 2, TS * .72); } });
+  for (const tr of fl.traps) {
+    const known = D.trapSeen.get(tr.id), gone = D.trapGone.has(tr.id);
+    if ((known || gone) && seen(tr.x, tr.y)) sprites.push({ y: tr.y - .1, fn: () => emoji(tr.type === 'spike' ? '🔺' : '☁️', sx(tr.x), sy(tr.y), TS * .55, gone ? .45 : .95) });
+  }
+  for (const m of D.mons.values()) {
+    if (!(m.boss ? seen(m.x, m.y) : isVisible(m.x, m.y))) continue;
+    sprites.push({ y: m.py, fn: () => {
+      const X = sx(m.px), Y = sy(m.py), e = EN[m.group[0]];
+      if (m.boss) {
+        const r = TS * (.95 + .08 * Math.sin(t / 200)); const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(255,40,40,.55)'); gr.addColorStop(1, 'rgba(255,40,40,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+        shadow(X, Y + TS * .45, TS * .5); emoji(e.e, X, Y - Math.abs(Math.sin(t / 400)) * 3, TS * 1.35); emoji('👑', X, Y - TS * .85, TS * .45);
+      } else {
+        ctx.beginPath(); ctx.ellipse(X, Y + TS * .36, TS * .38, TS * .14, 0, 0, 7); ctx.fillStyle = 'rgba(229,72,77,.25)'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,90,90,.65)'; ctx.stroke();
+        shadow(X, Y + TS * .35, TS * .28); emoji(e.e, X, Y - Math.abs(Math.sin(t / 260 + m.hx)) * 3, TS * .82, m.stun > 0 ? .45 : 1);
+        if (m.group.length > 1) { ctx.fillStyle = '#000b'; ctx.beginPath(); ctx.arc(X + TS * .38, Y - TS * .3, TS * .17, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(TS * .24)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.group.length, X + TS * .38, Y - TS * .29); }
+      }
+    } });
+  }
+  sprites.push({ y: D.py + .45, fn: () => { const X = sx(D.px), Y = sy(D.py), moving = Math.abs(D.x - D.px) + Math.abs(D.y - D.py) > .03;
+    shadow(X, Y + TS * .4, TS * .36); heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), leader().e, TS * .97, '#f2c14e', t, D.face > 0, 1, st.name || 'Tú', '#241a00'); } });
+  sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
+  // Niebla
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    if (isVisible(x, y)) continue;
+    ctx.fillStyle = isSeen(x, y) ? 'rgba(4,3,8,.62)' : '#000';
+    ctx.fillRect(Math.floor(x * TS - camX), Math.floor(y * TS - camY), Math.ceil(TS) + 1, Math.ceil(TS) + 1);
+  }
+  // Luz de antorcha alrededor del grupo
+  const X = sx(D.px), Y = sy(D.py), lg = ctx.createRadialGradient(X, Y, TS * 1.5, X, Y, TS * (VISION + .8));
+  lg.addColorStop(0, 'rgba(255,170,60,0)'); lg.addColorStop(.7, 'rgba(0,0,0,.18)'); lg.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+  // Flechas en el borde: escalera de bajada o salida (si ya las viste)
+  refreshHud(t); const placed = [];
+  const goal = fl.down || (pr.done ? fl.exit : null);
+  if (goal && isSeen(goal.x, goal.y)) { const gx = sx(goal.x), gy = sy(goal.y); if (offscreen(gx, gy)) edgeArrow(gx, gy, fl.down ? '🪜' : '🌀', `${fl.down ? 'Bajar' : 'Salida'} · ${Math.round(Math.hypot(goal.x - D.x, goal.y - D.y))} c`, '#9fd8ff', '#e2f4ff', 1, placed); }
+  if (fl.up && isSeen(fl.up.x, fl.up.y)) { const ux = sx(fl.up.x), uy = sy(fl.up.y); if (offscreen(ux, uy)) edgeArrow(ux, uy, '🪜', `${D.f === 0 ? 'Salida' : 'Subir'} · ${Math.round(Math.hypot(fl.up.x - D.x, fl.up.y - D.y))} c`, '#f2c14e', '#ffe6a0', .8, placed); }
+}
+
 export function draw(t) {
+  if (inDungeon()) { drawDungeon(t); return; }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#0b0e18'; ctx.fillRect(0, 0, W, H);
   const TS = TILE * Z, CS = CH * TS;
@@ -193,6 +273,15 @@ export function draw(t) {
     else if (f.type === 'village') sprites.push({ y, fn: () => {
       shadow(sx(x), sy(y) + TS * .38, TS * .55); emoji('🏘️', sx(x), sy(y), TS * 1.25);
       ctx.font = `bold ${Math.max(11, Math.round(TS * .3))}px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000a'; ctx.strokeText(f.name, sx(x), sy(y) - TS * .8); ctx.fillStyle = '#ffe6a0'; ctx.fillText(f.name, sx(x), sy(y) - TS * .8);
+    } });
+    else if (f.type === 'cave') sprites.push({ y, fn: () => {
+      // Entrada de mazmorra: agujero oscuro con brillo morado, nombre y ✅ si ya se completó
+      const X = sx(x), Y = sy(y), done = caveDone(f.id);
+      ctx.fillStyle = 'rgba(10,6,16,.85)'; ctx.beginPath(); ctx.ellipse(X, Y + TS * .2, TS * .55, TS * .32, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(192,132,252,${.45 + .25 * Math.sin(t / 400)})`; ctx.lineWidth = 2.5; ctx.stroke();
+      emoji('🕳️', X, Y, TS * .95);
+      if (done) emoji('✅', X + TS * .42, Y - TS * .38, TS * .42);
+      ctx.font = `bold ${Math.max(11, Math.round(TS * .28))}px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText(f.name, X, Y - TS * .78); ctx.fillStyle = '#e9ddff'; ctx.fillText(f.name, X, Y - TS * .78);
     } });
     else if (f.type === 'chest' && !G.opened[f.id]) sprites.push({ y, fn: () => { shadow(sx(x), sy(y) + TS * .3, TS * .3); emoji('📦', sx(x), sy(y) + Math.sin(t / 300 + x) * 2, TS * .72); } });
     else if (f.type === 'shrine') sprites.push({ y, fn: () => {

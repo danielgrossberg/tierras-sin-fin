@@ -8,6 +8,33 @@ import { feats, monsters, getChunk, ckey, nearestVillage } from './world.js';
 import { net, mateColor } from './net.js';
 import { tracked } from './quests.js';
 import { mateOnMini } from './prefs.js';
+import { D, DW, DH, inDungeon, isSeen, isVisible, dunProg, caveDone } from './dungeon.js';
+import { CAVE } from './data.js';
+
+// Dentro de una mazmorra: el piso entero, solo lo recorrido (lo que ves ahora más claro)
+function paintDungeon(c, opts) {
+  const css = c.clientWidth || 120, dpr = Math.min(2, window.devicePixelRatio || 1);
+  const px = Math.max(2, Math.ceil(css * dpr / DW)), W = DW * px, Hh = DH * px;
+  if (c.width !== W || c.height !== W) { c.width = W; c.height = W; }
+  const g = c.getContext('2d'), u = W / css, oy = Math.round((W - Hh) / 2), C = CAVE[D.cave.kind] || CAVE.cripta, fl = D.fl, pr = dunProg(D.cave.id);
+  g.fillStyle = '#07060b'; g.fillRect(0, 0, W, W);
+  for (let y = 0; y < DH; y++) for (let x = 0; x < DW; x++) {
+    if (!isSeen(x, y)) continue;
+    const floor = fl.grid[y * DW + x] === 1;
+    g.fillStyle = floor ? (isVisible(x, y) ? '#b9b2c4' : C.floor) : C.line;
+    g.fillRect(x * px, oy + y * px, px, px);
+  }
+  const at = (p, r, fill) => { g.beginPath(); g.arc((p.x + .5) * px, oy + (p.y + .5) * px, r, 0, 7); g.fillStyle = fill; g.fill(); g.lineWidth = u; g.strokeStyle = '#000'; g.stroke(); };
+  const glyph = (t, p, size) => { g.font = `${Math.round(size)}px ${EF}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#000'; g.fillText(t, (p.x + .5) * px, oy + (p.y + .5) * px); };
+  const s = Math.max(7 * u, px * 1.6);
+  for (const p of [fl.up, fl.down].filter(Boolean)) if (isSeen(p.x, p.y)) glyph('🪜', p, s);
+  if (fl.exit && pr.done && isSeen(fl.exit.x, fl.exit.y)) glyph('🌀', fl.exit, s);
+  for (const ch of fl.chests) if (!pr.ch[ch.id] && isSeen(ch.x, ch.y)) glyph('📦', ch, s * .9);
+  for (const t of fl.traps) if ((D.trapSeen.get(t.id) || D.trapGone.has(t.id)) && isSeen(t.x, t.y)) glyph('⚠️', t, s * .8);
+  for (const m of D.mons.values()) if (m.boss ? isSeen(m.x, m.y) : isVisible(m.x, m.y)) { if (m.boss) glyph('👑', m, s); else at(m, 2.5 * u, '#ff4d4d'); }
+  at({ x: D.x, y: D.y }, 4 * u, '#fff');
+  if (!opts.full) { g.lineWidth = 2 * u; g.strokeStyle = '#000a'; g.strokeRect(0, 0, W, W); }
+}
 
 const offs = new Map();   // canvas pequeños reutilizables para el terreno (1 píxel = 1 casilla)
 const rel = (x, y) => `${x - START.x}, ${START.y - y}`;
@@ -15,6 +42,7 @@ const rel = (x, y) => `${x - START.x}, ${START.y - y}`;
 // c: <canvas>; R: radio en casillas; opts.labels: nombres y coordenadas de compañeros; opts.full: mapa grande
 export function paintMap(c, R, opts = {}) {
   if (!c || !G.visited) return;
+  if (inDungeon()) { paintDungeon(c, opts); return; }
   const N = R * 2 + 1, css = c.clientWidth || 120, dpr = Math.min(2, window.devicePixelRatio || 1);
   const px = Math.max(2, Math.ceil(css * dpr / N)), W = N * px;
   if (c.width !== W) { c.width = W; c.height = W; }
@@ -48,6 +76,8 @@ export function paintMap(c, R, opts = {}) {
   const near = nearestVillage(P.x, P.y);
   for (const f of feats.values()) {
     if (f.type === 'shrine' && !G.opened[f.id] && vis(f.x, f.y)) { const p = to(f.x, f.y); if (inside(p)) dot(p, 2.2 * u, '#c27bff'); continue; }
+    // Mazmorras: punto oscuro con 🕳️ (✅ si ya la completaste)
+    if (f.type === 'cave' && vis(f.x, f.y)) { const p = to(f.x, f.y); if (inside(p)) { const done = caveDone(f.id); dot(p, 4.5 * u, done ? '#2f8f4e' : '#3a1f4d', done ? '#9fe8b0' : '#c084fc'); glyph(done ? '✅' : '🕳️', p, 7 * u); if (opts.labels) text(f.name, [p[0], p[1] - 10 * u], 9 * u, '#e9ddff'); } continue; }
     if (f.type !== 'village' || f.start || !vis(f.x, f.y)) continue;
     const p = to(f.x, f.y); if (!inside(p)) continue;
     if (near && f.id === near.id) { const s = 5 * u; g.fillStyle = '#ffd84d'; g.fillRect(p[0] - s, p[1] - s, s * 2, s * 2); g.lineWidth = 2 * u; g.strokeStyle = '#fff'; g.strokeRect(p[0] - s, p[1] - s, s * 2, s * 2); if (opts.labels) text(f.name, [p[0], p[1] - 11 * u], 10 * u, '#ffe6a0'); }

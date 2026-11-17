@@ -99,8 +99,10 @@ export function rollRarity(luck = 0, min = 'comun', rng = Math.random) {
   return keys[keys.length - 1];
 }
 // Botín: objeto de tipo y rareza al azar (los legendarios eligen uno de los 8 con nombre)
-export function rollLoot(ilvl, luck = 0, min = 'comun', rng = Math.random) {
-  const r = rollRarity(luck, min, rng);
+// bump: sube la rareza sorteada N niveles (cofres de mazmorra: +1 garantizado)
+export function rollLoot(ilvl, luck = 0, min = 'comun', rng = Math.random, bump = 0) {
+  let r = rollRarity(luck, min, rng);
+  if (bump) r = RAR_KEYS[Math.min(RAR_KEYS.length - 1, RAR_KEYS.indexOf(r) + bump)];
   if (r === 'legendario') { const lg = pick(Object.keys(LEGENDS), rng); return makeItem(LEGENDS[lg].t, r, ilvl, rng, lg); }
   return makeItem(pick(Object.keys(TYPES), rng), r, ilvl, rng);
 }

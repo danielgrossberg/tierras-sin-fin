@@ -248,6 +248,33 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Guardado:** `saveVersion` 7 (agrega `favs`). Antes de migrar se copia la partida intacta en
   `tsf:SALA:nombre:backup-v6`. El modo 👁️ y 🔕 se guardan en el dispositivo (`tsf-vis`, `tsf-mute`), no en la partida.
 
+### Fase 1 (lista): mazmorras 🕳️
+- **Entradas** en el mapa (~3% de los chunks, a más de 25 casillas de Ciudad Origen), deterministas por la semilla de
+  la sala y con nombre ("Cripta de Valdor", "Gruta Sombría", "Mina Olvidada"). Se generan con un azar aparte, así que
+  las aldeas, cofres y monstruos de los mundos que ya existían no cambian. Al pisarla: nombre, tipo, nivel
+  recomendado (peligro de la zona + 1), pisos y **🕳️ Entrar / 🏃 Retirarse**.
+- **Adentro:** pisos de salas y pasillos de 40×30 (deterministas por la entrada), **3 a 5 pisos** según el nivel
+  (Nv <6: 3 · <12: 4 · si no, 5). **Visión de ~5 casillas** que no atraviesa muros; lo ya visto queda en penumbra y el
+  resto en negro, con luz de antorcha. Escaleras 🪜 para bajar y subir; desde **cualquier escalera** se puede
+  **🚪 Salir de la mazmorra**. Flechas en el borde hacia las escaleras ya vistas.
+- **Monstruos de cueva** según el tipo (Cripta: esqueletos, zombis, fantasmas, murciélagos · Gruta: arañas,
+  murciélagos, serpientes, **Gólem 🗿** · Mina: **Mineros Fantasma**, gólems, murciélagos, ratas). Nivel = entrada + 1
+  por piso. Te persiguen si te ven.
+- **Trampas ocultas:** púas (−12% de vida a cada héroe, nunca por debajo de 1) y gas (veneno). Con **Pícaro o Goblin**
+  en el grupo, 50% de detectarlas al verlas (⚠️ visibles: al pisarlas se esquivan).
+- **Cofres:** equipo con **+1 nivel de rareza garantizado** (nunca Común) y algo de oro.
+- **Último piso:** jefe de mazmorra (Señor de la Cripta, Reina Araña o Gólem Ancestral) con la ventana de confirmación
+  y **📣 Pedir ayuda** (igual que los jefes en equipo; los compañeros lo ven en la entrada de la mazmorra). Al vencerlo:
+  "✅ ¡Mazmorra completada!", aparece un **portal de salida 🌀** y la entrada queda con ✅ en el mapa y el minimapa.
+  El jefe y los cofres no reaparecen; los monstruos normales sí (cada vez que entras).
+- **Muerte adentro:** despiertas en Ciudad Origen y la **tumba 🪦 queda en la entrada** de la mazmorra, afuera.
+- **Otros jugadores** ven en el panel "🕳️ en Cripta de Valdor (piso 2)". Para unirte a un jefe en equipo tienes que
+  salir de la mazmorra.
+- **Misiones:** nuevo tipo **🕳️ Completa la mazmorra X** en los tablones (~15% de los puestos; las demás misiones de
+  cada tablón quedan iguales que antes).
+- **Guardado:** `saveVersion` 8: `dungeons` (por entrada: pisos vistos, cofres abiertos, jefe, completada, piso más
+  profundo) e `inDun` (si recargas adentro, vuelves al mismo piso y lugar).
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -292,6 +319,7 @@ public/js/chat.js      Panel 💬 Chat / 👥 Sala: mensajes, no leídos, silenc
 public/js/prefs.js     Preferencias del dispositivo: ver jugadores 👁️ y silenciar chat 🔕
 public/js/estimate.js  Estimados de daño/curación de los botones y vista previa de objetos
 public/js/hpbar.js     Barras de vida de enemigos con números y barra grande de jefe
+public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})
 scripts/make-icons.js  Genera los íconos (npm run icons)
@@ -305,7 +333,7 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `room:join` | cliente → servidor (ack) | `{code, name, pin, rejoin}` → `{ok, name, players, pins, seed, db, save, chat}` o `{ok:false, error, needPin}` ("Sala llena", "Sala no existe", "PIN incorrecto") |
 | `save:push` | cliente → servidor (ack) | `{data}` (máx. 200 KB; no pisa una partida más nueva) → `{ok, stored}` |
 | `room:leave` | cliente → servidor | — |
-| `player:state` | cliente → servidor (≤ 8/s, solo si cambió) | `{x, y, leaderEmoji, avgLvl, biome, status:'map'\|'battle'\|'village'}` |
+| `player:state` | cliente → servidor (≤ 8/s, solo si cambió) | `{x, y, leaderEmoji, avgLvl, biome, status:'map'\|'battle'\|'village'\|'dungeon', tomb, vs, dun}` (en una mazmorra, x/y son los de la entrada y `dun` = "Cripta de Valdor (piso 2)") |
 | `players:update` | servidor → sala (≤ 10/s) | `{players:[…]}` |
 | `chat:quick` | ida y vuelta | `{msgId}` → `{name, msgId}` (además queda en el chat) |
 | `chat:msg` | cliente → servidor (ack) · servidor → sala | `{text}` (máx. 200, 1/s) → `{ok}` o `{ok:false, error}`; la sala recibe `{id, t, kind:'msg'\|'quick'\|'sys', name, e, text}` con el texto escapado |

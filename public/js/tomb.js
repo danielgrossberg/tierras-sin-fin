@@ -14,7 +14,7 @@ export const tombMinutes = () => Math.ceil(tombLeft() / 60000);
 // Casilla caminable más cercana (sin mar ni obstáculos, sin jefe ni aldea encima)
 function freeSpot(x, y) {
   const ok = (a, b) => { const t = tileAt(a, b), m = mpos.get(a + ',' + b), f = feats.get(a + ',' + b);
-    return !blockT(t) && !(m && m.boss) && !(f && f.type === 'village'); };
+    return !blockT(t) && !(m && m.boss) && !(f && (f.type === 'village' || f.type === 'cave')); };
   for (let r = 0; r <= 12; r++) for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
     if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
     if (ok(x + i, y + j)) return { x: x + i, y: y + j };

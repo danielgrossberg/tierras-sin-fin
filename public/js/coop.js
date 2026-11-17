@@ -17,6 +17,7 @@ import { createTomb } from './tomb.js';
 import { heroFx } from './state.js';
 import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
+import { inDungeon } from './dungeon.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -52,7 +53,8 @@ export function askHelp(m) {
   if (!canAskHelp()) { toast('No hay compañeros conectados para pedir ayuda'); return; }
   const be = EN[m.group[0]];
   chooseHero('📣 Pedir ayuda', `Contra ${be.e} <b>${be.n}</b> (Nv ${m.lvl}) cada jugador pelea con <b>1 héroe</b>. Elige el tuyo:`, async h => {
-    const r = await coopAsk('boss:invite', { boss: { id: m.id, name: be.n, e: be.e, lvl: m.lvl, x: m.x, y: m.y }, hero: snap(h) });
+    // Jefe de mazmorra: los demás lo ven en la ENTRADA de la mazmorra (coordenadas del mundo)
+    const r = await coopAsk('boss:invite', { boss: { id: m.id, name: be.n, e: be.e, lvl: m.lvl, x: m.wx != null ? m.wx : m.x, y: m.wy != null ? m.wy : m.y }, hero: snap(h) });
     if (!r.ok) { toast('No se pudo pedir ayuda'); return; }
     coop.host = { id: r.id, m, hero: h, guests: [], until: Date.now() + (r.left || 90000) };
     openHostLobby();
@@ -129,6 +131,7 @@ function renderInvites() {
 function joinInvite(id) {
   const v = net.invites.get(id); if (!v) return;
   if (getBT()) { toast('Termina tu combate para unirte'); return; }
+  if (inDungeon()) { toast('🕳️ Sal de la mazmorra para unirte (usa una escalera)'); return; }
   if (isModalOpen()) closeModal();
   chooseHero('⚔️ Unirse al combate', `${esc(v.host)} pelea contra ${esc(v.boss.e)} <b>${esc(v.boss.name)}</b> (Nv ${v.boss.lvl}). Cada jugador usa <b>1 héroe</b>:`, async h => {
     const r = await coopAsk('boss:join', { id, hero: snap(h) });

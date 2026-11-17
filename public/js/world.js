@@ -2,7 +2,7 @@
 // (que sale del código de sala), así que cada jugador genera el mismo mundo en su celular.
 'use strict';
 import { hash, hashI, mulberry, fbm, pick } from './util.js';
-import { CH, B, blockT, EN, POOL, BOSS, SYL1, SYL2, VSUF, RESPAWN } from './data.js';
+import { CH, B, blockT, EN, POOL, BOSS, SYL1, SYL2, VSUF, RESPAWN, CAVE } from './data.js';
 import { st, G, P, START } from './state.js';
 
 export const chunks = new Map(), feats = new Map(), monsters = new Map(), mpos = new Map();
@@ -94,6 +94,18 @@ function makeChunk(cx, cy) {
       c.spawns.push({ id: 'b@' + p.x + ',' + p.y, x: p.x, y: p.y, biome: p.t.b, lvl, group, boss: true });
     }
   }
+  // Entradas de mazmorra 🕳️ (Versión 3 · Fase 1): ~3% por chunk, a más de 25 casillas de Ciudad Origen.
+  // Usan su PROPIO generador al azar para no cambiar las aldeas, cofres ni monstruos de los mundos que ya existen.
+  {
+    const rc = mulberry(hashI(cx, cy, seed + 4242));
+    if (rc() < .03) for (let k = 0; k < 24; k++) {
+      const i = Math.floor(rc() * CH), j = Math.floor(rc() * CH), t = c.tiles[j * CH + i], x = cx * CH + i, y = cy * CH + j;
+      if (blockT(t) || feats.has(x + ',' + y) || c.spawns.some(s => s.x === x && s.y === y) || Math.hypot(x - START.x, y - START.y) <= 25) continue;
+      const kind = pick(Object.keys(CAVE), rc), lvl = dangerAt(x, y) + 1, V = pick(SYL1, rc) + pick(SYL2, rc);
+      addFeat('cave', x, y, { kind, lvl, name: pick(CAVE[kind].names, rc).replace('{V}', V), floors: lvl < 6 ? 3 : lvl < 12 ? 4 : 5 });
+      break;
+    }
+  }
   // Lugares creados por misiones (Fase C) que no existían en el mundo: se guardan en G.extraFeats
   if (G.extraFeats) for (const f of G.extraFeats) {
     if (Math.floor(f.x / CH) === cx && Math.floor(f.y / CH) === cy && !feats.has(f.x + ',' + f.y)) addFeat(f.type, f.x, f.y, f.name ? { name: f.name } : null);
@@ -132,7 +144,7 @@ export function nearestVillage(x, y) {
   return best;
 }
 export const inVillage = () => feats.get(P.x + ',' + P.y)?.type === 'village';
-function canMonsterGo(x, y) { if (isBlocked(x, y) || mpos.has(x + ',' + y)) return false; const f = feats.get(x + ',' + y); return !(f && f.type === 'village'); }
+function canMonsterGo(x, y) { if (isBlocked(x, y) || mpos.has(x + ',' + y)) return false; const f = feats.get(x + ',' + y); return !(f && (f.type === 'village' || f.type === 'cave')); }
 export function moveMonsters() {
   let hit = null; const safe = inVillage();
   for (const m of monsters.values()) {
