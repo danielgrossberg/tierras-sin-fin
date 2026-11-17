@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { roomSeed, cleanName } from './public/js/util.js';
-import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL } from './public/js/data.js';
+import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS } from './public/js/data.js';
 import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,7 +19,7 @@ const GRACE = 15 * 1000;            // tiempo para reconectar antes de "salir" d
 const MAX_ROOMS = 1000;
 const STATUSES = new Set(['map', 'battle', 'village', 'dungeon']);
 const BIOMES = new Set(Object.keys(B));
-const EMOJIS = new Set(LEADER_EMOJIS);
+const EMOJIS = new Set(LEADER_EMOJIS), PETS_E = new Set(PET_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
 const NOTICE_TYPES = new Set(['level', 'boss', 'death']);
 const MAX_SAVE = 200 * 1024;                     // tamaño máximo de una partida guardada (bytes)
@@ -87,7 +87,7 @@ function loadChat(room) {
   })();
   return room.chatLoad;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -174,7 +174,9 @@ function validState(d) {
   const vs = typeof d.vs === 'string' ? cleanText(d.vs, 30) || null : null;
   // "🕳️ en Cripta de Valdor (piso 2)" mientras está en una mazmorra
   const dun = typeof d.dun === 'string' ? cleanText(d.dun, 40) || null : null;
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun };
+  // Mascota que lo sigue en el mapa (Versión 3 · Fase 3)
+  const pet = PETS_E.has(d.pet) ? d.pet : null;
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun, pet };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;
@@ -266,7 +268,7 @@ io.on('connection', socket => {
     room.players.set(name, p); room.emptySince = null;
     socket.join(code); socket.data.room = code; socket.data.name = name; socket.data.playerId = row ? row.id : null;
     ack({ ok: true, code, name, seed: room.seed, players: publicPlayers(room), pins: publicPins(room),
-      db: !!row, save: row ? row.data : null, chat: room.chat });
+      db: !!row, save: row ? row.data : null, chat: room.chat, now: Date.now() });   // now: hora del servidor (día y noche)
     if (!existing) { socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` }); sysMsg(room, `👋 ${name} entró a la sala`); }
     markDirty(room);
   });

@@ -12,6 +12,8 @@ import { startBattle, getBT, skillCost } from './battle.js';
 import { openModal, closeModal, isModalOpen, toast, feed, updateHUD } from './ui.js';
 import { save } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
+import { petSnap, activePet, catBonus, petGainXP, addEgg } from './pets.js';
+import { PETS } from './data.js';
 import { onVictory } from './quests.js';
 import { createTomb } from './tomb.js';
 import { heroFx, talFx, talSk, clsName } from './state.js';
@@ -34,7 +36,7 @@ export const inCoopBattle = () => !!(coop.guest && coop.guest.started);
 
 // Héroe que se manda a la sesión (con sus mejoras de herrería)
 // tal/adv: talentos y clase avanzada (Versión 3 · Fase 2) · gold: para Lluvia de Monedas
-const snap = h => ({ id: h.id, cls: h.cls, name: h.name, e: h.e, lvl: h.lvl, hp: h.hp, mp: h.mp, bonus: h.bonus, equip: h.equip, poison: h.poison || 0, upA: G.upA, upD: G.upD, tal: h.tal || {}, adv: h.adv || null, gold: G.gold });
+const snap = h => ({ id: h.id, cls: h.cls, name: h.name, e: h.e, lvl: h.lvl, hp: h.hp, mp: h.mp, bonus: h.bonus, equip: h.equip, poison: h.poison || 0, upA: G.upA, upD: G.upD, tal: h.tal || {}, adv: h.adv || null, gold: G.gold, pet: petSnap() });   // pet: la mascota acompaña al héroe elegido
 const onlineMates = () => [...net.others.values()].filter(o => o.online !== false && o.status && o.status !== 'lobby' && o.status !== 'away');
 export const canAskHelp = () => st.online && net.status === 'on' && onlineMates().length > 0;
 
@@ -172,6 +174,9 @@ function guestState(s) {
     $('#b-field').innerHTML = s.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="g-${esc(e.id)}"><span class="sp emoji" style="filter:${esc(e.tint || '')} drop-shadow(0 8px 6px #0007)">${esc(e.e)}</span><div class="en">${e.boss ? '👑 ' : ''}${esc(e.name)} <span class="lv">Nv ${e.lvl | 0}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('');
     bossBar(null);
     $('#b-party').innerHTML = s.party.map(h => `<div class="hcard" id="g-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${esc(h.e)}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv ${h.lvl | 0} · ${esc(h.owner)}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
+    // Mascotas del combate (cada una con el nombre de su dueño)
+    if (Array.isArray(s.pets) && s.pets.length) $('#b-field').insertAdjacentHTML('beforeend', '<div id="b-pets">' + s.pets.filter(q => PETS[q.k]).map(q => `<div class="petb" id="g-${esc(q.id)}"><span class="emoji">${PETS[q.k].e}</span><small>Nv ${q.lvl | 0} · ${esc(q.owner)}</small></div>`).join('') + '</div>');
+    if (s.night) $('#b-field').insertAdjacentHTML('beforeend', '<div id="b-night">🌙 Noche</div>');
     g.built = true; g.nE = s.enemies.length; g.nP = s.party.length;
     const mine = s.party.find(h => h.owner === st.name); g.myId = mine ? mine.id : null;
   }
@@ -271,8 +276,10 @@ async function guestEnd(d) {
     lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`);
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, d.xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
-    const extra = (d.extra && d.extra[st.name]) || 0; G.gold += d.gold + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);
+    const extra = (d.extra && d.extra[st.name]) || 0, cat = activePet() && activePet().k === 'gato' ? activePet() : null; G.gold += Math.round(d.gold * (cat ? 1 + catBonus(cat) : 1)) + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);
     G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter');
+    if (Math.random() < .15) { addEgg('jefe'); lines.push('🥚 <b>¡Un huevo de mascota!</b> Eclosiona en 300 pasos.'); }
+    lines.push(...petGainXP(activePet(), d.xp * .5));
     const b = d.boss || {}, it = rollLoot(b.lvl || 1, Math.min(1, Math.hypot((b.x || 0) - START.x, (b.y || 0) - START.y) / 400), 'raro');
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
     if (b.id) { G.defeated[b.id] = G.steps; const mo = monsters.get(b.id); if (mo) { monsters.delete(b.id); mpos.delete(mo.x + ',' + mo.y); } }

@@ -16,6 +16,8 @@ import { openModal, closeModal, openBossConfirm, toast, feed, updateHUD } from '
 import { save } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onDungeonDone } from './quests.js';
+import { activePet, owlRadius, stepEggs } from './pets.js';
+import { PETS } from './data.js';
 
 export const DW = 40, DH = 30, VISION = 5;
 const idx = (x, y) => y * DW + x;
@@ -124,8 +126,12 @@ function updateVision() {
   }
   // Trampas: con Pícaro o Goblin en el grupo, 50% de detectarlas al verlas por primera vez
   for (const t of D.fl.traps) if (D.vis.has(idx(t.x, t.y)) && !D.trapSeen.has(t.id)) D.trapSeen.set(t.id, hasScout() && Math.random() < (heroes().some(h => talFx(h, 'trapDet')) ? .9 : .5));   // talento Trampero: 90%
+  // Búho: revela las trampas cercanas (aunque no las veas todavía)
+  const owl = activePet(); if (owl && owl.k === 'buho') { const r = owlRadius(owl); for (const t of D.fl.traps) if (Math.hypot(t.x - D.x, t.y - D.y) <= r) D.trapSeen.set(t.id, true); }
   dunProg(D.cave.id).seen[D.f] = enc(D.seen);
 }
+// Búho: cofres y trampas dentro de su radio (para el minimapa)
+export function owlSees(x, y) { const o = activePet(); return !!(o && o.k === 'buho' && D.on && Math.hypot(x - D.x, y - D.y) <= owlRadius(o)); }
 export const isVisible = (x, y) => D.vis.has(idx(x, y));
 export const isSeen = (x, y) => !!(D.seen && D.seen[idx(x, y)]);
 
@@ -207,6 +213,7 @@ export function dungeonMove(dir) {
   if (!walkable(nx, ny)) return;
   const m = D.mpos.get(nx + ',' + ny); if (m) { fight(m); return; }
   D.x = nx; D.y = ny; G.steps++;
+  for (const p of stepEggs()) { toast(`🐣 ¡Nació tu mascota!<br><span style="font-size:15px">${PETS[p.k].e} ${PETS[p.k].n}</span>`); save('now'); }
   updateVision(); keepPos();
   const fl = D.fl, pr = dunProg(D.cave.id);
   if (same(fl.up, nx, ny)) stairsMenu('up');

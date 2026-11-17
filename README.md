@@ -304,6 +304,24 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Guardado:** `saveVersion` 9: cada héroe guarda `tal` (opción elegida por nivel) y `adv` (clase avanzada). Las
   partidas viejas cargan con todo vacío y los héroes que ya pasaron esos niveles los eligen al entrar.
 
+### Fase 3 (lista): día y noche, y mascotas
+- **Día y noche compartido por la sala:** se calcula con la hora del servidor (`room:join` entrega `now`; ver
+  `public/js/daynight.js`). Ciclo de **20 minutos**: 14 de día y 6 de noche, con atardecer 🌇 y amanecer suaves.
+  Arriba a la derecha: ☀️/🌙 con el tiempo que falta para el cambio, y un aviso al anochecer y al amanecer.
+- **De noche:** el mapa se oscurece con un círculo de luz alrededor del grupo; las aldeas y Ciudad Origen se ven
+  iluminadas con faroles 🏮. Los monstruos tienen **+20% de stats** y dan **+30% de experiencia, oro y botín**.
+  Aparecen **monstruos nocturnos** (Murciélago Vampiro, Lobo de Sombra, Espectro Errante) que se van al amanecer;
+  se generan con un azar aparte, así que los monstruos de día no cambian. En las mazmorras no hay día ni noche.
+- **Mascotas:** salen de un **huevo 🥚** (15% en cada jefe, 30% en misiones de jefe y de mazmorra, o 800 oro en
+  Ciudad Origen) que eclosiona a los **300 pasos** con una mascota al azar:
+  🐺 Lobo (ataca al final de cada ronda) · 🦉 Búho (revela trampas y cofres cercanos en el minimapa) ·
+  🐈 Gato (+15% de oro y botín) · 🐲 Dragoncito (fuego a todos cada 2 rondas) · 🐢 Tortuga (escudo al héroe con
+  menos vida, 1 vez por combate) · 🦊 Zorro (+10% de huir y de esquivar).
+  1 mascota activa; las demás en el **🐾 Establo** de cualquier aldea, donde se cambian. Sigue al grupo en el mapa
+  (los demás también la ven), gana la mitad de la experiencia de los combates y sube hasta nivel 20 (el efecto
+  mejora). No muere. En los jefes en equipo acompaña al héroe elegido.
+- **Guardado:** `saveVersion` 10: `pets`, `pet` y `eggs`.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -348,6 +366,8 @@ public/js/chat.js      Panel 💬 Chat / 👥 Sala: mensajes, no leídos, silenc
 public/js/prefs.js     Preferencias del dispositivo: ver jugadores 👁️ y silenciar chat 🔕
 public/js/estimate.js  Estimados de daño/curación de los botones y vista previa de objetos
 public/js/hpbar.js     Barras de vida de enemigos con números y barra grande de jefe
+public/js/daynight.js  Día y noche con la hora del servidor
+public/js/pets.js      Mascotas: huevos, eclosión, efectos y experiencia
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

@@ -9,7 +9,14 @@ import { tracked, QICON } from './quests.js';
 import { tombMinutes } from './tomb.js';
 import { mateOnMap, othersBubbles, chatMuted } from './prefs.js';
 import { D, DW, DH, VISION, inDungeon, isSeen, isVisible, dunProg, caveDone } from './dungeon.js';
-import { CAVE } from './data.js';
+import { CAVE, PETS } from './data.js';
+import { darkness, twilight } from './daynight.js';
+import { activePet } from './pets.js';
+// Mascota que sigue al grupo: más chica, detrás del líder, saltando un poco
+function petSprite(e, X, Y, TS, t, face, alpha) {
+  const px = X - face * TS * .5, py = Y + TS * .18 - Math.abs(Math.sin(t / 180)) * 2.5;
+  shadow(px, py + TS * .28, TS * .2); emoji(e, px, py, TS * .52, alpha);
+}
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
 let W = 0, H = 0, DPR = 1, Z = 1.3, vign = null;
@@ -123,7 +130,7 @@ const visibleOther = o => o.status && o.status !== 'lobby' && o.status !== 'away
 let hudRects = [], hudT = 0;
 function refreshHud(t) {
   if (t - hudT < 500) return; hudT = t;
-  hudRects = ['#hud', '#info', '#coords', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(Boolean)
+  hudRects = ['#hud', '#info', '#dn', '#coords', '#plist', '#dock', '#dpad', '#social'].map(s => document.querySelector(s)).filter(Boolean)
     .map(el => el.getBoundingClientRect()).filter(r => r.width && r.height);
 }
 const hitsBox = (x0, y0, x1, y1) => hudRects.some(r => x1 > r.left && x0 < r.right && y1 > r.top && y0 < r.bottom);
@@ -229,6 +236,7 @@ function drawDungeon(t) {
     } });
   }
   sprites.push({ y: D.py + .45, fn: () => { const X = sx(D.px), Y = sy(D.py), moving = Math.abs(D.x - D.px) + Math.abs(D.y - D.py) > .03;
+    { const pt = activePet(); if (pt) petSprite(PETS[pt.k].e, X, Y, TS, t, D.face > 0 ? 1 : -1, 1); }
     shadow(X, Y + TS * .4, TS * .36); heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), leader().e, TS * .97, '#f2c14e', t, D.face > 0, 1, st.name || 'Tú', '#241a00'); } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
   // Niebla
@@ -258,9 +266,10 @@ export function draw(t) {
   for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) { const c = getChunk(cx, cy); if (!c.can) renderChunk(c); ctx.drawImage(c.can, Math.round(cx * CS - camX), Math.round(cy * CS - camY), Math.ceil(CS), Math.ceil(CS)); }
   const x0 = Math.floor(camX / TS) - 1, y0 = Math.floor(camY / TS) - 1, x1 = Math.ceil((camX + W) / TS) + 1, y1 = Math.ceil((camY + H) / TS) + 1;
   const sx = x => x * TS - camX + TS / 2, sy = y => y * TS - camY + TS / 2;
-  const sprites = [];
+  const sprites = [], litVillages = [];
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const f = feats.get(x + ',' + y); if (!f) continue;
+    if (f.type === 'village') litVillages.push(f);
     if (f.type === 'village' && f.start) sprites.push({ y, fn: () => {
       // Ciudad Origen: castillo grande, brillo dorado suave y nombre en dorado
       const X = sx(x), Y = sy(y), r = TS * (1.25 + .08 * Math.sin(t / 500));
@@ -330,6 +339,7 @@ export function draw(t) {
     sprites.push({ y: o.py + .44, fn: () => {   // sobre lo demás de su casilla
       const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .5 : 1;
       shadow(X, Y + TS * .4, TS * .34);
+      if (o.pet && o.biome !== 'WATER' && o.status !== 'dungeon') petSprite(o.pet, X, Y, TS, t, 1, a);
       heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * .95, mateColor(o.name), t, false, a,
         statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18');
     } });
@@ -352,11 +362,25 @@ export function draw(t) {
   sprites.push({ y: P.py + .45, fn: () => {    // sobre lo demás de su casilla
     const X = sx(P.px), Y = sy(P.py); const moving = Math.abs(P.x - P.px) + Math.abs(P.y - P.py) > .03;
     const bob = onWater ? Math.sin(t / 400) * 2 : -(moving ? Math.abs(Math.sin(t / 70)) * 4 : 0);
+    { const pt = activePet(); if (pt && !onWater) petSprite(PETS[pt.k].e, X, Y, TS, t, P.face > 0 ? 1 : -1, 1); }
     shadow(X, Y + TS * .4, TS * .36);
     // 18% más grande que un monstruo normal (TS*.82), anillo dorado con pulso y nombre en dorado
     heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00');
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
+  // ---- Día y noche (Versión 3 · Fase 3)
+  const dk = darkness(), tw = twilight();
+  if (tw > 0) { ctx.fillStyle = `rgba(255,120,50,${.13 * tw})`; ctx.fillRect(0, 0, W, H); }
+  if (dk > 0) {
+    const X = sx(P.px), Y = sy(P.py), g = ctx.createRadialGradient(X, Y, TS * 2.2, X, Y, TS * 5.5);
+    g.addColorStop(0, 'rgba(6,8,30,0)'); g.addColorStop(1, `rgba(6,8,30,${.8 * dk})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const f of litVillages) { const vx = sx(f.x), vy = sy(f.y), r = TS * (f.start ? 3.4 : 2.3), lg = ctx.createRadialGradient(vx, vy, 0, vx, vy, r);
+      lg.addColorStop(0, `rgba(255,190,90,${.42 * dk})`); lg.addColorStop(1, 'rgba(255,190,90,0)'); ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(vx, vy, r, 0, 7); ctx.fill(); }
+    ctx.restore();
+    for (const f of litVillages) { const vx = sx(f.x), vy = sy(f.y); emoji('🏮', vx + TS * (f.start ? .95 : .7), vy + TS * .15 + Math.sin(t / 500 + f.x) * 1.5, TS * .42); if (f.start) emoji('🏮', vx - TS * .95, vy + TS * .15 + Math.sin(t / 520) * 1.5, TS * .42); }
+  }
   // Globos del chat y de los mensajes rápidos (encima de todo). 🔕 Silenciar los oculta; los de los demás
   // solo se ven en el modo 👁️ "Mostrar todo". El texto se dibuja con fillText (nunca como HTML).
   if (net.myBubble && !chatMuted()) bubble(net.myBubble.text, sx(P.px), sy(P.py) - TS * 1.25);

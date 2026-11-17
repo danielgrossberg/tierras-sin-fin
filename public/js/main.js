@@ -3,10 +3,13 @@
 import { $, esc, pick, roomSeed, cleanName } from './util.js';
 import { CL, B, IT, CH, BOONS, CODE_ALPHABET, SEA_POOL } from './data.js';
 import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_GOLD, startItems } from './state.js';
-import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt } from './world.js';
+import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt, removeNightMonsters } from './world.js';
+import { stepEggs, activePet } from './pets.js';
+import { isNight } from './daynight.js';
+import { PETS } from './data.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
-import { initUI, updateMini, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI } from './ui.js';
+import { initUI, updateMini, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI, updateDayNight } from './ui.js';
 import { net, ensureSocket, available, createRoom, joinRoom, leaveRoom, tick, wake, lerpOthers, uploadSave } from './net.js';
 import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, writeLocal, backupIfOld, SAVE_VERSION } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
@@ -26,7 +29,7 @@ function move(dir) {
   if (m && !inVillage()) { if (m.boss) openBossConfirm(m, startBattle); else startBattle(m); return; }
   if (m) return;
   if (playerBlocked(nx, ny)) return;   // con bote se puede navegar por el mar
-  P.x = nx; P.y = ny; G.steps++;
+  P.x = nx; P.y = ny; G.steps++; hatchEggs();
   visitAround();
   if (G.steps % 20 === 0 || Math.floor(nx / CH) !== Math.floor((nx - dx) / CH) || Math.floor(ny / CH) !== Math.floor((ny - dy) / CH)) spawnNearby();
   const b = tileAt(P.x, P.y).b;
@@ -74,7 +77,7 @@ function useShrine(f) {
 }
 // Estado que ven los demás
 const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : inDungeon() ? 'dungeon' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel() });
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel(), pet: activePet() ? PETS[activePet().k].e : null });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -130,6 +133,7 @@ function frame(t) {
     if (inDungeon()) dunLerp(a);
     lerpOthers(dt);
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
+    if (t - lastDN > 500) { lastDN = t; dayNightTick(); }
     draw(t);
     updateMini(t);
     tick(t, myState);
@@ -138,7 +142,19 @@ function frame(t) {
 }
 
 // ================= Partidas =================
-let lastTombCheck = 0;
+let lastTombCheck = 0, lastDN = 0, wasNight = null;
+// Día y noche: avisos al cambiar; de noche aparecen monstruos nocturnos y al amanecer se van
+function dayNightTick() {
+  updateDayNight();
+  const n = isNight(); if (wasNight === null) { wasNight = n; return; }
+  if (n === wasNight) return; wasNight = n;
+  if (n) { spawnNearby(); if (!inDungeon()) toast('🌙 Cae la noche<br><span style="font-size:13px">Monstruos +20% más fuertes, +30% de experiencia y botín, y aparecen los nocturnos</span>'); }
+  else { removeNightMonsters(); if (!inDungeon()) toast('☀️ Amanece<br><span style="font-size:13px">Los monstruos nocturnos se esconden</span>'); }
+}
+// Huevos de mascota: avanzan con cada paso (también dentro de las mazmorras)
+export function hatchEggs() {
+  for (const p of stepEggs()) { toast(`🐣 ¡Nació tu mascota!<br><span style="font-size:15px">${PETS[p.k].e} ${PETS[p.k].n}</span><br><span style="font-size:12px">${PETS[p.k].d}</span>`); save('now'); }
+}
 function checkTomb() { if (tombExpired()) { toast('⌛ Se acabaron los 60 minutos: los objetos de tu tumba 🪦 se perdieron'); save('now'); updateHUD(); } }
 function enterWorld() {
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
@@ -149,7 +165,7 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);

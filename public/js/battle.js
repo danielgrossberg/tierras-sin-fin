@@ -9,6 +9,9 @@ import { $, sleep, clamp, pick, esc } from './util.js';
 import { CL, SK, IT, EN, BG } from './data.js';
 import { atkMulB, defMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
+import { isNight, NIGHT_STATS, NIGHT_REWARD } from './daynight.js';
+import { activePet, petPower, catBonus, foxBonus, turtleShield, petGainXP, addEgg } from './pets.js';
+import { PETS, PET_MAX } from './data.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName } from './state.js';
 import { createTomb } from './tomb.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
@@ -197,6 +200,7 @@ function coopSnapshot() {
     // def/cu/ud: para que el invitado calcule los estimados de daño (Fase 0.5)
     enemies: BT.enemies.map(e => ({ id: e.id, e: e.e, name: e.name, lvl: e.lvl, boss: e.boss, tint: e.tint, hp: e.hp, mhp: e.mhp, tags: tags(e), def: Math.round(S(e, 'def') * defMul(e) * 10) / 10, cu: e.buffs.curse > 0, ud: !!e.undead })),
     party: party().map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: (h.tmp || 0) + (h.shield || 0), tags: tags(h), bear: h.buffs.bear > 0, poison: h.poison || 0, buffs: Object.assign({}, h.buffs) })),
+    pets: (BT.pets || []).map(q => ({ id: q.id, k: q.k, lvl: q.lvl, owner: q.owner || BT.coop.me })), night: !!BT.night,
     pops: BT.pops.splice(0) };
 }
 function coopSync(now) {
@@ -270,7 +274,7 @@ async function strike(a, d, r, o = {}) {
   // Esquivar todo (Sombra, Paso Sombrío)
   if (d.buffs.evade > 0) { popup(d, '👤 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; }
   // Esquivar golpes físicos: Agilidad Élfica 15%, Velo Lunar +30% y talentos (máx. 75%)
-  if (!r.mag && d.isHero) { const ev = (d.cls === 'elfo' ? 15 : 0) + (d.buffs.veil > 0 ? 30 : 0) + talFx(d, 'dodge'); if (ev > 0 && Math.random() * 100 < Math.min(75, ev)) { popup(d, '💨 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; } }
+  if (!r.mag && d.isHero) { const ev = (d.cls === 'elfo' ? 15 : 0) + (d.buffs.veil > 0 ? 30 : 0) + talFx(d, 'dodge') + petDodge(d); if (ev > 0 && Math.random() * 100 < Math.min(75, ev)) { popup(d, '💨 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; } }
   // Égida del Alba: 15% de bloquear el golpe completo
   if (d.isHero && heroFx(d, 'egida') && Math.random() < .15) { popup(d, '🛡️ ¡Bloqueo!', '#ffe08a'); await sleep(o.fast ? 220 : 450); return 0; }
   // Profecía: anula el próximo golpe
@@ -313,10 +317,36 @@ const tags = u => (u.poison > 0 ? '☠️' : '') + (u.burn > 0 ? '🔥' : '') + 
   + (u.shield > 0 ? '💠' : '') + (u.ward ? '✨' : '') + (u.buffs.mark > 0 ? '🎯' : '') + (u.buffs.haste > 0 ? '⏩' : '') + (u.buffs.frenzy > 0 ? '💢' : '') + (u.buffs.bloodrage > 0 ? '🩸' : '')
   + (u.buffs.veil > 0 ? '🌙' : '') + (u.buffs.evade > 0 ? '👤' : '') + (u.agony && u.agony.n > 0 ? '💜' : '') + (u.buffs.firerune > 0 ? '🪔' : '') + (u.nextCrit ? '⚡' : '');
 
+// ================= Mascotas en combate (Versión 3 · Fase 3) =================
+// BT.pets: la mascota activa propia y, en jefes en equipo, las de los demás (cada una con su héroe).
+const validPet = q => q && PETS[q.k] && Number.isInteger(q.lvl) && q.lvl >= 1 && q.lvl <= PET_MAX;
+const partyLvl = () => { const a = party(); return a.reduce((s, h) => s + h.lvl, 0) / Math.max(1, a.length); };
+// Zorro: +% de esquivar para los héroes de su dueño
+function petDodge(h) { if (!BT || !BT.pets) return 0; const own = h.owner || null; return BT.pets.filter(q => q.k === 'zorro' && (q.owner || null) === own).reduce((a, q) => a + foxBonus(q), 0); }
+const ownPet = k => BT && BT.pets ? BT.pets.find(q => q.k === k && !q.owner) : null;
+async function petHit(q, e, dmg, col, icon) {
+  const b = e.hp; e.hp = Math.max(0, e.hp - dmg); hurtEnemy(q.hero, e, b);
+  popup(e, icon + dmg, col); anim(e, 'hit'); if (e.hp <= 0) fall(e); refresh(); await sleep(380);
+}
+// Al final de cada ronda: el lobo muerde, el dragoncito escupe fuego (cada 2 rondas) y la tortuga protege (1 vez)
+async function petsAct() {
+  for (const q of BT.pets || []) {
+    if (outcome()) return;
+    const pw = petPower(q, partyLvl()), v = () => .9 + Math.random() * .2;
+    if (q.k === 'lobo') { const t = pick(alive(BT.enemies)); if (!t) continue; log(`🐺 El lobo${q.owner ? ' de ' + q.owner : ''} muerde a ${t.name}`); popup(q, '🐺', '#fff'); await petHit(q, t, Math.max(1, Math.round((pw - S(t, 'def') * defMul(t) * .4) * v())), '#ffd8a8', '🐺'); }
+    else if (q.k === 'dragon' && BT.round % 2 === 0) { log(`🐲 El dragoncito${q.owner ? ' de ' + q.owner : ''} escupe fuego`); popup(q, '🔥', '#ff9a3d'); for (const t of alive(BT.enemies)) await petHit(q, t, Math.max(1, Math.round((pw * .6 - S(t, 'def') * defMul(t) * .2) * v())), '#ff9a3d', '🔥'); }
+    else if (q.k === 'tortuga' && !q.used) {
+      const al = alive(party()), low = al.sort((a, b) => a.hp / S(a, 'mhp') - b.hp / S(b, 'mhp'))[0];
+      if (low && low.hp < S(low, 'mhp') * .6) { q.used = 1; const sh = Math.round(S(low, 'mhp') * turtleShield(q)); low.shield = (low.shield || 0) + sh; log(`🐢 La tortuga protege a ${low.name}`); popup(q, '🐢', '#9fd8ff'); popup(low, '💠 +' + sh, '#9fd8ff'); refresh(); await sleep(450); }
+    }
+  }
+}
+const petsHTML = () => (BT.pets || []).length ? `<div id="b-pets">${BT.pets.map(q => `<div class="petb" id="u-${q.id}"><span class="emoji">${PETS[q.k].e}</span><small>Nv ${q.lvl}${q.owner ? ' · ' + esc(q.owner) : ''}</small></div>`).join('')}</div>` : '';
+
 // ================= Pantalla de combate =================
 function buildBattle(biome) {
   $('#battle').style.background = BG[biome] || BG.GRASS;
-  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('');
+  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('') + petsHTML() + (BT.night ? '<div id="b-night">🌙 Noche</div>' : '');
   // Los héroes de otros jugadores traen nombre desde la red: siempre escapado
   $('#b-party').innerHTML = party().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${esc(h.e)}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${esc(h.owner ? h.owner : clsName(h))}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
   $('#b-menu').innerHTML = ''; bossBar(null); refresh();
@@ -464,7 +494,7 @@ async function heroTurn(h) {
       if (BT.enemies.some(e => e.boss)) { log('¡No puedes huir de un jefe!'); await sleep(800); continue; }
       if (partyHas('goblin')) { log('🏃 ¡El goblin encontró una salida!'); await sleep(700); return 'fled'; }   // pasiva del Goblin
       const ps = alive(party()).reduce((a, u) => a + S(u, 'spd'), 0) / alive(party()).length, es = alive(BT.enemies).reduce((a, u) => a + u.spd, 0) / alive(BT.enemies).length;
-      if (Math.random() < clamp(.5 + (ps - es) * .03, .25, .9)) { log('🏃 ¡Escaparon!'); await sleep(700); return 'fled'; }
+      const fx = ownPet('zorro'); if (Math.random() < clamp(.5 + (ps - es) * .03 + (fx ? foxBonus(fx) / 100 : 0), .25, .95)) { log('🏃 ¡Escaparon!'); await sleep(700); return 'fled'; }
       log('¡No pudieron escapar!'); await sleep(700); return;
     }
   }
@@ -518,6 +548,8 @@ async function runBattle() {
       if (r === 'fled') return 'fled';
       await sleep(120);
     }
+    BT.round = (BT.round || 0) + 1;
+    await petsAct();
     if (BT.corpse && --BT.corpse.n <= 0) BT.corpse = null;
     // Al final de cada ronda atacan las invocaciones (Alzar Esqueleto)
     for (const sm of [...BT.summons]) {
@@ -540,13 +572,18 @@ export async function startBattle(m, opts = {}) {
   const ens = m.group.map((k, i) => mkEnemy(k, Math.max(1, m.boss && i > 0 ? m.lvl - 2 : m.lvl)));
   if (opts.bossMul && ens[0] && ens[0].boss) { ens[0].mhp = Math.round(ens[0].mhp * opts.bossMul); ens[0].hp = ens[0].mhp; }
   if (opts.dmgMul) for (const e of ens) { e.atk *= opts.dmgMul; e.mag *= opts.dmgMul; }
+  // Noche (fuera de las mazmorras): +20% de stats y +30% de experiencia y oro
+  const night = !m.dun && isNight();
+  if (night) for (const e of ens) { e.mhp = Math.round(e.mhp * NIGHT_STATS); e.hp = e.mhp; e.atk *= NIGHT_STATS; e.def *= NIGHT_STATS; e.mag *= NIGHT_STATS; e.xp = Math.round(e.xp * NIGHT_REWARD); e.g = Math.round(e.g * NIGHT_REWARD); }
   const supp = Math.round(.15 * ens.reduce((a, e) => a + e.mhp, 0) / ens.length);
   BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set(),
-    party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null };
+    party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null, night, round: 0, pets: [] };
+  { const own = activePet(); if (own) BT.pets.push({ id: 'pet0', k: own.k, lvl: own.lvl, hero: BT.party[0] });
+    BT.party.filter(h => h.remote && validPet(h.pet)).forEach((h, i) => BT.pets.push({ id: 'pet' + (i + 1), k: h.pet.k, lvl: h.pet.lvl, owner: h.owner, hero: h })); }
   // Talentos: escudo al empezar (Bastión, Barrera, Barba de Hierro)
   for (const h of BT.party) { h.shield = 0; h.ward = 0; h.nextCrit = 0; const ss = talFx(h, 'startShield'); if (ss && h.hp > 0) h.shield = Math.round(S(h, 'mhp') * ss); }
   buildBattle(m.biome); $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
-  log(m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!${BT.coop ? ' · ¡En equipo!' : ''}` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`);
+  log((m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!${BT.coop ? ' · ¡En equipo!' : ''}` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`) + (night ? ' 🌙' : ''));
   coopSync(true);
   await sleep(1000);
   const res = await runBattle();
@@ -557,10 +594,12 @@ export async function startBattle(m, opts = {}) {
   else m.stun = 5;
   stopClock(); bossBar(null); $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
 }
+// Huevo de mascota: botín raro de los jefes (15%)
+export function bossEgg() { if (Math.random() < .15) { addEgg('jefe'); return ['🥚 <b>¡Un huevo de mascota!</b> Eclosiona en 300 pasos.']; } return []; }
 async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);
-  const loot = partyHas('goblin') ? 1.3 : 1;   // pasiva del Goblin: +30% de botín
-  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))));   // pasiva del Enano: +25% de oro · talentos de oro
+  const cat = ownPet('gato'), loot = (partyHas('goblin') ? 1.3 : 1) * (BT.night ? NIGHT_REWARD : 1) * (cat ? 1 + catBonus(cat) : 1);   // Goblin +30% · noche +30% · gato
+  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))) * (cat ? 1 + catBonus(cat) : 1));   // pasiva del Enano: +25% de oro · talentos de oro
   G.gold += gold; const lines = [`🏆 <b>¡Victoria!</b> +${xp} XP · +${gold} de oro`];
   // Experiencia según participación; los que esperan en la taberna reciben el 10%
   const team = heroes(), before = team.map(h => h.lvl), shares = splitXP(team, xp), lvMsgs = [];
@@ -568,8 +607,10 @@ async function victory() {
   for (let i = 0; i < G.roster.length; i++) if (!G.party.includes(i)) gainXP(G.roster[i], xp * .1);
   lines.push(`<div class="xpl">${team.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
   lines.push(...lvMsgs);
-  if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); }
+  if (BT.night) lines.push('🌙 <span class="mut">Bonus nocturno: +30% de experiencia y botín</span>');
+  if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
+  lines.push(...petGainXP(activePet(), xp * .5));
   // Equipo: 15% en combates normales; los jefes siempre sueltan uno (mínimo Raro)
   if (m.boss || Math.random() < .15 * loot) {
     const luck = m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400);
@@ -604,7 +645,9 @@ async function coopFinish(res) {
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
-  G.gold += gold; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter');
+  const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1));
+  G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg());
+  lines.push(...petGainXP(activePet(), xp * .5));
   const it = rollLoot(m.lvl, m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
   lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
   if (!m.dun) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }

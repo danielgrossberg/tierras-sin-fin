@@ -3,7 +3,9 @@
 import { $, esc, dirArrow, cardinal, cardinalWord, zoneOf } from './util.js';
 import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip, talList, pendingTal, pendingAdv, hasPending, clsName, talSk, talFx } from './state.js';
-import { ADV, ADV_LVL, TAL, TAL_LVLS, advOf } from './data.js';
+import { ADV, ADV_LVL, TAL, TAL_LVLS, advOf, PETS, EGG_PRICE, EGG_STEPS, PET_MAX } from './data.js';
+import { activePet, petLabel, petEffect, petNeed, addEgg } from './pets.js';
+import { isNight, clockText, darkness } from './daynight.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
@@ -46,6 +48,16 @@ export function updateHUD() {
   // 🎒 con aviso si algún héroe del grupo tiene un talento o una clase avanzada por elegir
   const pb = $('#partyBadge'); if (pb) pb.classList.toggle('hidden', !heroes().some(hasPending));
   updateCoords();
+}
+
+// ================= Día y noche (Versión 3 · Fase 3): ☀️/🌙 y tiempo para el cambio =================
+export function updateDayNight() {
+  const el = $('#dn'); if (!el) return;
+  if (!st.inGame || inDungeon()) { el.classList.add('hidden'); return; }   // en las mazmorras no hay día ni noche
+  const n = isNight(), d = darkness();
+  el.classList.remove('hidden'); el.classList.toggle('night', n);
+  el.textContent = `${n ? '🌙' : d > 0 ? '🌇' : '☀️'} ${clockText()}`;
+  el.title = n ? 'Noche: tiempo para el amanecer' : 'Día: tiempo para la noche';
 }
 
 // ================= Coordenadas (relativas a Ciudad Origen; este = X+, norte = Y+) =================
@@ -137,7 +149,7 @@ function villageRender() {
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
-  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}
+  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div></div>
@@ -160,6 +172,10 @@ function villageAct(a, k) {
     }
   }
   if (a === 'togsell') VSELL = !VSELL;
+  // Mascotas (Versión 3 · Fase 3)
+  if (a === 'buyegg' && VF.start && G.gold >= EGG_PRICE) { G.gold -= EGG_PRICE; addEgg('tienda'); save('now'); VMSG = `🥚 Compraste un huevo de mascota. Eclosiona en ${EGG_STEPS} pasos.`; }
+  if (a === 'petuse') { const q = (G.pets || []).find(x => x.id === k); if (q) { G.pet = q.id; save('now'); VMSG = `🐾 Ahora te acompaña ${PETS[q.k].e} ${PETS[q.k].n}.`; } }
+  if (a === 'petstay') { G.pet = null; save('now'); VMSG = '🐾 Tu mascota se quedó en el establo.'; }
   // ---- Misiones, bote y portal (fase C) ----
   if (a === 'qacc') {
     const q = boardQuest(VF, +k);
@@ -201,10 +217,19 @@ function boardHTML(f) {
   for (let s = 0; s < SLOTS_PER_BOARD; s++) {
     const q = boardQuest(f, s); if (!q) continue;
     const on = isActive(q.id);
-    rows += `<div class="qrow"><div class="qi">${QICON[q.type]}</div><div class="qt"><b>${q.title}</b><small class="mut">${QNAME[q.type]} · Nv ${q.lvl} · ${q.desc}</small><small class="goldt">${rewardText(q.reward)}</small></div>
+    rows += `<div class="qrow"><div class="qi">${QICON[q.type]}</div><div class="qt"><b>${q.title}</b><small class="mut">${QNAME[q.type]} · Nv ${q.lvl} · ${q.desc}</small><small class="goldt">${rewardText(q.reward, q.type)}</small></div>
       ${on ? '<span class="qon">✅ En curso</span>' : `<button class="btn sm" data-a="qacc" data-k="${s}" ${n >= MAX_ACTIVE ? 'disabled' : ''}>Aceptar</button>`}</div>`;
   }
   return `<div class="sec"><h3>📜 Tablón de misiones <small class="mut">${n}/${MAX_ACTIVE} activas</small></h3>${rows}</div>`;
+}
+// ---- Establo y huevos (Versión 3 · Fase 3) ----
+function stableHTML(f) {
+  const pets = G.pets || [], eggs = G.eggs || [], act = activePet();
+  const rows = pets.map(q => `<div class="shop petrow ${act && act.id === q.id ? 'on' : ''}"><span class="ishop"><b>${petLabel(q)}${act && act.id === q.id ? ' · te acompaña' : ''}</b><small class="mut">${petEffect(q)}${q.lvl < PET_MAX ? ` · XP ${q.xp}/${petNeed(q.lvl)}` : ' · nivel máximo'}</small></span>${act && act.id === q.id ? '<button class="btn sm" data-a="petstay">Dejar aquí</button>' : `<button class="btn sm gold" data-a="petuse" data-k="${q.id}">Llevar</button>`}</div>`).join('');
+  return `<div class="sec"><h3>🐾 Establo <small class="mut">1 mascota te acompaña; las demás esperan aquí</small></h3>
+    ${f.start ? `<div class="shop"><span>🥚 <b>Huevo de mascota</b> <small class="mut">eclosiona en ${EGG_STEPS} pasos; la mascota es al azar</small></span><button class="btn sm" data-a="buyegg" ${G.gold < EGG_PRICE ? 'disabled' : ''}>Comprar · ${EGG_PRICE} oro</button></div>` : ''}
+    ${eggs.map(e => `<div class="shop"><span>🥚 Huevo <small class="mut">faltan ${e.left} pasos</small></span><span class="eggbar"><i style="width:${Math.round(100 * (1 - e.left / EGG_STEPS))}%"></i></span></div>`).join('')}
+    ${rows || `<p class="mut small" style="margin:4px 0 0">Aún no tienes mascotas. Los huevos 🥚 salen de los jefes y de las misiones de jefe y de mazmorra${f.start ? ', o cómpralos aquí' : ', y se compran en Ciudad Origen'}.</p>`}</div>`;
 }
 // ---- Muelle (solo aldeas costeras) ----
 function dockHTML(f) {
@@ -414,13 +439,15 @@ function questsTab() {
   if (!list.length) return `<p class="mut small" style="margin-top:10px">No tienes misiones. Acepta hasta ${MAX_ACTIVE} en el 📜 tablón de cualquier aldea.</p>`;
   return `<div class="qlog">${list.map(q => { const on = G.qtrack === q.id; return `<div class="qcard ${on ? 'on' : ''}">
     <div class="qhead"><span class="qi">${QICON[q.type]}</span><div class="qt"><b>${q.title}</b><small class="mut">${QNAME[q.type]} · de ${q.from.name} · Nv ${q.lvl}</small></div><span class="qprog">${progressText(q)}</span></div>
-    <small class="goldt">${rewardText(q.reward)}</small>
+    <small class="goldt">${rewardText(q.reward, q.type)}</small>
     <div class="qbtns"><button class="btn sm ${on ? 'gold' : ''}" data-a="qtrack" data-k="${q.id}" ${on ? 'disabled' : ''}>${on ? '🎯 Siguiendo' : '🎯 Seguir'}</button><button class="btn sm" data-a="qdrop" data-k="${q.id}">${QD === q.id ? '⚠️ ¿Abandonar? Toca otra vez' : 'Abandonar'}</button></div></div>`; }).join('')}</div>
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
   const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['quests', `📜 Misiones <small>${active().length}</small>`]];
+  const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
+  <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
   h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');

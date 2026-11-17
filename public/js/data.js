@@ -293,6 +293,10 @@ export const EN = {
   esqueleto: { n: 'Esqueleto', e: '💀', hp: 26, atk: 13, def: 5, spd: 7, xp: 14, g: 12, undead: 1 },
   demonio: { n: 'Demonio', e: '👹', hp: 40, atk: 15, def: 6, mag: 10, spd: 8, xp: 20, g: 18, sk: ['fuego'], min: 4 },
   fantasma: { n: 'Fantasma', e: '👻', hp: 22, atk: 6, def: 2, mag: 13, spd: 9, xp: 13, g: 10, sk: ['drenar'], undead: 1, magic: 1 },
+  // Versión 3 · Fase 3: monstruos nocturnos (solo aparecen de noche)
+  vampiro: { n: 'Murciélago Vampiro', e: '🦇', hp: 18, atk: 10, def: 3, mag: 9, spd: 14, xp: 11, g: 9, sk: ['drenar'], tint: 'hue-rotate(320deg) saturate(2.2) brightness(.9)' },
+  lobosombra: { n: 'Lobo de Sombra', e: '🐺', hp: 28, atk: 13, def: 4, spd: 11, xp: 13, g: 9, sk: ['brutal'], tint: 'brightness(.45) contrast(1.4) drop-shadow(0 0 6px #7c3aed)' },
+  espectro2: { n: 'Espectro Errante', e: '👻', hp: 24, atk: 7, def: 3, mag: 13, spd: 9, xp: 14, g: 11, sk: ['drenar'], undead: 1, magic: 1, tint: 'hue-rotate(200deg) saturate(2) opacity(.85)' },
   // Versión 3 · Fase 1: monstruos de cueva
   golem: { n: 'Gólem', e: '🗿', hp: 40, atk: 12, def: 11, spd: 2, xp: 16, g: 12, sk: ['brutal'], min: 2 },
   minero: { n: 'Minero Fantasma', e: '👻', hp: 22, atk: 10, def: 3, mag: 9, spd: 8, xp: 12, g: 14, sk: ['drenar'], undead: 1, tint: 'sepia(1) saturate(2.5) brightness(1.1)' },
@@ -308,6 +312,20 @@ export const EN = {
   reinaarana: { n: 'Reina Araña', e: '🕷️', hp: 100, atk: 15, def: 6, spd: 9, xp: 100, g: 120, sk: ['veneno', 'brutal'], boss: 1, tint: 'hue-rotate(300deg) saturate(2) drop-shadow(0 0 10px #ff3060)' },
   golemrey: { n: 'Gólem Ancestral', e: '🗿', hp: 120, atk: 16, def: 10, spd: 3, xp: 105, g: 130, sk: ['brutal'], boss: 1, tint: 'sepia(.6) saturate(2) drop-shadow(0 0 10px #f2c14e)' },
 };
+// ================= Noche y mascotas (Versión 3 · Fase 3) =================
+export const NIGHT_POOL = ['vampiro', 'lobosombra', 'espectro2'];
+// Mascotas: el efecto mejora con el nivel (máx. 20). El búho no pelea: revela cosas en el minimapa.
+export const PETS = {
+  lobo: { n: 'Lobo', e: '🐺', d: 'Ataca a un enemigo al final de cada ronda' },
+  buho: { n: 'Búho', e: '🦉', d: 'Revela trampas y cofres cercanos en el minimapa' },
+  gato: { n: 'Gato', e: '🐈', d: '+15% de botín y oro' },
+  dragon: { n: 'Dragoncito', e: '🐲', d: 'Pequeño daño de fuego a todos cada 2 rondas' },
+  tortuga: { n: 'Tortuga', e: '🐢', d: 'Escudo al héroe con menos vida una vez por combate' },
+  zorro: { n: 'Zorro', e: '🦊', d: '+10% de probabilidad de huir y de esquivar' },
+};
+export const PET_EMOJIS = Object.values(PETS).map(p => p.e);
+export const EGG_STEPS = 300, EGG_PRICE = 800, PET_MAX = 20;
+
 // ================= Mazmorras (Versión 3 · Fase 1) =================
 // Tipo de cueva: monstruos, jefe, nombres ({V} = nombre inventado) y colores del piso
 export const CAVE = {

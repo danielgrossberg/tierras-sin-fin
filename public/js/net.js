@@ -4,6 +4,7 @@
 import { esc, unesc, dirArrow, MATE_COLORS } from './util.js';
 import { QUICK, PIN_TTL } from './data.js';
 import { P } from './state.js';
+import { setServerTime } from './daynight.js';
 
 export const net = {
   socket: null,
@@ -67,7 +68,7 @@ async function onConnect() {
   const r = await ask('room:join', { code: net.code, name: net.name, pin: net.pin || undefined, rejoin: true });
   if (r.ok) {
     net.db = !!r.db;
-    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); lastKey = ''; setStatus('on');
+    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); setServerTime(r.now); lastKey = ''; setStatus('on');
     if (wasWaiting) fire('feed', '🟢 Conexión recuperada');
     if (owed) flushSave();   // subir lo que no se alcanzó a guardar mientras no había conexión
   } else { setStatus('wait'); fire('feed', '⚠️ ' + esc(r.error || 'No se pudo volver a la sala')); }
@@ -80,7 +81,7 @@ export async function joinRoom(code, name, rejoin, pin) {
     net.code = code; net.name = r.name || name; net.pin = pin || null; net.joined = true; net.replaced = false;
     net.db = !!r.db; net.serverSave = r.save || null;
     net.others.clear(); net.pins.clear(); applyPlayers(r.players || []); applyPins(r.pins || []);
-    net.chat = []; setChat(r.chat);
+    net.chat = []; setChat(r.chat); setServerTime(r.now);
     lastKey = ''; setStatus('on');
   }
   return r;

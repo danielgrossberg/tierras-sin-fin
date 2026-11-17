@@ -2,7 +2,8 @@
 // (que sale del código de sala), así que cada jugador genera el mismo mundo en su celular.
 'use strict';
 import { hash, hashI, mulberry, fbm, pick } from './util.js';
-import { CH, B, blockT, EN, POOL, BOSS, SYL1, SYL2, VSUF, RESPAWN, CAVE } from './data.js';
+import { CH, B, blockT, EN, POOL, BOSS, SYL1, SYL2, VSUF, RESPAWN, CAVE, NIGHT_POOL } from './data.js';
+import { isNight } from './daynight.js';
 import { st, G, P, START } from './state.js';
 
 export const chunks = new Map(), feats = new Map(), monsters = new Map(), mpos = new Map();
@@ -106,6 +107,18 @@ function makeChunk(cx, cy) {
       break;
     }
   }
+  // Monstruos nocturnos (Versión 3 · Fase 3): un grupo en ~45% de los chunks, solo de noche. Azar propio.
+  {
+    const rn = mulberry(hashI(cx, cy, seed + 5151)); c.night = null;
+    if (rn() < .45) for (let k = 0; k < 20; k++) {
+      const i = Math.floor(rn() * CH), j = Math.floor(rn() * CH), t = c.tiles[j * CH + i], x = cx * CH + i, y = cy * CH + j, d = Math.hypot(x - START.x, y - START.y);
+      if (blockT(t) || d < 12 || feats.has(x + ',' + y) || c.spawns.some(s => s.x === x && s.y === y)) continue;
+      const lvl = Math.max(1, Math.floor(1 + d / 14 + rn() * 1.5)), g = [];
+      for (let q = 0, n = 1 + Math.floor(rn() * (lvl >= 4 ? 3 : 2)); q < n; q++) g.push(pick(NIGHT_POOL, rn));
+      c.night = { id: 'n@' + x + ',' + y, x, y, biome: t.b, lvl, group: g, boss: false, night: true };
+      break;
+    }
+  }
   // Lugares creados por misiones (Fase C) que no existían en el mundo: se guardan en G.extraFeats
   if (G.extraFeats) for (const f of G.extraFeats) {
     if (Math.floor(f.x / CH) === cx && Math.floor(f.y / CH) === cy && !feats.has(f.x + ',' + f.y)) addFeat(f.type, f.x, f.y, f.name ? { name: f.name } : null);
@@ -114,7 +127,7 @@ function makeChunk(cx, cy) {
 }
 // Los monstruos son individuales por jugador en la Etapa 1 (G.defeated es local)
 function spawnChunk(c) {
-  for (const s of c.spawns) {
+  for (const s of (isNight() && c.night ? [...c.spawns, c.night] : c.spawns)) {
     if (monsters.has(s.id)) continue;
     const dt = G.defeated[s.id];
     if (dt !== undefined) { if (s.boss || G.steps - dt < RESPAWN) continue; delete G.defeated[s.id]; }
@@ -123,6 +136,8 @@ function spawnChunk(c) {
     monsters.set(m.id, m); mpos.set(k, m);
   }
 }
+// Al amanecer se van los monstruos nocturnos
+export function removeNightMonsters() { for (const m of [...monsters.values()]) if (m.night) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); } }
 export function spawnNearby() { const pcx = Math.floor(P.x / CH), pcy = Math.floor(P.y / CH); for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) spawnChunk(getChunk(pcx + i, pcy + j)); }
 export function visitAround() { const pcx = Math.floor(P.x / CH), pcy = Math.floor(P.y / CH); for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) G.visited[ckey(pcx + i, pcy + j)] = 1; }
 export function findStart() {

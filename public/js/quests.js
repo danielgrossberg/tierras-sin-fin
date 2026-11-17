@@ -8,6 +8,7 @@ import { CH, EN, POOL } from './data.js';
 import { G, st, P, heroes, gainXP } from './state.js';
 import { getChunk, feats, tileAt, isBlocked, dangerAt, addFeat, vName } from './world.js';
 import { rollLoot, addItem, itemLabel } from './items.js';
+import { addEgg } from './pets.js';
 
 export const MAX_ACTIVE = 5;
 export const SLOTS_PER_BOARD = 3;
@@ -122,7 +123,7 @@ export function accept(q) {
 export function abandon(id) { G.quests = active().filter(q => q.id !== id); if (G.qtrack === id) G.qtrack = active()[0] ? active()[0].id : null; }
 export function track(id) { G.qtrack = id; }
 export const progressText = q => q.type === 'hunt' ? `${q.have}/${q.need}` : q.target ? `${Math.round(Math.hypot(q.target.x - P.x, q.target.y - P.y))} c` : '';
-export const rewardText = r => `💰 ${r.gold} · ⭐ ${r.xp} XP${r.gear >= 1 ? ' · 🎁 equipo' : r.gear ? ` · ${Math.round(r.gear * 100)}% equipo` : ''}`;
+export const rewardText = (r, type) => `💰 ${r.gold} · ⭐ ${r.xp} XP${r.gear >= 1 ? ' · 🎁 equipo' : r.gear ? ` · ${Math.round(r.gear * 100)}% equipo` : ''}${type === 'boss' || type === 'dungeon' ? ' · 30% 🥚' : ''}`;
 
 // Completa una misión: recompensa, renueva el puesto del tablón y devuelve líneas para mostrar
 function complete(q) {
@@ -134,7 +135,9 @@ function complete(q) {
   for (const h of party) lines.push(...gainXP(h, each));
   let gear = '';
   if (Math.random() < q.reward.gear) { const it = rollLoot(q.lvl, 0, q.type === 'boss' || q.type === 'dungeon' ? 'raro' : 'comun'); gear = addItem(it) ? ' · ' + itemLabel(it) : ' · (inventario lleno)'; }
-  return [`📜 <b>¡Misión cumplida!</b> ${q.title}<br><span style="font-size:14px">+${q.reward.gold} oro · +${q.reward.xp} XP${gear}</span>`, ...lines];
+  // Mascotas: las misiones de jefe y de mazmorra pueden dar un huevo (30%)
+  let egg = ''; if ((q.type === 'boss' || q.type === 'dungeon') && Math.random() < .3) { addEgg('misión'); egg = ' · 🥚 huevo de mascota'; }
+  return [`📜 <b>¡Misión cumplida!</b> ${q.title}<br><span style="font-size:14px">+${q.reward.gold} oro · +${q.reward.xp} XP${gear}${egg}</span>`, ...lines];
 }
 // Tras ganar un combate: avanza las cacerías y completa los jefes
 export function onVictory(enemies, m) {

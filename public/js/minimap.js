@@ -8,7 +8,8 @@ import { feats, monsters, getChunk, ckey, nearestVillage } from './world.js';
 import { net, mateColor } from './net.js';
 import { tracked } from './quests.js';
 import { mateOnMini } from './prefs.js';
-import { D, DW, DH, inDungeon, isSeen, isVisible, dunProg, caveDone } from './dungeon.js';
+import { D, DW, DH, inDungeon, isSeen, isVisible, dunProg, caveDone, owlSees } from './dungeon.js';
+import { activePet, owlRadius } from './pets.js';
 import { CAVE } from './data.js';
 
 // Dentro de una mazmorra: el piso entero, solo lo recorrido (lo que ves ahora más claro)
@@ -29,7 +30,7 @@ function paintDungeon(c, opts) {
   const s = Math.max(7 * u, px * 1.6);
   for (const p of [fl.up, fl.down].filter(Boolean)) if (isSeen(p.x, p.y)) glyph('🪜', p, s);
   if (fl.exit && pr.done && isSeen(fl.exit.x, fl.exit.y)) glyph('🌀', fl.exit, s);
-  for (const ch of fl.chests) if (!pr.ch[ch.id] && isSeen(ch.x, ch.y)) glyph('📦', ch, s * .9);
+  for (const ch of fl.chests) if (!pr.ch[ch.id] && (isSeen(ch.x, ch.y) || owlSees(ch.x, ch.y))) glyph('📦', ch, s * .9);   // 🦉 el búho los revela
   for (const t of fl.traps) if ((D.trapSeen.get(t.id) || D.trapGone.has(t.id)) && isSeen(t.x, t.y)) glyph('⚠️', t, s * .8);
   for (const m of D.mons.values()) if (m.boss ? isSeen(m.x, m.y) : isVisible(m.x, m.y)) { if (m.boss) glyph('👑', m, s); else at(m, 2.5 * u, '#ff4d4d'); }
   at({ x: D.x, y: D.y }, 4 * u, '#fff');
@@ -83,6 +84,8 @@ export function paintMap(c, R, opts = {}) {
     if (near && f.id === near.id) { const s = 5 * u; g.fillStyle = '#ffd84d'; g.fillRect(p[0] - s, p[1] - s, s * 2, s * 2); g.lineWidth = 2 * u; g.strokeStyle = '#fff'; g.strokeRect(p[0] - s, p[1] - s, s * 2, s * 2); if (opts.labels) text(f.name, [p[0], p[1] - 11 * u], 10 * u, '#ffe6a0'); }
     else { const s = 3 * u; g.fillStyle = 'rgba(242,193,78,.55)'; g.fillRect(p[0] - s, p[1] - s, s * 2, s * 2); }
   }
+  // ---- 🦉 Búho: cofres cercanos (aunque no los hayas visto)
+  { const o = activePet(); if (o && o.k === 'buho') { const r = owlRadius(o); for (const f of feats.values()) if (f.type === 'chest' && !G.opened[f.id] && Math.hypot(f.x - P.x, f.y - P.y) <= r) { const p = to(f.x, f.y); if (inside(p)) glyph('📦', p, 8 * u); } } }
   // ---- Jefes conocidos (vistos en zonas exploradas o marcados por una misión)
   const bosses = new Map();
   for (const mo of monsters.values()) if (mo.boss && vis(mo.x, mo.y)) bosses.set(mo.id, mo);
