@@ -14,6 +14,9 @@ import { save } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onVictory } from './quests.js';
 import { createTomb } from './tomb.js';
+import { heroFx } from './state.js';
+import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
+import { ebarHTML, setBar, bossBar } from './hpbar.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -80,7 +83,8 @@ function openHostLobby() {
       if (!r.ok) { toast(r.error || 'Nadie se unió'); return; }
       stopLobbyTick(); closeModal();
       const guests = r.lobby.guests;
-      const remotes = guests.map((g, i) => Object.assign({}, g.hero, { id: 'r' + i + '_' + g.hero.id, isHero: true, remote: true, owner: g.name, buffs: {}, xp: 0, defending: false, stun: 0, tmp: 0, trap: 0, bonus: g.hero.bonus || {}, equip: g.hero.equip || {} }));
+      // Nombre y emoji llegan desde la red: el servidor ya los limpia; aquí se vuelve a quitar cualquier <>&"
+      const remotes = guests.map((g, i) => Object.assign({}, g.hero, { id: 'r' + i + '_' + g.hero.id, isHero: true, remote: true, owner: g.name, name: String(g.hero.name || 'Héroe').replace(/[<>&"']/g, '').slice(0, 16), e: CL[g.hero.cls] && Object.values(CL).some(c => c.e === g.hero.e) ? g.hero.e : (CL[g.hero.cls] ? CL[g.hero.cls].e : '🙂'), buffs: {}, xp: 0, defending: false, stun: 0, tmp: 0, trap: 0, bonus: g.hero.bonus || {}, equip: g.hero.equip || {} }));
       const ctl = { id: H.id, me: st.name, gone: new Set(), waiters: new Map(),
         send: state => coopSend('battle:state', state),
         end: res => { coopSend('battle:end', res); coop.host = null; },
@@ -150,7 +154,7 @@ function guestStart(d) {
   st.busy = true;
   P.x = P.px = g.boss.x; P.y = P.py = g.boss.y + 1; spawnNearby(); visitAround();
   $('#battle').style.background = BG.GRASS; $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
-  $('#b-field').innerHTML = ''; $('#b-party').innerHTML = ''; $('#b-menu').innerHTML = '<div class="res">⚔️ ¡Comienza el combate en equipo!</div>'; $('#b-log').textContent = '';
+  $('#b-field').innerHTML = ''; $('#b-party').innerHTML = ''; $('#b-menu').innerHTML = '<div class="res">⚔️ ¡Comienza el combate en equipo!</div>'; $('#b-log').textContent = ''; bossBar(null);
   updateHUD();
 }
 // Dibuja el estado que manda el anfitrión
@@ -161,12 +165,14 @@ function guestState(s) {
   g.last = s;
   if (!g.built || g.nE !== s.enemies.length || g.nP !== s.party.length) {
     $('#battle').style.background = BG[s.bg] || BG.GRASS;
-    $('#b-field').innerHTML = s.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="g-${e.id}"><span class="sp emoji" style="filter:${e.tint || ''} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div><div class="bar"><i></i></div><div class="etags"></div></div>`).join('');
-    $('#b-party').innerHTML = s.party.map(h => `<div class="hcard" id="g-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${h.e}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv ${h.lvl} · ${esc(h.owner)}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
+    $('#b-field').innerHTML = s.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="g-${esc(e.id)}"><span class="sp emoji" style="filter:${esc(e.tint || '')} drop-shadow(0 8px 6px #0007)">${esc(e.e)}</span><div class="en">${e.boss ? '👑 ' : ''}${esc(e.name)} <span class="lv">Nv ${e.lvl | 0}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('');
+    bossBar(null);
+    $('#b-party').innerHTML = s.party.map(h => `<div class="hcard" id="g-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${esc(h.e)}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv ${h.lvl | 0} · ${esc(h.owner)}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
     g.built = true; g.nE = s.enemies.length; g.nP = s.party.length;
     const mine = s.party.find(h => h.owner === st.name); g.myId = mine ? mine.id : null;
   }
-  for (const e of s.enemies) { const el = gel(e.id); if (!el) continue; el.querySelector('.bar>i').style.width = (100 * e.hp / e.mhp) + '%'; el.querySelector('.etags').textContent = e.tags; el.classList.toggle('dead', e.hp <= 0); }
+  for (const e of s.enemies) { const el = gel(e.id); if (!el) continue; setBar(el.querySelector('.ebar'), e.hp, e.mhp); el.querySelector('.etags').textContent = e.tags; el.classList.toggle('dead', e.hp <= 0); }
+  const boss = s.enemies.find(e => e.boss); if (boss) bossBar(boss);
   for (const h of s.party) {
     const el = gel(h.id); if (!el) continue;
     el.classList.toggle('dead', h.hp <= 0); el.classList.toggle('active', !!(s.turn && s.turn.id === h.id)); el.classList.toggle('mine', h.owner === st.name);
@@ -205,23 +211,42 @@ function guestMenu(stage, data) {
     if (kind === 'item') G.items[key] = Math.max(0, (G.items[key] || 0) - 1);
     m.innerHTML = '<div class="res">✅ Acción enviada. Esperando al anfitrión…</div>';
   };
-  const targets = (kind, then) => {
+  // Estimados (Fase 0.5): con los stats de mi héroe, sus mejoras activas y la defensa de los enemigos que manda el anfitrión
+  const A = { atk: S(h, 'atk') * atkMulB(me.buffs), atkRaw: S(h, 'atk'), mag: S(h, 'mag'), hp: me.hp, mhp: me.mhp, critMul: heroFx(h, 'umbra') ? 2.5 : 1.75 };
+  const tOf = e => ({ def: Number(e.def) || 0, hp: e.hp, mhp: e.mhp, curse: !!e.cu, undead: !!e.ud, boss: !!e.boss });
+  const est = k => estimate(k, A, s.enemies.filter(e => e.hp > 0).map(tOf));
+  const hvOf = x => ({ hp: x.hp, mhp: x.mhp, mp: x.mp, mmp: x.mmp, poison: x.poison || 0 });
+  const note = n => n ? `<span class="bnote2">${n}</span>` : '';
+  const targets = (kind, then, ctx) => {
     const list = kind === 'enemy' ? s.enemies.filter(e => e.hp > 0) : kind === 'ally' ? s.party.filter(x => x.hp > 0) : kind === 'dead' ? s.party.filter(x => x.hp <= 0) : [];
     if (!list.length) { guestMenu('main'); toast('No hay objetivos válidos'); return; }
-    m.innerHTML = ''; for (const x of list) btn(`${x.e} ${esc(x.name)}`, `PV ${x.hp}/${x.mhp}${x.owner ? ' · ' + esc(x.owner) : ''}`, () => then(x.id));
+    m.innerHTML = '';
+    for (const x of list) {
+      const sub = kind === 'enemy' ? (ctx && ctx.enemy ? ctx.enemy(tOf(x)) : `PV ${x.hp}/${x.mhp}`) : kind === 'dead' ? (ctx && ctx.revive ? ctx.revive(hvOf(x)) : `PV 0/${x.mhp}`) : (ctx && ctx.ally ? ctx.ally(hvOf(x)) : `PV ${x.hp}/${x.mhp}`);
+      btn(`${esc(x.e)} ${esc(x.name)}`, sub + (x.owner ? ' · ' + esc(x.owner) : ''), () => then(x.id));
+    }
     btn('↩ Volver', '', () => guestMenu('main'), false, true);
   };
+  // Objetos (Fase 0.4): tarjetas con PV/PM de todos los héroes del combate y vista previa
+  const itemPick = k => {
+    const rows = itemTargets(k, s.party.map(x => ({ x0: x, e: esc(x.e), name: esc(x.name), sub: esc(x.owner) + ' · Nv ' + (x.lvl | 0), H: hvOf(x) })));
+    if (!rows.some(r => !r.dis)) { toast(k === 'pluma' ? 'No hay héroes caídos' : 'Nadie lo necesita ahora'); return; }
+    m.innerHTML = '';
+    for (const r of rows) { const b = document.createElement('button'); b.className = 'btn hpk' + (r.best ? ' best' : ''); b.innerHTML = heroCardHTML(r.x, r.prev, r.dis, r.best); if (r.dis) b.disabled = true; b.onclick = () => send('item', k, r.x.x0.id); m.appendChild(b); }
+    btn('↩ Volver', '', () => guestMenu('item'), false, true);
+  };
   if (stage === 'main') {
-    btn(me.bear ? '🐻 Zarpazo' : '⚔️ Atacar', '', () => targets('enemy', id => send('atk', null, id)));
+    const ea = est('atk');
+    btn(me.bear ? '🐻 Zarpazo' : '⚔️ Atacar', ea.line + note(ea.note), () => targets('enemy', id => send('atk', null, id), ea));
     btn('✨ Habilidades', me.bear ? 'en forma de oso' : '', () => guestMenu('skill'), me.bear);
     btn('🎒 Objetos', 'tus objetos', () => guestMenu('item'));
-    btn('🛡️ Defender', '', () => send('def'));
+    btn('🛡️ Defender', 'Recibe la mitad de daño', () => send('def'));
   } else if (stage === 'skill') {
-    for (const k of learned(h)) { const c = skillCost(h, k), sk = SK[k];
-      btn(sk.n, `${c} PM · ${sk.d}`, () => { if (['enemy', 'ally', 'dead'].includes(sk.t)) targets(sk.t, id => send('skill', k, id)); else send('skill', k); }, me.mp < c || (k === 'cerveza' && g.beer)); }
+    for (const k of learned(h)) { const c = skillCost(h, k), sk = SK[k], e = est(k);
+      btn(sk.n, `${c} PM · ${e.line || sk.d}${note(e.note)}`, () => { if (['enemy', 'ally', 'dead'].includes(sk.t)) targets(sk.t, id => send('skill', k, id), e); else send('skill', k); }, me.mp < c || (k === 'cerveza' && g.beer)); }
     btn('↩ Volver', '', () => guestMenu('main'), false, true);
   } else if (stage === 'item') {
-    for (const k of Object.keys(IT)) btn(`${IT[k].e} ${IT[k].n} ×${G.items[k] || 0}`, IT[k].d, () => targets(IT[k].t, id => send('item', k, id)), !G.items[k]);
+    for (const k of Object.keys(IT)) btn(`${IT[k].e} ${IT[k].n} ×${G.items[k] || 0}`, IT[k].d, () => itemPick(k), !G.items[k]);
     btn('↩ Volver', '', () => guestMenu('main'), false, true);
   }
 }
@@ -259,7 +284,7 @@ async function guestEnd(d) {
   $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
   const b = document.createElement('button'); b.className = 'btn gold full'; b.textContent = 'Continuar';
   b.onclick = () => {
-    $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle');
+    $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); bossBar(null);
     if (lost) { P.x = P.px = START.x; P.y = P.py = START.y; } else { P.x = P.px = g.prev.x; P.y = P.py = g.prev.y; }   // vuelve a su posición
     spawnNearby(); visitAround(); st.busy = false; updateHUD(); save('now');
   };

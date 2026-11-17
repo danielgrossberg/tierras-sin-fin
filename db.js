@@ -34,7 +34,19 @@ CREATE TABLE IF NOT EXISTS players (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS players_room_name ON players (room_code, lower(name));
+-- Versión 3 · Fase 0.2: chat de la sala (se guardan los últimos 100 mensajes por sala)
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id BIGSERIAL PRIMARY KEY,
+  room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'msg',
+  name TEXT,
+  emoji TEXT,
+  text TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chat_room_id ON chat_messages (room_code, id DESC);
 `;
+export const CHAT_KEEP = 100;
 
 // Conecta y crea las tablas. Si falla, reintenta cada minuto sin tumbar el servidor.
 export async function init(log = console.log) {
@@ -87,6 +99,21 @@ export async function members(code) {
   const r = await pool.query('SELECT name FROM players WHERE room_code = $1 ORDER BY id', [code]);
   return r.rows.map(x => x.name);
 }
+// ================= Chat (últimos 100 mensajes por sala) =================
+export async function chatHistory(code) {
+  const r = await pool.query(
+    `SELECT id, kind, name, emoji, text, (extract(epoch from created_at) * 1000)::bigint AS t
+     FROM chat_messages WHERE room_code = $1 ORDER BY id DESC LIMIT ${CHAT_KEEP}`, [code]);
+  return r.rows.reverse().map(x => ({ id: 'd' + x.id, kind: x.kind, name: x.name, e: x.emoji, text: x.text, t: Number(x.t) }));
+}
+export async function chatAdd(code, m) {
+  await pool.query('INSERT INTO chat_messages (room_code, kind, name, emoji, text) VALUES ($1, $2, $3, $4, $5)', [code, m.kind, m.name || null, m.e || null, m.text]);
+  // Deja solo los últimos 100 de esta sala
+  await pool.query(
+    `DELETE FROM chat_messages WHERE room_code = $1 AND id < (
+       SELECT min(id) FROM (SELECT id FROM chat_messages WHERE room_code = $1 ORDER BY id DESC LIMIT ${CHAT_KEEP}) t)`, [code]);
+}
+
 // Solo guarda si la partida que llega no es más vieja que la guardada (evita que un celular viejo pise a uno nuevo)
 export async function saveData(id, json, savedAt) {
   const r = await pool.query(

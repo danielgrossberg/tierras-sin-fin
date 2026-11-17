@@ -59,6 +59,15 @@ export const dirArrow = (dx, dy) => (dx || dy) ? ARW[(Math.round(Math.atan2(dy, 
 // Dirección cardinal con norte = arriba en la pantalla. dx: este positivo · dn: norte positivo
 const CARD = ['E', 'NE', 'N', 'NO', 'O', 'SO', 'S', 'SE'];
 export const cardinal = (dx, dn) => (dx || dn) ? CARD[(Math.round(Math.atan2(dn, dx) / (Math.PI / 4)) + 8) % 8] : '·';
+const CARDW = ['este', 'noreste', 'norte', 'noroeste', 'oeste', 'suroeste', 'sur', 'sureste'];
+export const cardinalWord = (dx, dn) => (dx || dn) ? CARDW[(Math.round(Math.atan2(dn, dx) / (Math.PI / 4)) + 8) % 8] : '';
+// Zona del portal (Versión 3 · Fase 0.1): 4 sectores de 90° centrados en cada punto cardinal.
+// Las diagonales exactas van al norte o al sur. dx: este positivo · dn: norte positivo
+export const zoneOf = (dx, dn) => (Math.abs(dn) >= Math.abs(dx) ? (dn >= 0 ? 'N' : 'S') : (dx > 0 ? 'E' : 'O'));
+// El servidor manda el chat con el HTML escapado; aquí se vuelve al texto original para usarlo
+// SOLO con textContent o fillText (nunca con innerHTML).
+const UNESC = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+export const unesc = s => String(s == null ? '' : s).replace(/&(amp|lt|gt|quot|#39);/g, m => UNESC[m]);
 
 // Colores de compañeros (anillo, nombre y flecha). La asignación la hace net.mateColor para que no se repitan.
 export const MATE_COLORS = ['#4da3ff', '#46c37b', '#ff7eb6', '#b36bff', '#ff9a3d', '#2ed3c6'];

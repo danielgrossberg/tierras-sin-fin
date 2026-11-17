@@ -206,6 +206,48 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
 - **Desconexiones:** si se va el anfitrión, el combate se cancela para todos **sin penalización**; si se va un invitado,
   su héroe se defiende solo y el combate sigue.
 
+## Versión 3
+
+### Fase 0 (lista): portal, chat, visibilidad, objetos y combate más claro
+- **🌀 Portal rediseñado** (en cualquier aldea → "Abrir portal"): **Ciudad Origen** arriba en una tarjeta dorada;
+  debajo las **⭐ favoritas** (se marcan con la estrella y se guardan en la partida) y las aldeas agrupadas en
+  **⬆️ Norte, ⬇️ Sur, ➡️ Este y ⬅️ Oeste** con su cantidad. La zona se calcula **respecto a Ciudad Origen**
+  (4 sectores de 90°; las diagonales exactas van al norte o al sur). Al abrir el portal se despliega la zona donde
+  estás (en Ciudad Origen, la que tiene más aldeas); al tocar otra, las demás se pliegan. Cada fila: nombre (con "…"),
+  coordenadas, "18 casillas al sur de ti", costo y **Viajar** siempre a la derecha; ordenadas de la más cercana a la
+  más lejana. La aldea donde estás dice "📍 Estás aquí". **🗺️ Ver en mapa** muestra las aldeas visitadas; al tocar
+  una aparece su tarjeta con Viajar. El viaje sigue costando 5 × nivel promedio.
+- **💬 Chat de la sala** (botón 💬, tecla C): panel con pestañas **💬 Chat / 👥 Sala** (la sala tiene los jugadores
+  y 📍 Marcar aquí). En el celular sube desde abajo (mitad de la pantalla) y se acomoda sobre el teclado. Cada mensaje
+  muestra el emoji del líder, el nombre en su color, la hora y el texto; los mensajes del sistema (entradas, salidas,
+  subidas de nivel, jefes derrotados, caídas e invitaciones a jefes) van en gris. ⚡ abre los mensajes rápidos, que
+  también quedan en el chat. Globito rojo con los no leídos y **globo de 5 s sobre el personaje** de quien escribe.
+  **🔕 Silenciar** oculta los globos y el contador (los mensajes siguen llegando); se recuerda en el dispositivo.
+  - **Seguridad:** máx. **200 caracteres**, sin mensajes vacíos y **1 mensaje por segundo** por jugador (validado en
+    el servidor). El servidor guarda y envía el texto con el HTML escapado y el cliente lo muestra solo con
+    `textContent` (nunca `innerHTML`).
+  - **Historial:** los últimos **100 mensajes por sala** se guardan en la tabla `chat_messages` (si hay base de datos)
+    y se envían al entrar o reconectar. Sin base de datos viven en la memoria del servidor.
+- **👁️ Ver a los demás jugadores** (botón abajo, 3 modos con aviso): 👁️ Mostrar todo · 🗺️ Solo en el minimapa ·
+  🚫 Ocultar todo. Siempre siguen el chat, el panel de jugadores, las invitaciones a jefes, tu tumba, Ciudad Origen y
+  la aldea más cercana; en un combate en equipo se ven los compañeros de ese combate. Se recuerda en el dispositivo.
+- **🧪 Objetos más fáciles:** Poción, Éter y Pluma Fénix (en combate, fuera de combate y como invitado en un jefe)
+  abren tarjetas del grupo con emoji, nombre, clase, **barras y números de PV/PM** y la vista previa del efecto
+  ("🧪 +40 PV → 63/80"). El que más lo necesita aparece resaltado; "Vida llena", "Magia llena" y los caídos quedan
+  desactivados con su motivo; la Pluma Fénix muestra solo a los caídos. Curar y Revivir fuera de combate usan las
+  mismas tarjetas.
+- **⚔️ Estimados en los botones del combate** (`public/js/estimate.js`, mismas fórmulas que `battle.js` sin el azar):
+  "⚔️ Daño ≈ 18–22", "💥 ≈ 12–15 a cada enemigo", "🏹 2 × ≈ 9–11", "💚 Cura ≈ 35", veneno "☠️ +6 por turno durante
+  3 turnos" y efectos ("+40% ATQ · 3 turnos"). Cuenta los stats, el equipo, las mejoras activas y la defensa del
+  enemigo (promedio de los vivos); los críticos no se incluyen (nota "crítico ×1.75"). Al elegir objetivo:
+  "🐺 Lobo · PV 30/45 → ≈ 10 PV" o "💀 lo derrota"; al curar: "Ivana · PV 23/80 → ≈ 60/80". (Los talentos se sumarán
+  en la Fase 2.)
+- **❤️ Vida de los enemigos con números:** "PV 34 / 60" dentro de la barra; al recibir daño el número baja animado y la
+  parte perdida queda un momento más clara. Los **jefes** tienen una barra grande arriba con nombre, nivel y
+  "PV 1.240 / 2.000".
+- **Guardado:** `saveVersion` 7 (agrega `favs`). Antes de migrar se copia la partida intacta en
+  `tsf:SALA:nombre:backup-v6`. El modo 👁️ y 🔕 se guardan en el dispositivo (`tsf-vis`, `tsf-mute`), no en la partida.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -220,7 +262,7 @@ Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y si
    - Value: la connection string que copiaste
    - **Save Changes** (Render redespliega solo).
 5. Comprueba en `https://<tu-servicio>.onrender.com/health` que diga `"db":"ok"`.
-   Las tablas `rooms` y `players` se crean solas al arrancar.
+   Las tablas `rooms`, `players` y `chat_messages` se crean solas al arrancar.
 
 **Probar sin base de datos (local):** `npm start` sin `DATABASE_URL` → `/health` dice `"db":"off"`, no se pide PIN
 y todo se guarda en el navegador. **Probar con base de datos (local):** `DATABASE_URL="postgresql://…" npm start`
@@ -245,7 +287,11 @@ public/js/quests.js    Misiones de aldea: generación determinista, progreso y r
 public/js/tomb.js      Tumba 🪦: objetos del grupo caído, recuperación y vencimiento (60 min)
 public/js/minimap.js   Dibujo del mapa grande y del mini-minimapa
 public/js/coop.js      Jefes en equipo: invitación, elección de héroe, sala de espera y vista del invitado
-public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
+public/js/ui.js        HUD, avisos, modales (aldea, portal, grupo, mapa)
+public/js/chat.js      Panel 💬 Chat / 👥 Sala: mensajes, no leídos, silenciar y teclado del celular
+public/js/prefs.js     Preferencias del dispositivo: ver jugadores 👁️ y silenciar chat 🔕
+public/js/estimate.js  Estimados de daño/curación de los botones y vista previa de objetos
+public/js/hpbar.js     Barras de vida de enemigos con números y barra grande de jefe
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})
 scripts/make-icons.js  Genera los íconos (npm run icons)
@@ -256,12 +302,13 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | Evento | Dirección | Datos |
 |---|---|---|
 | `room:create` | cliente → servidor (ack) | → `{ok, code}` |
-| `room:join` | cliente → servidor (ack) | `{code, name, pin, rejoin}` → `{ok, name, players, pins, seed, db, save}` o `{ok:false, error, needPin}` ("Sala llena", "Sala no existe", "PIN incorrecto") |
+| `room:join` | cliente → servidor (ack) | `{code, name, pin, rejoin}` → `{ok, name, players, pins, seed, db, save, chat}` o `{ok:false, error, needPin}` ("Sala llena", "Sala no existe", "PIN incorrecto") |
 | `save:push` | cliente → servidor (ack) | `{data}` (máx. 200 KB; no pisa una partida más nueva) → `{ok, stored}` |
 | `room:leave` | cliente → servidor | — |
 | `player:state` | cliente → servidor (≤ 8/s, solo si cambió) | `{x, y, leaderEmoji, avgLvl, biome, status:'map'\|'battle'\|'village'}` |
 | `players:update` | servidor → sala (≤ 10/s) | `{players:[…]}` |
-| `chat:quick` | ida y vuelta | `{msgId}` → `{name, msgId}` |
+| `chat:quick` | ida y vuelta | `{msgId}` → `{name, msgId}` (además queda en el chat) |
+| `chat:msg` | cliente → servidor (ack) · servidor → sala | `{text}` (máx. 200, 1/s) → `{ok}` o `{ok:false, error}`; la sala recibe `{id, t, kind:'msg'\|'quick'\|'sys', name, e, text}` con el texto escapado |
 | `ping:place` | ida y vuelta | `{x, y}` → `{name, x, y, ttl}` (2 minutos) |
 | `event:notice` | ida y vuelta | `{type:'level'\|'boss'\|'death', text}`; el servidor además envía `join`/`leave` |
 | `boss:invite` | anfitrión → sala (ack) | `{boss, hero}` → todos reciben `{id, host, boss, left}` (90 s) |

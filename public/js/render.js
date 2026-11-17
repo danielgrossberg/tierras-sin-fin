@@ -7,6 +7,7 @@ import { getChunk, biomeAt, feats, monsters, tileAt, nearestVillage } from './wo
 import { net, mateColor } from './net.js';
 import { tracked, QICON } from './quests.js';
 import { tombMinutes } from './tomb.js';
+import { mateOnMap, othersBubbles, chatMuted } from './prefs.js';
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
 let W = 0, H = 0, DPR = 1, Z = 1.3, vign = null;
@@ -79,7 +80,10 @@ function rrect(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRec
 // Globo de diálogo sobre un personaje
 function bubble(txt, x, y) {
   const fs = 14; ctx.font = `600 ${fs}px system-ui,sans-serif,${EF}`;
-  const w = Math.min(W - 16, ctx.measureText(txt).width + 18), h = fs + 14;
+  // Si no cabe en la pantalla (o es muy largo), se corta con "…"
+  const maxW = Math.min(W - 34, 280);
+  if (ctx.measureText(txt).width > maxW) { const ch = Array.from(txt); while (ch.length > 1 && ctx.measureText(ch.join('') + '…').width > maxW) ch.pop(); txt = ch.join('').trimEnd() + '…'; }
+  const w = ctx.measureText(txt).width + 18, h = fs + 14;
   const bx = Math.max(8, Math.min(W - 8 - w, x - w / 2)), by = y - h;
   ctx.fillStyle = 'rgba(255,255,255,.95)'; rrect(bx, by, w, h, 9); ctx.fill();
   ctx.beginPath(); ctx.moveTo(x - 6, by + h - 1); ctx.lineTo(x + 6, by + h - 1); ctx.lineTo(x, by + h + 7); ctx.fill();
@@ -231,7 +235,7 @@ export function draw(t) {
   // Otros jugadores
   const away = [];
   for (const o of net.others.values()) {
-    if (!visibleOther(o)) continue;
+    if (!visibleOther(o) || !mateOnMap(o)) continue;   // 👁️ modo de visibilidad (prefs.js)
     const X = sx(o.px), Y = sy(o.py);
     if (offscreen(X, Y)) { away.push(o); continue; }
     sprites.push({ y: o.py + .44, fn: () => {   // sobre lo demás de su casilla
@@ -244,7 +248,7 @@ export function draw(t) {
   // Tumba 🪦 propia (con brillo y "Tus objetos") y las de los compañeros ("🪦 de Nombre", no se pueden recoger)
   const tombs = [];
   if (G.tomb) tombs.push({ x: G.tomb.x, y: G.tomb.y, own: true });
-  for (const o of net.others.values()) if (Array.isArray(o.tomb)) tombs.push({ x: o.tomb[0], y: o.tomb[1], name: o.name });
+  for (const o of net.others.values()) if (Array.isArray(o.tomb) && mateOnMap(o)) tombs.push({ x: o.tomb[0], y: o.tomb[1], name: o.name });
   for (const tb of tombs) {
     if (tb.x < x0 || tb.x > x1 || tb.y < y0 || tb.y > y1) continue;
     sprites.push({ y: tb.y, fn: () => {
@@ -264,9 +268,10 @@ export function draw(t) {
     heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00');
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
-  // Globos de mensajes rápidos (encima de todo)
-  if (net.myBubble) bubble(net.myBubble.text, sx(P.px), sy(P.py) - TS * 1.25);
-  for (const o of net.others.values()) if (o.bubble && visibleOther(o) && !away.includes(o)) bubble(o.bubble.text, sx(o.px), sy(o.py) - TS * 1.25);
+  // Globos del chat y de los mensajes rápidos (encima de todo). 🔕 Silenciar los oculta; los de los demás
+  // solo se ven en el modo 👁️ "Mostrar todo". El texto se dibuja con fillText (nunca como HTML).
+  if (net.myBubble && !chatMuted()) bubble(net.myBubble.text, sx(P.px), sy(P.py) - TS * 1.25);
+  if (othersBubbles()) for (const o of net.others.values()) if (o.bubble && visibleOther(o) && mateOnMap(o) && !away.includes(o)) bubble(o.bubble.text, sx(o.px), sy(o.py) - TS * 1.25);
   if (!vign) { vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75); vign.addColorStop(0, 'rgba(0,0,0,0)'); vign.addColorStop(1, 'rgba(0,0,0,.5)'); }
   ctx.fillStyle = vign; ctx.fillRect(0, 0, W, H);
   // Indicadores fuera de pantalla: primero Ciudad Origen (dorado), luego la misión y los compañeros (su color)

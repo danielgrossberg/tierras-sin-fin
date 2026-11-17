@@ -394,3 +394,102 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 #b-clock{text-align:center;padding:6px 10px;font-weight:700;background:#1d1838;color:#e9ddff;border-top:1px solid #6d5bd0;font-size:14px}
 #b-clock.mine{background:#4a3a0f;color:#ffe08a;border-color:var(--gold)}
 .hcard.mine{box-shadow:0 0 0 2px #46c37b88}
+
+/* ===== Versión 3 · Fase 0 ===== */
+/* Botones de abajo: 👁️ y globito rojo de mensajes sin leer */
+@media (hover:hover) and (pointer:fine){#dock{grid-template-columns:repeat(5,auto)}}
+.badge.red{background:#e5484d;color:#fff;box-shadow:0 0 0 2px #0f1220}
+
+/* 0.2 Panel de chat y sala: en el celular sube desde abajo (mitad de la pantalla) */
+#social{display:flex;flex-direction:column;padding:0;overflow:hidden;height:min(480px,calc(100% - 140px - var(--sat) - var(--sab)));max-height:none;width:min(380px,calc(100vw - 20px - var(--sal) - var(--sar)))}
+@media (max-width:640px),(pointer:coarse){
+  #social{left:0;right:0;width:auto;bottom:0;height:55%;border-radius:16px 16px 0 0;padding-bottom:var(--sab);z-index:12;box-shadow:0 -10px 40px #000c}
+}
+/* Celular en horizontal (no confundir con el teclado abierto en vertical, que también deja poca altura) */
+@media (pointer:coarse) and (max-height:480px) and (min-width:600px){#social{left:calc(120px + var(--sal));right:calc(10px + var(--sar));width:auto}}
+@media (max-height:480px) and (max-width:599px){#social{left:0;right:0;bottom:0;max-height:none}}
+.sochead{display:flex;align-items:center;gap:6px;padding:8px 8px 6px;border-bottom:1px solid var(--line);margin:0}
+.stabs{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}
+.stab{min-height:44px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:14px;padding:4px;white-space:nowrap}
+.stab.on{background:#2d2a1c;border-color:var(--gold);color:var(--gold);font-weight:700}
+.stab small{color:var(--mut);font-size:11px;font-weight:400}
+.btn.sico{width:44px;height:44px;padding:0;font-size:18px;flex:none}
+.smute.on{border-color:#e5484d;background:#3a1a1c}
+.spane{flex:1;min-height:0;display:flex;flex-direction:column}
+.spane[data-p=sala]{overflow:auto;padding:8px 10px;touch-action:pan-y;gap:6px}
+.clist{flex:1;min-height:0;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;touch-action:pan-y;overscroll-behavior:contain;user-select:text;-webkit-user-select:text}
+.cmsg{background:var(--panel2);border:1px solid #ffffff12;border-radius:10px;padding:5px 9px;font-size:14px;line-height:1.35;max-width:92%;align-self:flex-start;overflow-wrap:anywhere}
+.cmsg.me{align-self:flex-end;background:#2d2a1c;border-color:#f2c14e44}
+.cmsg.quick .cx{font-style:italic}
+.cmsg.sys{align-self:center;background:transparent;border:0;color:var(--mut);font-size:12px;text-align:center;padding:0 6px}
+.chead{display:flex;align-items:center;gap:5px;font-size:12px}
+.chead .ce{font-size:15px}
+.chead .cn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55vw}
+.chead .ct{color:var(--mut);font-size:11px;margin-left:auto;padding-left:8px}
+.cx{white-space:pre-wrap}
+.cempty{text-align:center;margin:auto}
+.cquick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px 10px;border-top:1px solid var(--line)}
+.cquick .btn{min-height:44px;font-size:13px;padding:4px}
+.cerr{color:#ff8a8a;font-size:12px;padding:2px 12px}
+.cform{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);background:var(--panel)}
+.cform input{min-width:0;flex:1;font-size:16px;padding:8px 10px}
+.cform .btn{min-height:44px}
+
+/* 0.1 Portal */
+.pv{display:flex;align-items:center;gap:6px;padding:6px 2px;border-bottom:1px solid #ffffff10;min-height:54px}
+.pv:last-child{border-bottom:0}
+.pvi{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pvi b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.pvi small{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv.here .pvi small{color:var(--friend)}
+.pgo{flex:none;min-height:44px;min-width:76px;padding:6px 10px}
+.pstar{flex:none;width:40px;height:44px;background:transparent;border:0;font-size:21px;color:#9aa3c0;padding:0;line-height:1}
+.pstar.on{color:var(--gold)}
+.pstar.fixed{display:flex;align-items:center;justify-content:center;font-size:24px}
+.porigin .pv{background:linear-gradient(#3d3112,#251d09);border:2px solid var(--gold);border-radius:12px;padding:10px 10px 10px 4px;margin-top:10px;min-height:64px;box-shadow:0 0 18px #f2c14e33}
+.porigin .pvi b{color:var(--gold);font-size:17px;font-family:Georgia,serif}
+.porigin .pvi small{color:#efe3c2}
+.psec{margin-top:10px;background:#0f1323;border:1px solid var(--line);border-radius:12px;padding:4px 8px}
+.psec h3{margin:6px 0 0;font-size:14px}
+.pzones{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.pzh{display:flex;justify-content:space-between;align-items:center;min-height:46px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 12px;color:var(--txt);font-size:15px;width:100%}
+.pzh.on{border-color:var(--gold);background:#2d2a1c;color:var(--gold);font-weight:700}
+.pzh small{color:var(--mut);font-weight:400}
+.pzl{max-height:min(44vh,360px);overflow-y:auto;touch-action:pan-y;overscroll-behavior:contain;background:#0f1323;border:1px solid var(--line);border-radius:10px;padding:2px 6px}
+#pmap{width:min(100%,520px,56vh);aspect-ratio:1;display:block;margin:10px auto 6px;border-radius:12px;border:1px solid var(--line);cursor:pointer;touch-action:manipulation;background:#0e1120}
+.pmsel{min-height:56px}
+.pmsel .pv{background:#0f1323;border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 2px}
+
+/* 0.4 Elegir héroe para un objeto: tarjetas con PV/PM y vista previa */
+.hpkgrid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:8px 0}
+.hpk{display:flex;flex-direction:column;align-items:stretch!important;gap:3px;text-align:left!important}
+.hpk-top{display:flex;align-items:center;gap:6px;min-width:0}
+.hpk-e{font-size:26px;flex:none}
+.hpk-n{display:flex;flex-direction:column;min-width:0;flex:1}
+.hpk-n b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.hpk-n small{color:var(--mut)!important;font-size:11px!important;margin:0!important}
+.hpk-best{flex:none;background:#46c37b;color:#05210f;font-size:10px;font-weight:800;border-radius:8px;padding:2px 6px}
+.hpk.best{border-color:#46c37b!important;box-shadow:0 0 0 2px #46c37b66}
+.hpk .bar{width:100%;margin-top:2px}
+.hpk-nums{color:var(--txt)!important;font-size:12px!important;margin:0!important}
+.hpk-prev{color:#9fe8b0!important;font-size:12px!important;font-weight:700;margin:0!important}
+.hpk-prev.no{color:#ff9a9a!important;font-weight:400}
+.hpk[disabled]{opacity:.55}
+#b-menu .btn.hpk{padding:8px;min-height:96px}
+#b-menu .btn.hpk .kn{display:none}
+
+/* 0.5 Estimados en los botones del combate */
+#b-menu .btn small.bnote2,.bnote2{display:block;color:#ffd34d;font-size:10px;opacity:.85;margin-top:1px}
+
+/* 0.6 Vida de los enemigos con números y barra grande de jefe */
+.ebar{position:relative;width:min(112px,30vw);height:16px;background:#000c;border:1px solid #000;border-radius:5px;overflow:hidden;margin-top:3px;box-shadow:0 1px 3px #0009}
+.ebar>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#ff6a6e,#c9363b);transition:width .15s;width:100%}
+.ebar>.ghost{position:absolute;left:0;top:0;bottom:0;background:#ffcfa8;width:100%}
+.ebar>.ehp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;white-space:nowrap;text-shadow:0 0 2px #000,0 1px 2px #000,1px 0 2px #000,-1px 0 2px #000}
+.enemy.boss .ebar:not(.big){display:none}
+#b-boss{margin:6px auto 0;width:min(94%,640px);background:#000b;border:2px solid #ff4d4d;border-radius:12px;padding:6px 10px;box-shadow:0 6px 18px #0009;flex:none}
+#b-boss .bbn{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;color:#ffe0e0;font-size:15px;text-shadow:0 1px 2px #000}
+#b-boss .bbn span{color:var(--gold);font-size:13px;white-space:nowrap}
+#b-boss .ebar.big{width:100%;height:22px;margin-top:4px}
+#b-boss .ebar.big .ehp{font-size:13px}
+@media (max-height:480px){#b-boss{padding:3px 8px;margin-top:3px}#b-boss .bbn{font-size:13px}#b-boss .ebar.big{height:18px}}

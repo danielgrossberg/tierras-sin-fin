@@ -5,8 +5,10 @@
 // (BT.party); los héroes remotos esperan la acción de su jugador (remoteTurn) y el estado se transmite
 // a los invitados (coopSnapshot). La invitación, la sala y la vista del invitado están en coop.js.
 'use strict';
-import { $, sleep, clamp, pick } from './util.js';
+import { $, sleep, clamp, pick, esc } from './util.js';
 import { CL, SK, IT, EN, BG } from './data.js';
+import { atkMulB, defMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
+import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx } from './state.js';
 import { createTomb } from './tomb.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
@@ -134,8 +136,9 @@ function log(m) { $('#b-log').innerHTML = m; if (BT && BT.coop) { BT.lastLog = m
 // Estado que ven los invitados (se manda como mucho ~14 veces por segundo, y al instante al cambiar de turno)
 function coopSnapshot() {
   return { id: BT.coop.id, bg: BT.m.biome, log: BT.lastLog || '', turn: BT.turn,
-    enemies: BT.enemies.map(e => ({ id: e.id, e: e.e, name: e.name, lvl: e.lvl, boss: e.boss, tint: e.tint, hp: e.hp, mhp: e.mhp, tags: tags(e) })),
-    party: party().map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: h.tmp || 0, tags: tags(h), bear: h.buffs.bear > 0 })),
+    // def/cu/ud: para que el invitado calcule los estimados de daño (Fase 0.5)
+    enemies: BT.enemies.map(e => ({ id: e.id, e: e.e, name: e.name, lvl: e.lvl, boss: e.boss, tint: e.tint, hp: e.hp, mhp: e.mhp, tags: tags(e), def: Math.round(S(e, 'def') * defMul(e) * 10) / 10, cu: e.buffs.curse > 0, ud: !!e.undead })),
+    party: party().map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: h.tmp || 0, tags: tags(h), bear: h.buffs.bear > 0, poison: h.poison || 0, buffs: Object.assign({}, h.buffs) })),
     pops: BT.pops.splice(0) };
 }
 function coopSync(now) {
@@ -158,8 +161,12 @@ function popup(u, txt, col) { if (BT && BT.coop) BT.pops.push({ id: u.id, txt: S
 function anim(u, cls) { const el = uel(u); if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 450); }
 const critOf = u => (u.isHero ? CL[u.cls].crit + eqSum(u, 'crit') / 100 : .05) + (u.buffs.song > 0 ? .1 : 0);
 // Estados que cambian el ataque / la defensa
-const atkMul = u => (u.buffs.atk > 0 ? 1.35 : 1) * (u.buffs.fury > 0 ? 1.6 : 1) * (u.buffs.bear > 0 ? 1.5 : 1);
-const defMul = u => (u.buffs.def > 0 ? 1.35 : 1) * (u.buffs.stone > 0 ? 1.6 : 1);
+const atkMul = u => atkMulB(u.buffs);
+const defMul = u => defMulB(u.buffs);
+// Datos para los estimados de los botones (estimate.js)
+const attacker = h => ({ atk: S(h, 'atk') * atkMul(h), atkRaw: S(h, 'atk'), mag: S(h, 'mag'), hp: h.hp, mhp: S(h, 'mhp'), critMul: heroFx(h, 'umbra') ? 2.5 : 1.75 });
+const tgtOf = e => ({ def: S(e, 'def') * defMul(e), hp: e.hp, mhp: S(e, 'mhp'), curse: e.buffs.curse > 0, undead: !!e.undead, boss: !!e.boss });
+const hvOf = h => ({ hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), poison: h.poison || 0 });
 const spdMul = u => u.buffs.song > 0 ? 1.3 : 1;
 function phys(a, d, m, o = {}) {
   const atk = S(a, 'atk') * atkMul(a), def = S(d, 'def') * defMul(d);
@@ -226,13 +233,15 @@ const tags = u => (u.poison > 0 ? '☠️' : '') + (u.burn > 0 ? '🔥' : '') + 
 // ================= Pantalla de combate =================
 function buildBattle(biome) {
   $('#battle').style.background = BG[biome] || BG.GRASS;
-  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div><div class="bar"><i></i></div><div class="etags"></div></div>`).join('');
-  $('#b-party').innerHTML = party().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${h.e}</span><div style="min-width:0"><div class="nm">${h.name}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${h.owner ? h.owner : CL[h.cls].n}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
-  $('#b-menu').innerHTML = ''; refresh();
+  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('');
+  // Los héroes de otros jugadores traen nombre desde la red: siempre escapado
+  $('#b-party').innerHTML = party().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${esc(h.e)}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${esc(h.owner ? h.owner : CL[h.cls].n)}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
+  $('#b-menu').innerHTML = ''; bossBar(null); refresh();
 }
 export function refresh() {
   updateHUD(); if (!BT) return;
-  for (const e of BT.enemies) { const el = uel(e); if (!el) continue; el.querySelector('.bar>i').style.width = (100 * e.hp / e.mhp) + '%'; el.querySelector('.etags').textContent = tags(e); }
+  for (const e of BT.enemies) { const el = uel(e); if (!el) continue; setBar(el.querySelector('.ebar'), e.hp, e.mhp); el.querySelector('.etags').textContent = tags(e); }
+  const boss = BT.enemies.find(e => e.boss); if (boss) bossBar(boss);
   for (const h of party()) {
     const el = uel(h); if (!el) continue; const mh = S(h, 'mhp'), mm = S(h, 'mmp');
     el.classList.toggle('dead', h.hp <= 0); el.classList.toggle('active', BT.active === h);
@@ -248,13 +257,15 @@ function menu(opts) {
     if (BT && BT.coop) BT.curRes = res;
     const m = $('#b-menu'); m.innerHTML = '';
     opts.forEach((o, i) => {
-      const b = document.createElement('button'); b.className = 'btn' + (o.full ? ' full' : '');
-      b.innerHTML = `<span class="mut kn">${i + 1}</span> ${o.l}` + (o.s ? `<small>${o.s}</small>` : '');
+      // o.l: nombre · o.s: línea chica (costo y estimado) · o.n: nota chica (crítico) · o.h: tarjeta completa (héroes)
+      const b = document.createElement('button'); b.className = 'btn' + (o.full ? ' full' : '') + (o.cls ? ' ' + o.cls : '');
+      b.innerHTML = o.h ? `<span class="mut kn">${i + 1}</span>${o.h}` : `<span class="mut kn">${i + 1}</span> ${o.l}` + (o.s ? `<small>${o.s}</small>` : '') + (o.n ? `<small class="bnote2">${o.n}</small>` : '');
       if (o.dis) b.disabled = true; b.onclick = () => res(o.v); m.appendChild(b);
     });
   });
 }
-function pickTarget(kind) {
+// ctx (opcional): estimado de la acción → texto de cada botón de objetivo (Fase 0.5)
+function pickTarget(kind, ctx) {
   return new Promise(res => {
     const cands = kind === 'enemy' ? alive(BT.enemies) : kind === 'ally' ? alive(party()) : kind === 'dead' ? party().filter(h => h.hp <= 0) : [];
     if (!cands.length) { res(null); return; }
@@ -263,10 +274,29 @@ function pickTarget(kind) {
     const done = v => { cleanup(); res(v); };
     cands.forEach(c => { const el = uel(c); if (!el) return; el.classList.add('target'); el.onclick = () => done(c); });
     log(kind === 'enemy' ? 'Elige un enemigo' : kind === 'dead' ? 'Elige a quién revivir' : 'Elige un aliado');
-    menu([...cands.map(c => ({ v: c, l: `${c.e} ${c.name}`, s: `PV ${c.hp}/${S(c, 'mhp')}` })), { v: null, l: '↩ Cancelar', full: 1 }]).then(done);
+    const sub = c => kind === 'enemy' ? (ctx && ctx.enemy ? ctx.enemy(tgtOf(c)) : `PV ${c.hp}/${S(c, 'mhp')}`)
+      : kind === 'dead' ? (ctx && ctx.revive ? ctx.revive(hvOf(c)) : `PV 0/${S(c, 'mhp')}`)
+      : (ctx && ctx.ally ? ctx.ally(hvOf(c)) : `PV ${c.hp}/${S(c, 'mhp')}`);
+    menu([...cands.map(c => ({ v: c, l: `${esc(c.e)} ${esc(c.name)}`, s: sub(c) })), { v: null, l: '↩ Cancelar', full: 1 }]).then(done);
   });
 }
-async function targetsFor(t) { if (t === 'none') return []; if (t === 'enemies') return alive(BT.enemies); if (t === 'allies') return alive(party()); const x = await pickTarget(t); return x ? [x] : null; }
+async function targetsFor(t, ctx) { if (t === 'none') return []; if (t === 'enemies') return alive(BT.enemies); if (t === 'allies') return alive(party()); const x = await pickTarget(t, ctx); return x ? [x] : null; }
+// Objetos (Fase 0.4): tarjetas con PV/PM y vista previa; el que más lo necesita, resaltado
+function pickItemTarget(k) {
+  return new Promise(res => {
+    const rows = itemTargets(k, party().map(h => ({ h, e: esc(h.e), name: esc(h.name), sub: esc(h.owner ? h.owner : CL[h.cls].n) + ' · Nv ' + h.lvl, H: hvOf(h) })));
+    const ok = rows.filter(r => !r.dis);
+    if (!ok.length) { log(k === 'pluma' ? 'No hay héroes caídos' : 'Nadie lo necesita ahora'); res(null); return; }
+    const cleanup = () => ok.forEach(r => { const el = uel(r.x.h); if (el) { el.classList.remove('target'); el.onclick = null; } });
+    const done = v => { cleanup(); res(v); };
+    ok.forEach(r => { const el = uel(r.x.h); if (!el) return; el.classList.add('target'); el.onclick = () => done(r.x.h); });
+    log(`¿En quién usas ${IT[k].e} ${IT[k].n}?`);
+    menu([...rows.map(r => ({ v: r.x.h, h: heroCardHTML(r.x, r.prev, r.dis, r.best), dis: !!r.dis, cls: 'hpk' + (r.best ? ' best' : '') })), { v: null, l: '↩ Cancelar', full: 1 }]).then(done);
+  });
+}
+// Estimado de una acción del héroe contra los enemigos vivos
+const estFor = (h, k) => estimate(k, attacker(h), alive(BT.enemies).map(tgtOf));
+const skillSub = (h, k) => { const e = estFor(h, k); return `${skillCost(h, k)} PM · ${e.line || SK[k].d}`; };
 // Anillo del Eco: 20% de repetir la habilidad gratis
 async function echo(h, k, sk, ts) {
   if (heroFx(h, 'eco') && h.hp > 0 && sk.t !== 'dead' && alive(BT.enemies).length && Math.random() < .2) {
@@ -317,26 +347,28 @@ async function heroTurn(h) {
   while (true) {
     log(`Turno de <b>${h.e} ${h.name}</b>`);
     const bear = h.buffs.bear > 0;   // Forma de Oso: solo ataques físicos
-    const c = await menu([{ v: 'atk', l: bear ? '🐻 Zarpazo' : '⚔️ Atacar' }, { v: 'skill', l: bear ? '✨ Habilidades (oso)' : '✨ Habilidades', dis: bear }, { v: 'item', l: '🎒 Objetos' }, { v: 'def', l: '🛡️ Defender' }, { v: 'run', l: '🏃 Huir', full: 1 }]);
+    const ea = estFor(h, 'atk');
+    const c = await menu([{ v: 'atk', l: bear ? '🐻 Zarpazo' : '⚔️ Atacar', s: ea.line, n: ea.note }, { v: 'skill', l: bear ? '✨ Habilidades (oso)' : '✨ Habilidades', dis: bear }, { v: 'item', l: '🎒 Objetos' }, { v: 'def', l: '🛡️ Defender', s: 'Recibe la mitad de daño' }, { v: 'run', l: '🏃 Huir', full: 1 }]);
     if (BT.timedOut) return autoDefend(h);
     if (c === 'atk') {
-      const t = await pickTarget('enemy'); if (BT.timedOut) return autoDefend(h); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
+      const t = await pickTarget('enemy', estFor(h, 'atk')); if (BT.timedOut) return autoDefend(h); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
       // Arco del Viento Norte: 25% de flecha extra
       if (t.hp > 0 && heroFx(h, 'viento') && Math.random() < .25) { popup(h, '🌬️ ¡Flecha extra!', '#bff0ff'); await strike(h, t, phys(h, t, .6), { fast: 1 }); }
       return;
     }
     if (c === 'skill') {
       const once = k => k === 'cerveza' && BT.used.has('cerveza:' + h.id);
-      const list = learned(h).map(k => ({ v: k, l: SK[k].n, s: once(k) ? 'Ya usada en este combate' : `${skillCost(h, k)} PM · ${SK[k].d}`, dis: h.mp < skillCost(h, k) || once(k) })); list.push({ v: null, l: '↩ Volver', full: 1 });
-      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue; const sk = SK[k]; const ts = await targetsFor(sk.t); if (BT.timedOut) return autoDefend(h); if (ts === null) continue;
+      const list = learned(h).map(k => ({ v: k, l: SK[k].n, s: once(k) ? 'Ya usada en este combate' : skillSub(h, k), n: once(k) ? '' : estFor(h, k).note, dis: h.mp < skillCost(h, k) || once(k) })); list.push({ v: null, l: '↩ Volver', full: 1 });
+      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue; const sk = SK[k]; const ts = await targetsFor(sk.t, estFor(h, k)); if (BT.timedOut) return autoDefend(h); if (ts === null) continue;
       h.mp -= skillCost(h, k); log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts);
       await echo(h, k, sk, ts);
       return;
     }
     if (c === 'item') {
       const list = Object.keys(IT).map(k => ({ v: k, l: `${IT[k].e} ${IT[k].n} ×${G.items[k] || 0}`, s: IT[k].d, dis: !G.items[k] })); list.push({ v: null, l: '↩ Volver', full: 1 });
-      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue; const ts = await targetsFor(IT[k].t); if (BT.timedOut) return autoDefend(h); if (!ts) continue;
-      log(`${h.name} usa ${IT[k].e} ${IT[k].n} en ${ts[0].name}`); useItem(k, ts[0]); await sleep(600); return;
+      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue;
+      const t = AUTO ? (await targetsFor(IT[k].t) || [])[0] : await pickItemTarget(k); if (BT.timedOut) return autoDefend(h); if (!t) continue;
+      log(`${h.name} usa ${IT[k].e} ${IT[k].n} en ${esc(t.name)}`); useItem(k, t); await sleep(600); return;
     }
     if (c === 'def') { h.defending = true; log(`${h.name} se pone en guardia`); popup(h, 'Defensa', '#9fd8ff'); refresh(); await sleep(450); return; }
     if (c === 'run') {
@@ -420,7 +452,7 @@ export async function startBattle(m, opts = {}) {
   else if (res === 'win') await victory();
   else if (res === 'lose') await defeat();
   else m.stun = 5;
-  stopClock(); $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
+  stopClock(); bossBar(null); $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
 }
 async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);

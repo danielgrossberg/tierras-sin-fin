@@ -7,6 +7,7 @@ import { G, P, START } from './state.js';
 import { feats, monsters, getChunk, ckey, nearestVillage } from './world.js';
 import { net, mateColor } from './net.js';
 import { tracked } from './quests.js';
+import { mateOnMini } from './prefs.js';
 
 const offs = new Map();   // canvas pequeños reutilizables para el terreno (1 píxel = 1 casilla)
 const rel = (x, y) => `${x - START.x}, ${START.y - y}`;
@@ -71,6 +72,7 @@ export function paintMap(c, R, opts = {}) {
   // ---- Compañeros: punto de su color, nombre y coordenadas (aunque estén fuera de lo explorado)
   for (const o of net.others.values()) {
     if (!o.status || o.status === 'lobby' || o.status === 'away' || !Number.isFinite(o.x)) continue;
+    if (!mateOnMini(o)) continue;   // 👁️ "Ocultar todo"
     const col = mateColor(o.name), p0 = to(o.x, o.y), p = clampP(p0, m);
     g.globalAlpha = o.online === false ? .5 : 1;
     dot(p, 5 * u, col); if (!inside(p0, m)) edgeTri(p, p0, col);

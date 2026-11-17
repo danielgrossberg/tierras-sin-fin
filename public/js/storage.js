@@ -8,7 +8,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -42,11 +42,16 @@ export function migrate(o) {
     }
     o.tomb = o.tomb || null;
   }
+  if (v < 7) {
+    // Versión 3 · Fase 0: aldeas favoritas del portal (⭐). Todo lo demás queda igual.
+    o.favs = o.favs || {};
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
   for (const k of ['gold', 'upA', 'upD', 'steps', 'bosses']) o[k] = o[k] || 0;
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];
+  o.favs = o.favs && typeof o.favs === 'object' ? o.favs : {};
   o.quests = Array.isArray(o.quests) ? o.quests : []; o.vv = o.vv || {}; o.board = o.board || {}; o.extraFeats = Array.isArray(o.extraFeats) ? o.extraFeats : [];
   for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; }
   o.saveVersion = SAVE_VERSION;

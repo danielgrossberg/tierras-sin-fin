@@ -58,8 +58,34 @@ function newCode() {
   return null;
 }
 function makeRoom(code) {
-  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false };
+  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false,
+    chat: [], chatLoad: null, chatSeq: 0 };
   rooms.set(code, room); return room;
+}
+
+// ================= Chat de la sala (Versión 3 · Fase 0.2) =================
+// Mensajes: { id, t, kind: 'msg'|'quick'|'sys', name, e, text }. El texto va con el HTML ESCAPADO;
+// el cliente lo muestra solo con textContent. Se guardan los últimos 100 por sala (en memoria y en la base de datos).
+const CHAT_MAX = 200, CHAT_KEEP = 100, CHAT_GAP = 1000;
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ESC[c]);
+// eslint-disable-next-line no-control-regex
+const chatText = t => String(t).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
+function chatPush(room, m) {
+  const msg = { id: 'm' + Date.now().toString(36) + (++room.chatSeq), t: Date.now(), kind: m.kind, name: m.name || null, e: m.e || null, text: escHtml(m.text) };
+  room.chat.push(msg); if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
+  io.to(room.code).emit('chat:msg', msg);
+  if (db.isReady()) db.chatAdd(room.code, msg).catch(e => console.warn('chat:', e.message));
+}
+const sysMsg = (room, text) => chatPush(room, { kind: 'sys', text });
+// Carga el historial de la base de datos la primera vez que alguien entra a la sala (una sola vez)
+function loadChat(room) {
+  if (!room.chatLoad) room.chatLoad = (async () => {
+    if (!db.isReady()) return;
+    try { const h = await db.chatHistory(room.code); const ids = new Set(room.chat.map(x => x.id)); room.chat = [...h.filter(x => !ids.has(x.id)), ...room.chat].slice(-CHAT_KEEP); }
+    catch (e) { console.warn('chat (historial):', e.message); room.chatLoad = null; }
+  })();
+  return room.chatLoad;
 }
 const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
@@ -82,6 +108,7 @@ function removePlayer(room, p) {
   clearTimeout(p.graceTimer);
   room.players.delete(p.name);
   io.to(room.code).emit('event:notice', { type: 'leave', name: p.name, text: `${p.name} salió de la sala` });
+  sysMsg(room, `🚪 ${p.name} salió de la sala`);
   markDirty(room); updateEmpty(room);
 }
 // explicit=true: salió a propósito · false: se cortó la conexión (le damos un rato para volver)
@@ -120,6 +147,9 @@ function coopLeave(room, name) {
 // Héroe que se manda al combate (se limita a lo necesario)
 function cleanHero(h) {
   if (!isObj(h) || typeof h.cls !== 'string' || !Number.isInteger(h.lvl) || h.lvl < 1 || h.lvl > 99) return null;
+  // El nombre y el emoji se muestran a los demás: sin <> ni controles, y el emoji debe ser de una clase
+  h.name = cleanText(h.name || '', 16) || 'Héroe';
+  if (!EMOJIS.has(h.e)) h.e = LEADER_EMOJIS[0];
   return h;
 }
 
@@ -217,6 +247,8 @@ io.on('connection', socket => {
     }
     if (row && !room.membersLoaded) { try { for (const n of await db.members(code)) room.members.add(n); room.membersLoaded = true; } catch (e) { /* nada */ } }
     if (row) room.members.add(row.name);
+    await loadChat(room);
+    if (!socket.connected) return;
     const existing = room.players.get(name);
     if (!existing && room.players.size >= MAX_PLAYERS) return ack({ ok: false, error: 'Sala llena.' });
     if (socket.data.room) leaveCurrent(socket, socket.data.room !== code);
@@ -232,8 +264,8 @@ io.on('connection', socket => {
     room.players.set(name, p); room.emptySince = null;
     socket.join(code); socket.data.room = code; socket.data.name = name; socket.data.playerId = row ? row.id : null;
     ack({ ok: true, code, name, seed: room.seed, players: publicPlayers(room), pins: publicPins(room),
-      db: !!row, save: row ? row.data : null });
-    if (!existing) socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` });
+      db: !!row, save: row ? row.data : null, chat: room.chat });
+    if (!existing) { socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` }); sysMsg(room, `👋 ${name} entró a la sala`); }
     markDirty(room);
   });
 
@@ -264,6 +296,21 @@ io.on('connection', socket => {
     const c = ctxOf(socket); if (!c || !isObj(d) || !QUICK_IDS.has(d.msgId)) return;
     if (!allow(socket, 'chat', 4, 4000)) return;
     io.to(c.room.code).emit('chat:quick', { name: c.p.name, msgId: d.msgId });
+    chatPush(c.room, { kind: 'quick', name: c.p.name, e: c.p.leaderEmoji, text: QUICK.find(q => q.id === d.msgId).t });   // también queda en el chat
+  });
+
+  // Chat de texto libre: máx. 200 caracteres, sin mensajes vacíos y 1 mensaje por segundo por jugador
+  socket.on('chat:msg', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const c = ctxOf(socket); if (!c || !isObj(d) || typeof d.text !== 'string') return reply({ ok: false, error: 'No se pudo enviar.' });
+    const text = chatText(d.text);
+    if (!text) return reply({ ok: false, error: 'Mensaje vacío.' });
+    if (Array.from(text).length > CHAT_MAX) return reply({ ok: false, error: `Máximo ${CHAT_MAX} caracteres.` });
+    const now = Date.now();
+    if (now - (socket.data.lastChat || 0) < CHAT_GAP) return reply({ ok: false, error: 'Espera un segundo entre mensajes.' });
+    socket.data.lastChat = now;
+    chatPush(c.room, { kind: 'msg', name: c.p.name, e: c.p.leaderEmoji, text });
+    reply({ ok: true });
   });
 
   socket.on('ping:place', d => {
@@ -280,6 +327,10 @@ io.on('connection', socket => {
     const text = Array.from(d.text.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()).slice(0, 80).join('');
     if (!text) return;
     socket.to(c.room.code).emit('event:notice', { type: d.type, name: c.p.name, text });
+    // Mensajes del sistema en el chat (en gris)
+    if (d.type === 'level') sysMsg(c.room, `⭐ ${c.p.name} sube de nivel: ${text}`);
+    else if (d.type === 'boss') sysMsg(c.room, `👑 ${c.p.name} derrotó al jefe ${text}`);
+    else if (d.type === 'death') sysMsg(c.room, `💀 El grupo de ${c.p.name} cayó`);
   });
 
   // ================= Jefes en equipo =================
@@ -296,6 +347,7 @@ io.on('connection', socket => {
     const c = { id, host: c0.p.name, boss, guests: new Map(), state: 'lobby', created: Date.now() };
     c0.room.coop.set(id, c);
     socket.to(c0.room.code).emit('boss:invite', { id, host: c.host, boss, left: INVITE_MS });
+    sysMsg(c0.room, `📣 ${c.host} pide ayuda contra ${boss.e} ${boss.name} (Nv ${boss.lvl})`);
     reply({ ok: true, id, left: INVITE_MS });
   });
   socket.on('boss:join', (d, ack) => {

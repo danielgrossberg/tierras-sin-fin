@@ -1,7 +1,7 @@
 // Capa online (Socket.io): sala, presencia de otros jugadores, mensajes rápidos y pines.
 // Regla de oro: nada de aquí puede bloquear la partida. Si no hay servidor, se juega solo.
 'use strict';
-import { esc, dirArrow, MATE_COLORS } from './util.js';
+import { esc, unesc, dirArrow, MATE_COLORS } from './util.js';
 import { QUICK, PIN_TTL } from './data.js';
 import { P } from './state.js';
 
@@ -14,6 +14,7 @@ export const net = {
   others: new Map(),    // nombre → {name,x,y,px,py,leaderEmoji,avgLvl,biome,status,online,bubble}
   pins: new Map(),      // nombre → {name,x,y,until}
   invites: new Map(),   // jefes en equipo: id → {id, host, boss, until}
+  chat: [],             // chat de la sala (Versión 3): {id, t, kind: msg|quick|sys, name, e, text (HTML escapado)}
   myBubble: null,
   ev: {},               // callbacks que conecta main.js: players, feed, status
 };
@@ -35,6 +36,7 @@ export function ensureSocket() {
   s.on('connect_error', () => { if (net.joined) setStatus('wait'); });
   s.on('players:update', d => { if (d && Array.isArray(d.players)) applyPlayers(d.players); });
   s.on('chat:quick', onChat);
+  s.on('chat:msg', onChatMsg);
   s.on('ping:place', onPin);
   s.on('event:notice', onNotice);
   s.on('room:replaced', () => {
@@ -65,7 +67,7 @@ async function onConnect() {
   const r = await ask('room:join', { code: net.code, name: net.name, pin: net.pin || undefined, rejoin: true });
   if (r.ok) {
     net.db = !!r.db;
-    applyPlayers(r.players || []); applyPins(r.pins || []); lastKey = ''; setStatus('on');
+    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); lastKey = ''; setStatus('on');
     if (wasWaiting) fire('feed', '🟢 Conexión recuperada');
     if (owed) flushSave();   // subir lo que no se alcanzó a guardar mientras no había conexión
   } else { setStatus('wait'); fire('feed', '⚠️ ' + esc(r.error || 'No se pudo volver a la sala')); }
@@ -78,13 +80,14 @@ export async function joinRoom(code, name, rejoin, pin) {
     net.code = code; net.name = r.name || name; net.pin = pin || null; net.joined = true; net.replaced = false;
     net.db = !!r.db; net.serverSave = r.save || null;
     net.others.clear(); net.pins.clear(); applyPlayers(r.players || []); applyPins(r.pins || []);
+    net.chat = []; setChat(r.chat);
     lastKey = ''; setStatus('on');
   }
   return r;
 }
 export function leaveRoom() {
   if (net.socket && net.joined && net.socket.connected) net.socket.emit('room:leave');
-  net.joined = false; net.code = null; net.others.clear(); net.pins.clear(); net.myBubble = null;
+  net.joined = false; net.code = null; net.others.clear(); net.pins.clear(); net.myBubble = null; net.chat = []; fire('chat', null);
   net.db = false; net.serverSave = null; net.pin = null; owed = false; clearTimeout(saveTimer); saveTimer = null;
   setStatus('off'); fire('players');
 }
@@ -103,7 +106,18 @@ export function tick(now, makeState) {
 const canSend = () => net.joined && net.socket && net.socket.connected;
 export function sendQuick(id) {
   if (canSend()) net.socket.emit('chat:quick', { msgId: id });
-  else { const q = QUICK.find(q => q.id === id); if (q) net.myBubble = { text: q.t, until: Date.now() + 4000 }; }
+  else { const q = QUICK.find(q => q.id === id); if (q) { net.myBubble = { text: q.t, until: Date.now() + 4000 }; onChatMsg({ id: 'l' + (++chatLocal), t: Date.now(), kind: 'quick', name: net.name || 'Tú', text: esc(q.t) }); } }
+}
+// Chat de texto libre. Responde { ok } o { ok:false, error }. Sin conexión, el mensaje solo lo ves tú.
+export const CHAT_MAX = 200;
+let chatLocal = 0;
+export async function sendChat(text, me) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return { ok: false, error: 'Escribe algo primero.' };
+  if (Array.from(t).length > CHAT_MAX) return { ok: false, error: `Máximo ${CHAT_MAX} caracteres.` };
+  if (canSend()) return ask('chat:msg', { text: t }, 6000);
+  onChatMsg({ id: 'l' + (++chatLocal), t: Date.now(), kind: 'msg', name: net.name || (me && me.name) || 'Tú', e: me && me.e, text: esc(t) });
+  return { ok: true };
 }
 export function placePin(x, y) {
   if (canSend()) net.socket.emit('ping:place', { x, y });
@@ -162,6 +176,26 @@ function onChat(d) {
   if (d.name === net.name) { net.myBubble = b; return; }
   const o = net.others.get(d.name); if (o) o.bubble = b;
   fire('feed', `💬 <b>${esc(d.name)}</b>: ${esc(q.t)}`);
+}
+// Historial que entrega el servidor al entrar o reconectar (reemplaza al local, sin repetir)
+function setChat(list) {
+  if (!Array.isArray(list)) return;
+  const byId = new Map(net.chat.map(m => [m.id, m]));
+  for (const m of list) if (validMsg(m)) byId.set(m.id, m);
+  net.chat = [...byId.values()].sort((a, b) => a.t - b.t).slice(-100);
+  fire('chat', null);
+}
+const validMsg = m => m && typeof m.id === 'string' && typeof m.text === 'string' && ['msg', 'quick', 'sys'].includes(m.kind) && Number.isFinite(m.t);
+const short = (s, n) => { const a = Array.from(s); return a.length > n ? a.slice(0, n).join('').trimEnd() + '…' : s; };
+function onChatMsg(m) {
+  if (!validMsg(m) || net.chat.some(x => x.id === m.id)) return;
+  net.chat.push(m); if (net.chat.length > 100) net.chat.splice(0, net.chat.length - 100);
+  // Globo sobre el personaje unos 5 segundos (si es largo, se corta con "…")
+  if (m.kind === 'msg') {
+    const b = { text: short(unesc(m.text), 48), until: Date.now() + 5000 };
+    if (m.name === net.name) net.myBubble = b; else { const o = net.others.get(m.name); if (o) o.bubble = b; }
+  }
+  fire('chat', m);
 }
 function onPin(d) {
   if (!d || !Number.isInteger(d.x) || !Number.isInteger(d.y)) return;

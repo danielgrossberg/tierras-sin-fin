@@ -1,6 +1,6 @@
 // Interfaz: HUD, toasts, avisos online, modales (aldea, grupo, mapa) y panel de la sala.
 'use strict';
-import { $, esc, dirArrow, cardinal } from './util.js';
+import { $, esc, dirArrow, cardinal, cardinalWord, zoneOf } from './util.js';
 import { B, CL, SK, IT, EN, CH, RGB, BLOCKO, QUICK, BOAT_PRICE } from './data.js';
 import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEquip } from './state.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
@@ -11,7 +11,11 @@ import { save } from './storage.js';
 import { tombMinutes } from './tomb.js';
 import { paintMap, relCoords } from './minimap.js';
 import { askHelp, canAskHelp } from './coop.js';
-import { net, sendQuick, placePin, mateColor } from './net.js';
+import { net, mateColor } from './net.js';
+import { initChat, toggleSocial, closeSocial, refreshSocial } from './chat.js';
+import { VIS, cycleVis, visMode } from './prefs.js';
+import { estimate, itemTargets, heroCardHTML } from './estimate.js';
+export { toggleSocial, closeSocial };
 
 // Acciones que resuelve main.js (evita dependencias circulares con la pantalla de inicio)
 export const hooks = { onNewGame: null, onExit: null };
@@ -36,7 +40,6 @@ export function updateHUD() {
   const n = [...net.others.values()].filter(o => o.online !== false).length;
   $('#info').innerHTML = `<b>💰 ${G.gold}</b> · 🧪 ${G.items.pocion} · 🔷 ${G.items.eter} · 🪶 ${G.items.pluma}<br>${B[b].i} ${B[b].n} · Peligro Nv ~${dangerAt(P.x, P.y)}<br><span title="${connText()}">${connIcon()} ${esc(st.room)}${st.online ? ` · 👥${n + 1}` : ''}</span>`
     + (tracked() ? `<div class="qline">${QICON[tracked().type]} ${tracked().title} · <b>${progressText(tracked())}</b></div>` : '');
-  const badge = $('#socBadge'); if (badge) { badge.textContent = n ? n : ''; badge.classList.toggle('hidden', !n); }
   updateCoords();
 }
 
@@ -93,23 +96,9 @@ export function playersHTML(onlyOthers) {
   return rows.join('');
 }
 
-// Popover de la sala: jugadores + mensajes rápidos + marcar ubicación (no pausa el juego)
-let socialOpen = false;
-export function socialHTML() {
-  return `<div class="sochead"><b>Sala ${esc(st.room)}</b><span class="mut">${connIcon()} ${connText()}</span><button class="btn sm" data-s="close" aria-label="Cerrar">✕</button></div>
-  <div class="plist">${playersHTML(false)}</div>
-  <div class="qgrid">${QUICK.map(q => `<button class="btn" data-s="q" data-k="${q.id}">${q.t}</button>`).join('')}</div>
-  <button class="btn gold full" data-s="pin">📍 Marcar aquí</button>
-  ${!st.online ? '<p class="mut small">Sin conexión: los mensajes y marcas solo los ves tú.</p>' : ''}`;
-}
-export function toggleSocial(force) {
-  socialOpen = force == null ? !socialOpen : force;
-  const el = $('#social'); el.classList.toggle('hidden', !socialOpen);
-  if (socialOpen) el.innerHTML = socialHTML();
-}
-export const closeSocial = () => toggleSocial(false);
+// El panel de la sala (💬 Chat / 👥 Sala) vive en chat.js
 export function updatePlayersUI() {
-  if (socialOpen) $('#social').innerHTML = socialHTML();
+  refreshSocial();
   const pl = $('#plist'); if (pl) pl.innerHTML = st.inGame && net.others.size ? playersHTML(true) : '';
   updateHUD();
 }
@@ -120,7 +109,7 @@ export const isModalOpen = () => !!MR;
 export function openModal(render, handler, after) { MR = render; MH = handler; MA = after || null; st.busy = true; held.clear(); closeSocial(); $('#modal').classList.remove('hidden'); rerender(); }
 function rerender() { $('#mcontent').innerHTML = MR(); if (MA) MA(); updateHUD(); }
 export function closeModal() { $('#modal').classList.add('hidden'); MR = MH = MA = null; st.busy = false; held.clear(); save(); }
-export const modalIs = k => (k === 'party' && MR === partyRender) || (k === 'map' && MR === mapRender) || (k === 'village' && MR === villageRender);
+export const modalIs = k => (k === 'party' && MR === partyRender) || (k === 'map' && MR === mapRender) || (k === 'village' && MR === villageView);
 
 // ================= Aldea =================
 let VF = null, VMSG = '', VSELL = false;
@@ -168,9 +157,15 @@ function villageAct(a, k) {
     else if (active().length >= MAX_ACTIVE) VMSG = `Ya tienes ${MAX_ACTIVE} misiones activas. Abandona o termina una primero.`;
   }
   if (a === 'boat' && !G.boat && G.gold >= BOAT_PRICE) { G.gold -= BOAT_PRICE; G.boat = true; save('now'); VMSG = '⛵ ¡Compraste un bote! Ahora puedes navegar por el mar (las montañas siguen bloqueadas).'; }
+  // ---- Portal (Versión 3 · Fase 0.1) ----
+  if (a === 'portal') { VVIEW = 'portal'; PSEL = null; }
+  if (a === 'pmap') { VVIEW = 'pmap'; PSEL = null; }
+  if (a === 'vback') VVIEW = 'village';
+  if (a === 'pzone') PZ = PZ === k ? '' : k;   // tocar la zona abierta la pliega
+  if (a === 'fav' && G.vv[k] && k !== startId()) { G.favs = G.favs || {}; if (G.favs[k]) delete G.favs[k]; else G.favs[k] = 1; save(); }
   if (a === 'travel') {
     const v = G.vv[k], cost = travelCost();
-    if (v && G.gold >= cost) { G.gold -= cost; closeModal(); travelTo(v); return; }
+    if (v && k !== VF.id && G.gold >= cost) { G.gold -= cost; closeModal(); travelTo(v); return; }
   }
   if (a === 'selleq') { const it = G.inventory[+k]; if (it) { G.inventory.splice(+k, 1); G.gold += sellPrice(it); save('now'); VMSG = `Vendiste ${itemLabel(it)} por ${sellPrice(it)} de oro.`; } }
   if (a === 'tog') {
@@ -180,11 +175,13 @@ function villageAct(a, k) {
     if (!G.party.includes(G.leader)) G.leader = G.party[0];
   }
   rerender();
+  if (['portal', 'pmap', 'vback'].includes(a)) $('#mcontent').scrollTop = 0;
 }
 export function openVillage(f) {
   VF = f; VMSG = ''; VSELL = false; G.lastVillage = G.lastVillage || { x: f.x, y: f.y };
   G.vv = G.vv || {}; if (!G.vv[f.id]) G.vv[f.id] = { x: f.x, y: f.y, name: f.name };   // aldea descubierta (portales)
-  openModal(villageRender, villageAct);
+  VVIEW = 'village'; PZ = null; PSEL = null;
+  openModal(villageView, villageAct, () => { if (VVIEW === 'pmap') drawPortalMap(); });
 }
 
 // ---- Tablón de misiones ----
@@ -204,15 +201,93 @@ function dockHTML(f) {
   if (!isCoastal(f)) return '';
   return `<div class="sec"><h3>⛵ Muelle</h3><div class="shop"><span>${G.boat ? 'Ya tienes bote: camina hacia el mar para navegar.' : `<b>Bote</b> <small class="mut">navega por el mar (con encuentros marinos).</small>`}</span>${G.boat ? '<span class="qon">✅ Tuyo</span>' : `<button class="btn sm" data-a="boat" ${G.gold < BOAT_PRICE ? 'disabled' : ''}>Comprar · ${BOAT_PRICE} oro</button>`}</div></div>`;
 }
-// ---- Portal: viajar a otra aldea ya visitada ----
+// ---- Portal: viajar a otra aldea ya visitada (Versión 3 · Fase 0.1) ----
+// Ciudad Origen fija arriba; ⭐ favoritas; el resto agrupado en 4 zonas (⬆️ Norte, ⬇️ Sur, ➡️ Este, ⬅️ Oeste)
+// calculadas respecto a Ciudad Origen, cada una ordenada de la más cercana a la más lejana desde tu posición.
 const travelCost = () => Math.round(5 * avgLvl());
-function portalHTML(f) {
-  const list = Object.entries(G.vv || {}).filter(([id]) => id !== f.id).map(([id, v]) => ({ id, v, d: Math.round(Math.hypot(v.x - f.x, v.y - f.y)) })).sort((a, b) => a.d - b.d);
-  const cost = travelCost();
-  return `<div class="sec"><h3>🌀 Portal <small class="mut">viaja a una aldea que ya visitaste · ${cost} oro</small></h3>
-    ${list.length ? list.map(({ id, v, d }) => `<div class="shop"><span>🏘️ <b>${v.name}</b> <small class="mut">${d} casillas al ${compass(v.x - f.x, v.y - f.y)}</small></span><button class="btn sm" data-a="travel" data-k="${id}" ${G.gold < cost ? 'disabled' : ''}>Viajar</button></div>`).join('')
-      : '<p class="mut small" style="margin:0">Visita otras aldeas para poder viajar entre ellas.</p>'}</div>`;
+const ZONES = [['N', '⬆️ Norte'], ['S', '⬇️ Sur'], ['E', '➡️ Este'], ['O', '⬅️ Oeste']];
+let VVIEW = 'village', PZ = null, PSEL = null;   // vista de la ventana · zona abierta · aldea tocada en el mapa
+const startId = () => 'village@' + START.x + ',' + START.y;
+const zoneOfV = v => zoneOf(v.x - START.x, START.y - v.y);
+// "18 casillas al sur de ti"
+const fromYou = v => { const dx = v.x - P.x, dn = P.y - v.y, d = Math.round(Math.hypot(dx, dn)); return d ? `${d} casilla${d === 1 ? '' : 's'} al ${cardinalWord(dx, dn)} de ti` : 'aquí'; };
+function portalEntries() {
+  return Object.entries(G.vv || {}).map(([id, v]) => ({ id, v, d: Math.hypot(v.x - P.x, v.y - P.y), here: VF && id === VF.id, origin: id === startId() }));
 }
+function portalHTML(f) {
+  const n = portalEntries().filter(e => !e.here).length;
+  return `<div class="sec"><h3>🌀 Portal</h3><div class="shop"><span>Viaja al instante a una aldea que ya visitaste. <small class="mut">${n} destino${n === 1 ? '' : 's'} · ${travelCost()} oro por viaje</small></span><button class="btn gold" data-a="portal">🌀 Abrir portal</button></div></div>`;
+}
+// Una fila: estrella, nombre (con "…" si es largo), datos chicos debajo y "Viajar" siempre a la derecha
+function prow(e, cost, cls) {
+  const fav = !!(G.favs && G.favs[e.id]);
+  const star = e.origin ? '<span class="pstar fixed emoji">🏰</span>' : `<button class="pstar emoji ${fav ? 'on' : ''}" data-a="fav" data-k="${esc(e.id)}" aria-label="${fav ? 'Quitar de favoritas' : 'Marcar como favorita'}">${fav ? '⭐' : '☆'}</button>`;
+  const info = e.here ? '📍 Estás aquí' : `${relCoords(e.v.x, e.v.y)} · ${fromYou(e.v)} · ${cost} oro`;
+  return `<div class="pv ${cls || ''} ${e.here ? 'here' : ''}">${star}<div class="pvi"><b>${esc(e.v.name)}</b><small>${e.here ? `${relCoords(e.v.x, e.v.y)} · ` : ''}${info}</small></div>
+    <button class="btn pgo ${e.origin ? 'gold' : ''}" data-a="travel" data-k="${esc(e.id)}" ${e.here || G.gold < cost ? 'disabled' : ''}>${e.here ? '📍' : 'Viajar'}</button></div>`;
+}
+function portalRender() {
+  const cost = travelCost(), all = portalEntries(), origin = all.find(e => e.origin);
+  const rest = all.filter(e => !e.origin).sort((a, b) => a.d - b.d);
+  const favs = rest.filter(e => G.favs && G.favs[e.id]);
+  const byZ = { N: [], S: [], E: [], O: [] }; for (const e of rest) byZ[zoneOfV(e.v)].push(e);
+  if (PZ === null) {   // por defecto: la zona donde está el jugador (en Ciudad Origen, la que tiene más aldeas)
+    PZ = (P.x === START.x && P.y === START.y) ? ZONES.map(z => z[0]).sort((a, b) => byZ[b].length - byZ[a].length)[0] : zoneOf(P.x - START.x, START.y - P.y);
+  }
+  let h = `<h2>🌀 Portal</h2><p class="mut" style="margin:0">Desde <b>${esc(VF.name)}</b> · cada viaje cuesta <b class="goldt">${cost} oro</b> · tienes 💰 ${G.gold}</p>
+  ${VMSG ? `<div class="pend" style="margin-top:8px">${VMSG}</div>` : ''}
+  ${origin ? `<div class="porigin">${prow(origin, cost, 'big')}</div>` : ''}`;
+  if (favs.length) h += `<div class="psec"><h3>⭐ Favoritas</h3>${favs.map(e => prow(e, cost)).join('')}</div>`;
+  h += '<div class="pzones">' + ZONES.map(([z, label]) => {
+    const open = PZ === z, list = byZ[z];
+    return `<button class="pzh ${open ? 'on' : ''}" data-a="pzone" data-k="${z}" aria-expanded="${open}"><span>${label} <small>(${list.length})</small></span><span class="pzc">${open ? '▴' : '▾'}</span></button>
+      ${open ? `<div class="pzl">${list.length ? list.map(e => prow(e, cost)).join('') :'<p class="mut small" style="margin:6px 4px">Aún no visitas aldeas en esta zona.</p>'}</div>` : ''}`;
+  }).join('') + '</div>';
+  if (!rest.length) h += '<p class="mut small">Visita otras aldeas para poder viajar entre ellas. Ciudad Origen siempre está disponible.</p>';
+  h += `<div class="row end"><button class="btn" data-a="pmap">🗺️ Ver en mapa</button><button class="btn gold" data-a="vback">← Volver a la aldea</button></div>`;
+  return h;
+}
+// ---- Vista "🗺️ Ver en mapa": las aldeas visitadas en un mapa; al tocar una aparece su tarjeta con "Viajar" ----
+function portalMapRender() {
+  const cost = travelCost(), sel = PSEL && portalEntries().find(e => e.id === PSEL);
+  return `<h2>🗺️ Aldeas visitadas</h2><p class="mut" style="margin:0">Toca una aldea para viajar · cada viaje cuesta <b class="goldt">${cost} oro</b></p>
+    <canvas id="pmap" aria-label="Mapa de aldeas visitadas"></canvas>
+    <div class="pmsel">${sel ? prow(sel, cost, 'big') : '<p class="mut small" style="text-align:center;margin:4px 0">🏰 Ciudad Origen · ⭐ favoritas · 📍 tú</p>'}</div>
+    <div class="row end"><button class="btn" data-a="portal">← Lista</button><button class="btn gold" data-a="vback">Volver a la aldea</button></div>`;
+}
+let pmapPts = [];
+function drawPortalMap() {
+  const c = $('#pmap'); if (!c) return;
+  const css = c.clientWidth || 300, dpr = Math.min(2, window.devicePixelRatio || 1), Wd = Math.round(css * dpr);
+  c.width = Wd; c.height = Wd; const g = c.getContext('2d'), u = Wd / css;
+  const es = portalEntries(), pts = [...es.map(e => [e.v.x, e.v.y]), [P.x, P.y]];
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(20, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * 1.18;
+  const to = (x, y) => [(.5 + (x - cx) / span) * Wd, (.5 + (y - cy) / span) * Wd];
+  g.fillStyle = '#0e1120'; g.fillRect(0, 0, Wd, Wd);
+  // Ejes que cruzan Ciudad Origen (dividen las 4 zonas)
+  const o = to(START.x, START.y); g.strokeStyle = '#ffffff1a'; g.lineWidth = u;
+  g.beginPath(); g.moveTo(0, o[1]); g.lineTo(Wd, o[1]); g.moveTo(o[0], 0); g.lineTo(o[0], Wd); g.stroke();
+  const txt = (t, p, col, size) => { g.font = `bold ${Math.round(size * u)}px system-ui,sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 3 * u; g.strokeStyle = '#000'; g.strokeText(t, p[0], p[1]); g.fillStyle = col; g.fillText(t, p[0], p[1]); };
+  pmapPts = [];
+  for (const e of es) {
+    const p = to(e.v.x, e.v.y), fav = G.favs && G.favs[e.id], on = e.id === PSEL;
+    pmapPts.push({ id: e.id, x: p[0] / u, y: p[1] / u });
+    g.beginPath(); g.arc(p[0], p[1], (e.origin ? 9 : on ? 8 : 6) * u, 0, 7);
+    g.fillStyle = e.origin ? '#f2c14e' : fav ? '#ffd84d' : on ? '#7fe0ff' : 'rgba(242,193,78,.6)'; g.fill();
+    g.lineWidth = (on ? 3 : 1.5) * u; g.strokeStyle = on ? '#fff' : '#000'; g.stroke();
+    if (e.origin) { g.font = `${Math.round(11 * u)}px ${'"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'}`; g.fillStyle = '#000'; g.fillText('🏰', p[0], p[1]); }
+    if (e.origin || fav || on || es.length <= 12) txt(e.v.name, [p[0], p[1] - 14 * u], e.origin ? '#f2c14e' : '#ffe6a0', 10);
+  }
+  const me = to(P.x, P.y); g.beginPath(); g.arc(me[0], me[1], 4.5 * u, 0, 7); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1.5 * u; g.strokeStyle = '#000'; g.stroke();
+  c.onclick = ev => {
+    const r = c.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    let best = null, bd = 30; for (const p of pmapPts) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = p; } }
+    if (best) { PSEL = best.id; rerender(); }
+  };
+}
+function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : villageRender(); }
 function travelTo(v) {
   P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
   toast(`🌀 Llegaste a ${v.name}`);
@@ -223,10 +298,27 @@ function travelTo(v) {
 let PA = null, NGC = false, PT = 'heroes', PH = null, PI = null, PF = false;
 // Puntaje aproximado de un objeto (para la flechita ▲▼ de la lista)
 const score = it => Object.entries(it.st).reduce((a, [k, v]) => a + v * (k === 'mhp' ? 1 / 3 : k === 'mmp' ? .5 : ['crit', 'ls', 'pres'].includes(k) ? .4 : 1), 0);
+// Elegir héroe para un objeto o una habilidad de apoyo (Versión 3 · Fase 0.4): tarjetas con PV/PM y vista previa
+const hv = h => ({ hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), poison: h.poison || 0 });
+const cardOf = h => ({ h, e: h.e, name: esc(h.name), sub: `${CL[h.cls].n} · Nv ${h.lvl}`, H: hv(h) });
 function pendHTML() {
   if (!PA) return '';
-  const cands = PA.t === 'dead' ? heroes().filter(x => x.hp <= 0) : PA.t === 'ally' ? alive(heroes()) : [];
-  return `<div class="pend">Elige el objetivo de <b>${PA.label}</b>: ${cands.length ? cands.map(c => `<button class="btn sm" data-a="tgt" data-k="${G.roster.indexOf(c)}">${c.e} ${c.name} (${c.hp}/${S(c, 'mhp')})</button>`).join(' ') : '<span class="mut">no hay objetivos válidos</span>'} <button class="btn sm" data-a="cancel">Cancelar</button></div>`;
+  let rows;
+  if (PA.kind === 'item') rows = itemTargets(PA.k, heroes().map(cardOf));
+  else {
+    const c = PA.caster, est = estimate(PA.sk, { atk: S(c, 'atk'), atkRaw: S(c, 'atk'), mag: S(c, 'mag'), hp: c.hp, mhp: S(c, 'mhp'), critMul: 1.75 }, []);
+    rows = heroes().map(cardOf).filter(x => PA.t === 'dead' ? x.H.hp <= 0 : true).map(x => {
+      if (PA.t === 'dead') return { x, prev: est.revive ? est.revive(x.H) : '' };
+      if (x.H.hp <= 0) return { x, dis: '💀 Caído' };
+      if (x.H.hp >= x.H.mhp && !x.H.poison) return { x, dis: 'Vida llena' };
+      return { x, prev: est.ally ? est.ally(x.H) : '', need: x.H.hp / x.H.mhp };
+    });
+    const ok = rows.filter(r => !r.dis); const best = ok.length ? ok.reduce((a, b) => ((b.need || 0) < (a.need || 0) ? b : a)) : null; if (best) best.best = true;
+  }
+  const title = PA.kind === 'item' ? `¿En quién usas ${IT[PA.k].e} <b>${IT[PA.k].n}</b>? <small class="mut">tienes ${G.items[PA.k]}</small>` : `¿A quién le aplicas <b>${PA.label}</b>? <small class="mut">${PA.caster.e} ${PA.caster.name} · ${skillCost(PA.caster, PA.sk)} PM</small>`;
+  return `<div class="pend"><div>${title}</div>
+    <div class="pick hpkgrid">${rows.length ? rows.map(r => `<button class="pickc hpk ${r.best ? 'best' : ''}" data-a="tgt" data-k="${G.roster.indexOf(r.x.h)}" ${r.dis ? 'disabled' : ''}>${heroCardHTML(r.x, r.prev, r.dis, r.best)}</button>`).join('') : `<span class="mut">${PA.t === 'dead' ? 'No hay héroes caídos.' : 'No hay objetivos válidos.'}</span>`}</div>
+    <button class="btn full" data-a="cancel">Cancelar</button></div>`;
 }
 const eqLine = x => `<div class="eqline">${SLOT_KEYS.map(sl => { const it = x.equip && x.equip[sl]; return it ? `<span class="emoji" title="${it.n}" style="border-color:${RAR[it.r].c}">${TYPES[it.t].e}</span>` : `<span class="emoji empty" title="${SLOTS[sl].n} vacía">${SLOTS[sl].i}</span>`; }).join('')}</div>`;
 function heroesTab() {
@@ -324,8 +416,9 @@ async function partyAct(a, k) {
   if (a === 'item') { PA = { kind: 'item', k, t: IT[k].t, label: IT[k].n }; }
   if (a === 'tgt' && PA) {
     const t = G.roster[+k];
-    if (PA.kind === 'skill') { const c = skillCost(PA.caster, PA.sk); if (PA.caster.mp >= c) { PA.caster.mp -= c; await runSkill(PA.sk, PA.caster, [t]); } }
-    else if (G.items[PA.k] > 0) useItem(PA.k, t);
+    const okT = t && (PA.t === 'dead' ? t.hp <= 0 : t.hp > 0);   // nunca curar a un caído ni "revivir" a uno vivo
+    if (!okT) { /* nada */ } else if (PA.kind === 'skill') { const c = skillCost(PA.caster, PA.sk); if (PA.caster.mp >= c) { PA.caster.mp -= c; await runSkill(PA.sk, PA.caster, [t]); toast(`✨ ${PA.label} → ${esc(t.name)}`); } }
+    else if (G.items[PA.k] > 0) { useItem(PA.k, t); toast(`${IT[PA.k].e} ${IT[PA.k].n} → ${esc(t.name)}`); }
     PA = null;
   }
   // ---- Equipo ----
@@ -352,6 +445,7 @@ async function partyAct(a, k) {
   }
   if (a === 'drop' && PI && PI.src === 'inv') { if (!PI.drop) PI.drop = true; else { G.inventory.splice(PI.i, 1); PI = null; save(); } }
   if (MR === partyRender) rerender();
+  if ((a === 'item' || a === 'fskill') && PA) { const p = $('#mcontent .pend'); if (p) p.scrollIntoView({ block: 'nearest' }); }
 }
 export function openParty(tab) { PA = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
 
@@ -441,13 +535,11 @@ export function initUI(h) {
     if (b && MH && !b.disabled) { MH(b.dataset.a, b.dataset.k); return; }
     if (e.target.id === 'modal' && MR) closeModal();
   });
-  $('#social').addEventListener('click', e => {
-    const b = e.target.closest('[data-s]'); if (!b) return;
-    const a = b.dataset.s;
-    if (a === 'close') closeSocial();
-    else if (a === 'q') { sendQuick(b.dataset.k); closeSocial(); }
-    else if (a === 'pin') { placePin(P.x, P.y); if (!st.online) feed('📍 Marcaste este lugar (visible 2 minutos)'); closeSocial(); }
-  });
+  initChat();
+  // 👁️ Mostrar u ocultar a los demás jugadores (3 modos, se guarda en el dispositivo)
+  const visBtn = () => { const v = VIS[visMode()], b = $('#bVis'); if (!b) return; b.querySelector('.vi').textContent = v.i; b.title = v.n; b.setAttribute('aria-label', 'Ver jugadores: ' + v.n); };
+  visBtn();
+  $('#bVis').onclick = () => { const v = VIS[cycleVis()]; visBtn(); toast(`${v.i} ${v.n}<br><span style="font-size:13px;color:#cfd5ea">${v.d}</span>`); updateMini(); };
   $('#bParty').onclick = () => { if (!st.busy) openParty(); };
   $('#bMap').onclick = () => { if (!st.busy) openMap(); };
   $('#bSocial').onclick = () => toggleSocial();

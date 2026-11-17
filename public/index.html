@@ -31,8 +31,9 @@
 <div id="dock" class="hidden">
   <button class="btn" id="bParty" aria-label="Grupo">🎒<span class="lb"> Grupo <span class="mut">(G)</span></span></button>
   <button class="btn" id="bMap" aria-label="Mapa">🗺️<span class="lb"> Mapa <span class="mut">(M)</span></span></button>
-  <button class="btn" id="bSocial" aria-label="Mensajes y sala">💬<span class="lb"> Sala <span class="mut">(C)</span></span><span id="socBadge" class="badge hidden"></span></button>
+  <button class="btn" id="bSocial" aria-label="Chat y sala">💬<span class="lb"> Chat <span class="mut">(C)</span></span><span id="socBadge" class="badge red hidden" aria-label="Mensajes sin leer"></span></button>
   <button class="btn" id="bSave" aria-label="Guardar">💾<span class="lb"> Guardar</span></button>
+  <button class="btn" id="bVis" aria-label="Ver jugadores"><span class="vi">👁️</span><span class="lb"> Jugadores</span></button>
 </div>
 <div id="social" class="hidden"></div>
 <div id="toast"></div>
@@ -46,6 +47,7 @@
 
 <!-- Combate -->
 <div id="battle" class="hidden">
+  <div id="b-boss" class="hidden" aria-label="Vida del jefe"></div>
   <div id="b-field"></div>
   <div id="b-clock" class="hidden"></div>
   <div id="b-log"></div>
@@ -96,7 +98,7 @@
       </div>
     </div>
 
-    <div class="help">Moverse: WASD o flechas (o la cruceta en el celular: mantén presionado) · G: grupo · M: mapa · C: sala<br>Combate: toca las opciones o teclas 1–9 · Las aldeas 🏘️ son seguras: posada, tienda, herrería y taberna</div>
+    <div class="help">Moverse: WASD o flechas (o la cruceta en el celular: mantén presionado) · G: grupo · M: mapa · C: chat<br>Combate: toca las opciones o teclas 1–9 · Las aldeas 🏘️ son seguras: posada, tienda, herrería y taberna</div>
   </div>
 </div>
 
