@@ -13,6 +13,7 @@ export const net = {
   serverSave: null,     // partida que devolvió el servidor al entrar
   others: new Map(),    // nombre → {name,x,y,px,py,leaderEmoji,avgLvl,biome,status,online,bubble}
   pins: new Map(),      // nombre → {name,x,y,until}
+  invites: new Map(),   // jefes en equipo: id → {id, host, boss, until}
   myBubble: null,
   ev: {},               // callbacks que conecta main.js: players, feed, status
 };
@@ -41,8 +42,9 @@ export function ensureSocket() {
     fire('feed', '⚠️ Entraste con este nombre desde otro lugar. Aquí sigues en modo individual.');
     fire('players'); s.disconnect();
   });
-  // ETAPA 2 (no implementado): aquí se escucharán 'boss:invite', 'battle:join' y 'battle:action'
-  // para los combates cooperativos contra jefes.
+  // Jefes en equipo (coop.js): se reenvían todos los eventos al módulo cooperativo
+  for (const ev of ['boss:invite', 'boss:lobby', 'boss:closed', 'boss:start', 'boss:left', 'battle:state', 'battle:action', 'battle:end']) s.on(ev, d => fire('coop', ev, d));
+  s.on('disconnect', () => fire('coop', 'disconnect', {}));
   net.socket = s;
   return s;
 }
@@ -107,6 +109,9 @@ export function placePin(x, y) {
   if (canSend()) net.socket.emit('ping:place', { x, y });
   else net.pins.set('(tú)', { name: 'Tú', x, y, until: Date.now() + PIN_TTL });
 }
+// Cooperativo: con respuesta (ack) o simple
+export const coopAsk = (ev, data) => ask(ev, data, 8000);
+export function coopSend(ev, data) { if (canSend()) net.socket.emit(ev, data); }
 export function notice(type, text) { if (canSend()) net.socket.emit('event:notice', { type, text }); }
 
 // ================= Guardado en el servidor =================

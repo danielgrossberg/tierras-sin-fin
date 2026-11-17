@@ -370,3 +370,27 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .lg{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid #000}
 .lg.me{background:#fff}.lg.mate{background:linear-gradient(90deg,#4da3ff 50%,#46c37b 50%)}
 .lg.near{background:#ffd84d;border-radius:2px;outline:1.5px solid #fff}.lg.vil{background:rgba(242,193,78,.55);border-radius:2px}
+
+/* ===== Versión 2 · Fase 3: jefes en equipo ===== */
+.bbtns3{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.bbtns3 .btn{min-height:48px}
+.bbtns3 .btn:last-child{grid-column:1/-1}
+.btn.help{background:#3b2a6b;border-color:#7c5cd6;color:#efe7ff}
+.cfbtns3{display:grid;gap:8px;margin-top:10px}
+.cfbtns3 .btn{min-height:48px}
+.lobbyt{margin:10px 0 0;background:#1d1838;border:1px solid #6d5bd0;border-radius:10px;padding:8px 10px;text-align:center;color:#e9ddff}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.pickc{background:var(--panel2);border:2px solid var(--line);border-radius:12px;padding:10px;color:var(--txt);display:flex;flex-direction:column;align-items:center;gap:3px;min-height:44px;text-align:center}
+.pickc .pe{font-size:34px}
+.pickc small{color:var(--mut);font-size:12px}
+.pickc .bar{width:100%}
+.pickc:hover:not([disabled]){border-color:var(--gold)}
+.pickc.dead{opacity:.45;filter:grayscale(1)}
+#invite{position:fixed;left:50%;top:calc(10px + var(--sat));transform:translateX(-50%);width:min(94vw,440px);z-index:46;background:linear-gradient(#2a1f55,#1b1736);border:2px solid #a78bfa;border-radius:14px;padding:10px 12px;box-shadow:0 12px 40px #000c;animation:fin .3s}
+#invite .invt{font-size:15px;line-height:1.35}
+#invite .invs{font-size:12px;margin:4px 0 8px}
+#invite .invb{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+#invite .invb .btn{min-height:46px}
+#b-clock{text-align:center;padding:6px 10px;font-weight:700;background:#1d1838;color:#e9ddff;border-top:1px solid #6d5bd0;font-size:14px}
+#b-clock.mine{background:#4a3a0f;color:#ffe08a;border-color:var(--gold)}
+.hcard.mine{box-shadow:0 0 0 2px #46c37b88}

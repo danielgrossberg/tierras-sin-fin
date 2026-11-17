@@ -58,10 +58,10 @@ function newCode() {
   return null;
 }
 function makeRoom(code) {
-  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), emptySince: Date.now(), dirty: false };
+  const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false };
   rooms.set(code, room); return room;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -91,10 +91,36 @@ function leaveCurrent(socket, explicit) {
   const room = rooms.get(code); if (!room) return;
   const p = room.players.get(socket.data.name);
   if (!p || p.socketId !== socket.id) return;
+  coopLeave(room, p.name);
   if (explicit) { removePlayer(room, p); return; }
   p.online = false; p.socketId = null;
   p.graceTimer = setTimeout(() => removePlayer(room, p), GRACE);
   markDirty(room); updateEmpty(room);
+}
+
+// ================= Jefes en equipo (Versión 2 · Fase 3) =================
+// El servidor solo organiza y reenvía: el anfitrión (quien encontró al jefe) corre el combate.
+// room.coop: id → { id, host, boss, guests: Map(nombre → héroe), state: 'lobby'|'battle', created }
+const INVITE_MS = 90 * 1000, MAX_COOP = 4;
+const sendTo = (room, name, ev, data) => { const q = room.players.get(name); if (q && q.socketId) io.to(q.socketId).emit(ev, data); };
+const coopLobby = c => ({ id: c.id, host: c.host, boss: c.boss, state: c.state, guests: [...c.guests.entries()].map(([n, h]) => ({ name: n, hero: h })), left: Math.max(0, c.created + INVITE_MS - Date.now()) });
+function coopLeave(room, name) {
+  for (const c of [...room.coop.values()]) {
+    if (c.host === name) {   // se fue el anfitrión: se cancela para todos, sin penalización
+      for (const g of c.guests.keys()) sendTo(room, g, 'battle:end', { id: c.id, result: 'cancel', reason: c.host + ' se desconectó' });
+      io.to(room.code).emit('boss:closed', { id: c.id });
+      room.coop.delete(c.id);
+    } else if (c.guests.has(name)) {
+      c.guests.delete(name);
+      sendTo(room, c.host, 'boss:left', { id: c.id, name });   // su héroe se defenderá solo
+      if (c.state === 'lobby') sendTo(room, c.host, 'boss:lobby', coopLobby(c));
+    }
+  }
+}
+// Héroe que se manda al combate (se limita a lo necesario)
+function cleanHero(h) {
+  if (!isObj(h) || typeof h.cls !== 'string' || !Number.isInteger(h.lvl) || h.lvl < 1 || h.lvl > 99) return null;
+  return h;
 }
 
 // Límite simple de frecuencia por socket y tipo de evento (ventana fija)
@@ -104,6 +130,8 @@ function allow(socket, key, max, windowMs) {
   return ++b.n <= max;
 }
 const isObj = d => d && typeof d === 'object' && !Array.isArray(d);
+// eslint-disable-next-line no-control-regex
+const cleanText = (t, n) => Array.from(String(t).replace(/[\u0000-\u001f\u007f<>]/g, '').trim()).slice(0, n).join('');
 const isCoord = v => Number.isInteger(v) && Math.abs(v) < 1e7;
 function validState(d) {
   if (!isObj(d)) return null;
@@ -112,7 +140,9 @@ function validState(d) {
   const lv = Number(d.avgLvl); if (!Number.isFinite(lv) || lv < 1 || lv > 999) return null;
   // Tumba 🪦 (opcional): [x, y] enteros
   const tomb = Array.isArray(d.tomb) && d.tomb.length === 2 && isCoord(d.tomb[0]) && isCoord(d.tomb[1]) ? [d.tomb[0], d.tomb[1]] : null;
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb };
+  // "👑 vs Jefe" mientras dura un combate cooperativo
+  const vs = typeof d.vs === 'string' ? cleanText(d.vs, 30) || null : null;
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;
@@ -252,12 +282,70 @@ io.on('connection', socket => {
     socket.to(c.room.code).emit('event:notice', { type: d.type, name: c.p.name, text });
   });
 
-  // ================= ETAPA 2 (no implementado todavía) =================
-  // Combates cooperativos contra jefes. Idea de protocolo:
-  // socket.on('boss:invite',   d => { /* {bossId, x, y}: avisar a los jugadores cercanos */ });
-  // socket.on('battle:join',   d => { /* {battleId}: sumar el grupo del amigo al combate */ });
-  // socket.on('battle:action', d => { /* {battleId, action, target}: el servidor valida el turno,
-  //                                       tira los dados y reenvía el resultado a todos */ });
+  // ================= Jefes en equipo =================
+  // boss:invite (anfitrión) → todos ven la invitación 90 s · boss:join / boss:leave (invitados)
+  // boss:start / boss:cancel (anfitrión) · battle:state (anfitrión → invitados) · battle:action (invitado → anfitrión)
+  // battle:end (anfitrión → invitados)
+  socket.on('boss:invite', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d) || !isObj(d.boss) || !allow(socket, 'coop', 6, 10000)) return reply({ ok: false });
+    const b = d.boss; if (!isCoord(b.x) || !isCoord(b.y) || !Number.isInteger(b.lvl)) return reply({ ok: false });
+    coopLeave(c0.room, c0.p.name);   // un jugador solo puede tener una sesión a la vez
+    const id = Math.random().toString(36).slice(2, 10);
+    const boss = { id: cleanText(b.id, 40), name: cleanText(b.name, 30), e: cleanText(b.e, 8), lvl: b.lvl, x: b.x, y: b.y };
+    const c = { id, host: c0.p.name, boss, guests: new Map(), state: 'lobby', created: Date.now() };
+    c0.room.coop.set(id, c);
+    socket.to(c0.room.code).emit('boss:invite', { id, host: c.host, boss, left: INVITE_MS });
+    reply({ ok: true, id, left: INVITE_MS });
+  });
+  socket.on('boss:join', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d) || !allow(socket, 'coop', 6, 10000)) return reply({ ok: false, error: 'No se pudo unir.' });
+    const c = c0.room.coop.get(d.id);
+    if (!c || c.state !== 'lobby' || Date.now() > c.created + INVITE_MS) return reply({ ok: false, error: 'La invitación ya terminó.' });
+    if (c.host === c0.p.name) return reply({ ok: false, error: 'Es tu propio jefe.' });
+    if (!c.guests.has(c0.p.name) && c.guests.size + 1 >= MAX_COOP) return reply({ ok: false, error: 'Ya hay 4 jugadores.' });
+    const hero = cleanHero(d.hero); if (!hero) return reply({ ok: false, error: 'Héroe inválido.' });
+    c.guests.set(c0.p.name, hero);
+    sendTo(c0.room, c.host, 'boss:lobby', coopLobby(c));
+    reply({ ok: true, lobby: coopLobby(c) });
+  });
+  socket.on('boss:leave', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (c && c.guests.delete(c0.p.name)) { if (c.state === 'lobby') sendTo(c0.room, c.host, 'boss:lobby', coopLobby(c)); else sendTo(c0.room, c.host, 'boss:left', { id: c.id, name: c0.p.name }); }
+  });
+  socket.on('boss:cancel', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (!c || c.host !== c0.p.name) return;
+    for (const g of c.guests.keys()) sendTo(c0.room, g, 'battle:end', { id: c.id, result: 'cancel', reason: c.host + ' decidió no pelear en equipo' });
+    io.to(c0.room.code).emit('boss:closed', { id: c.id }); c0.room.coop.delete(c.id);
+  });
+  socket.on('boss:start', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d)) return reply({ ok: false }); const c = c0.room.coop.get(d.id);
+    if (!c || c.host !== c0.p.name || c.state !== 'lobby' || !c.guests.size) return reply({ ok: false, error: 'Nadie se unió.' });
+    c.state = 'battle';
+    const lobby = coopLobby(c);
+    for (const g of c.guests.keys()) sendTo(c0.room, g, 'boss:start', lobby);
+    io.to(c0.room.code).emit('boss:closed', { id: c.id });   // la invitación desaparece para los demás
+    reply({ ok: true, lobby });
+  });
+  socket.on('battle:state', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (!c || c.host !== c0.p.name || c.state !== 'battle' || !allow(socket, 'bstate', 40, 1000)) return;
+    for (const g of c.guests.keys()) sendTo(c0.room, g, 'battle:state', d);
+  });
+  socket.on('battle:action', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (!c || !c.guests.has(c0.p.name) || c.state !== 'battle' || !allow(socket, 'baction', 6, 1000)) return;
+    sendTo(c0.room, c.host, 'battle:action', Object.assign({}, d, { from: c0.p.name }));
+  });
+  socket.on('battle:end', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (!c || c.host !== c0.p.name) return;
+    for (const g of c.guests.keys()) sendTo(c0.room, g, 'battle:end', d);
+    c0.room.coop.delete(c.id);
+  });
 
   socket.on('disconnect', () => leaveCurrent(socket, false));
 });
@@ -278,6 +366,7 @@ setInterval(() => {
     }
   }
   for (const [k, f] of pinFails) if (now - f.t > PIN_LOCK) pinFails.delete(k);
+  for (const room of rooms.values()) for (const [id, c] of room.coop) if (c.state === 'lobby' && now - c.created > 5 * 60 * 1000) room.coop.delete(id);
 }, 60 * 1000);
 
 db.init(); // no bloquea: si la base no responde, el juego funciona igual y se reintenta

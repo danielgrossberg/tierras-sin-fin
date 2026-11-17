@@ -63,6 +63,8 @@ export function paintMap(c, R, opts = {}) {
   for (const pin of net.pins.values()) if (pin.until > now) { const p = to(pin.x, pin.y); if (inside(p)) dot(p, 3.5 * u, '#ff5fa2'); }
   if (tq && tq.target) { const p0 = to(tq.target.x, tq.target.y), p = clampP(p0, m); dot(p, 4 * u, '#c084fc'); if (!inside(p0, m)) edgeTri(p, p0, '#c084fc'); }
   if (G.tomb) { const p0 = to(G.tomb.x, G.tomb.y), p = clampP(p0, m); dot(p, 7 * u, 'rgba(255,48,48,.85)'); glyph('🪦', p, 9 * u); if (!inside(p0, m)) edgeTri(p, p0, '#ff4040'); }
+  // ---- Invitaciones a jefes en equipo (📣)
+  for (const v of net.invites.values()) { if (v.until < now) continue; const p0 = to(v.boss.x, v.boss.y), p = clampP(p0, m); dot(p, 7 * u, '#7c3aed'); glyph('📣', p, 9 * u); if (!inside(p0, m)) edgeTri(p, p0, '#a78bfa'); }
   // ---- Ciudad Origen: castillo dorado (siempre visible; en el borde indica la dirección)
   { const p0 = to(START.x, START.y), p = clampP(p0, 11 * u);
     dot(p, 9 * u, '#f2c14e'); glyph('🏰', p, 12 * u); if (!inside(p0, 11 * u)) edgeTri(p, p0, '#f2c14e'); }

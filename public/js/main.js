@@ -12,6 +12,7 @@ import { save, loadGame, removeGame, listSaves, loadPrefs, savePrefs, migrate, w
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onArrive, clearQuestCache } from './quests.js';
 import { onTomb, recoverTomb, tombExpired } from './tomb.js';
+import { initCoop, coopVs, inCoopBattle } from './coop.js';
 
 // ================= Movimiento en el mapa =================
 const DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
@@ -69,8 +70,8 @@ function useShrine(f) {
   toast(`⛩️ Santuario antiguo<br><span style="font-size:14px">${b[2]} para todos los héroes · grupo restaurado</span>`); save();
 }
 // Estado que ven los demás
-const curStatus = () => getBT() ? 'battle' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null });
+const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : (inVillage() || modalIs('village')) ? 'village' : 'map';
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs() });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -300,6 +301,7 @@ net.ev.feed = html => feed(html);
 net.ev.status = () => { updateHUD(); updatePlayersUI(); renderRoomInfo(); };
 net.ev.saveData = () => st.inGame ? G : null;   // lo que se sube al servidor
 
+initCoop();
 initUI({
   onNewGame: () => { removeGame(st.room, st.name); showHeroes(); },
   onExit: () => { save('urgent'); leaveRoom(); showLobby(); },

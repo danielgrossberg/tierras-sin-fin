@@ -21,7 +21,9 @@ export function eqSum(h, k) { let s = 0; const e = h.equip; if (e) for (const sl
 export function heroFx(h, fx) { const e = h && h.isHero && h.equip; if (e) for (const sl in e) if (e[sl] && e[sl].fx === fx) return true; return false; }
 export function hs(h, k) {
   const c = CL[h.cls];
-  return Math.round(c.b[k] + c.g[k] * (h.lvl - 1)) + (h.bonus[k] || 0) + (k === 'atk' ? G.upA * 2 : k === 'def' ? G.upD * 2 : 0) + eqSum(h, k);
+  // Un héroe de otro jugador (combate cooperativo) trae sus propias mejoras de herrería (upA/upD)
+  const ua = h.upA != null ? h.upA : G.upA, ud = h.upD != null ? h.upD : G.upD;
+  return Math.round(c.b[k] + c.g[k] * (h.lvl - 1)) + (h.bonus[k] || 0) + (k === 'atk' ? ua * 2 : k === 'def' ? ud * 2 : 0) + eqSum(h, k);
 }
 export const S = (u, k) => u.isHero ? hs(u, k) : u[k];
 // Tras cambiar equipo, la vida/magia actual no puede pasar del nuevo máximo

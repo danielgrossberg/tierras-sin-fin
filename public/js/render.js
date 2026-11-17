@@ -277,6 +277,8 @@ export function draw(t) {
   { const v = nearestVillage(P.x, P.y); if (v) { const ax = sx(v.x), ay = sy(v.y); if (offscreen(ax, ay)) edgeArrow(ax, ay, '🏘️', `${v.name} · ${Math.round(Math.hypot(v.x - P.x, v.y - P.y))} c`, '#9aa3b5', '#e2e6ef', 1, placed); } }
   // Tumba (roja): distancia y minutos que quedan
   if (G.tomb) { const tx = sx(G.tomb.x), ty = sy(G.tomb.y); if (offscreen(tx, ty)) edgeArrow(tx, ty, '🪦', `${Math.round(Math.hypot(G.tomb.x - P.x, G.tomb.y - P.y))} c · ${tombMinutes()} min`, '#ff4040', '#ffc2c2', 1, placed); }
+  // Invitación a un jefe en equipo (📣)
+  for (const v of net.invites.values()) { if (v.until < Date.now()) continue; const ix = sx(v.boss.x), iy = sy(v.boss.y); if (offscreen(ix, iy)) edgeArrow(ix, iy, '📣', `${v.host} · ${Math.round(Math.hypot(v.boss.x - P.x, v.boss.y - P.y))} c`, '#a78bfa', '#e9ddff', 1, placed); }
   // Misión seguida (morado)
   if (tq && tq.target) { const qx = sx(tq.target.x), qy = sy(tq.target.y); if (offscreen(qx, qy)) edgeArrow(qx, qy, QICON[tq.type], `Misión · ${Math.round(Math.hypot(tq.target.x - P.x, tq.target.y - P.y))} c`, '#c084fc', '#ead5ff', 1, placed); }
   for (const o of away) edgeArrow(sx(o.px), sy(o.py), o.leaderEmoji || '🙂', `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c`, mateColor(o.name), '#ffffff', o.online === false ? .5 : 1, placed);

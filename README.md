@@ -187,6 +187,25 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   Origen. Al tocarlo se abre el mapa grande. Se pliega con ▾ (queda un botón 🧭) y el navegador lo recuerda;
   en el celular horizontal parte plegado para no chocar con los botones.
 
+### Fase 3 (lista): jefes en equipo, 1 héroe por jugador
+- La ventana del jefe tiene **⚔️ Pelear solo · 📣 Pedir ayuda · 🏃 Retirarse**. "Pedir ayuda" se activa si hay
+  compañeros conectados explorando.
+- **Pedir ayuda:** eliges **1 héroe** de tu grupo (tarjetas con clase, nivel y PV/PM; los caídos no se pueden elegir).
+  Todos los de la sala ven un aviso grande "Dani encontró al Ogro Rey 👑 (Nv 8) — ⚔️ Unirse / Ahora no" por
+  **90 segundos**, marcado con 📣 en el minimapa y con una flecha. Quien pidió ayuda ve una sala de espera con los
+  que se unen y **¡Comenzar!**; si nadie se une puede **pelear solo con su grupo completo** o retirarse.
+- **Combate:** el que encontró al jefe es el **anfitrión** (corre el combate y transmite el estado); los demás mandan
+  sus acciones. Cada jugador controla solo su héroe, con **30 s por turno** y cuenta regresiva visible (si se acaba,
+  el héroe se defiende). Las habilidades de apoyo funcionan sobre los héroes de los demás. Los invitados "viajan"
+  junto al jefe y al terminar vuelven a su posición. El panel muestra "👑 vs Ogro Rey".
+- **Balance:** vida del jefe × `1 + 0.7 × (jugadores − 1)`. Como el jefe está pensado contra un grupo de 3 héroes
+  y en equipo cada jugador trae 1, el **daño de los enemigos** se ajusta: ×0.55 (2 jugadores), ×0.75 (3), ×1.0 (4).
+- **Resultado:** cada jugador recibe la **experiencia completa** para su héroe y **su propio botín** (Pluma Fénix,
+  Éter y un equipo mínimo Raro); si su héroe cayó pero ganaron, revive con 25% de vida. Si pierden, cada uno despierta
+  en Ciudad Origen con todo su grupo y la regla de la tumba 🪦 (los objetos quedan donde estaba antes del combate).
+- **Desconexiones:** si se va el anfitrión, el combate se cancela para todos **sin penalización**; si se va un invitado,
+  su héroe se defiende solo y el combate sigue.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -225,6 +244,7 @@ public/js/items.js     Equipo: tipos, rarezas, legendarios, nombres, botín y ar
 public/js/quests.js    Misiones de aldea: generación determinista, progreso y recompensas
 public/js/tomb.js      Tumba 🪦: objetos del grupo caído, recuperación y vencimiento (60 min)
 public/js/minimap.js   Dibujo del mapa grande y del mini-minimapa
+public/js/coop.js      Jefes en equipo: invitación, elección de héroe, sala de espera y vista del invitado
 public/js/ui.js        HUD, avisos, modales (aldea, grupo, mapa) y panel de la sala
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})
@@ -244,9 +264,14 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `chat:quick` | ida y vuelta | `{msgId}` → `{name, msgId}` |
 | `ping:place` | ida y vuelta | `{x, y}` → `{name, x, y, ttl}` (2 minutos) |
 | `event:notice` | ida y vuelta | `{type:'level'\|'boss'\|'death', text}`; el servidor además envía `join`/`leave` |
+| `boss:invite` | anfitrión → sala (ack) | `{boss, hero}` → todos reciben `{id, host, boss, left}` (90 s) |
+| `boss:join` / `boss:leave` | invitado → servidor | `{id, hero}` / `{id}`; el anfitrión recibe `boss:lobby` |
+| `boss:start` / `boss:cancel` | anfitrión → invitados | comienza o se cancela; la invitación se cierra con `boss:closed` |
+| `battle:state` | anfitrión → invitados | estado del combate (enemigos, héroes, turno, registro, números flotantes) |
+| `battle:action` | invitado → anfitrión | `{id, heroId, kind, key, target}` (kind: atk, skill, item o def) |
+| `battle:end` | anfitrión → invitados | `{result, xp, gold, boss, heroes}` (win, lose o cancel; si se va el anfitrión, el servidor manda cancel) |
 
-El servidor valida tipos, largos y frecuencias de todo lo que llega. Lo de la **Etapa 2**
-(`boss:invite`, `battle:join`, `battle:action`) está comentado en `server.js`, `net.js` y `battle.js`.
+El servidor valida tipos, largos y frecuencias de todo lo que llega. Los eventos de los jefes en equipo están en `server.js` (sesiones) y `public/js/coop.js` (cliente).
 
 ## Limitaciones conocidas
 

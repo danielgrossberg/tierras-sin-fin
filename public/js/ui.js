@@ -10,6 +10,7 @@ import { INV_MAX, SLOTS, SLOT_KEYS, TYPES, RAR, STAT, LEGENDS, slotOf, canUse, s
 import { save } from './storage.js';
 import { tombMinutes } from './tomb.js';
 import { paintMap, relCoords } from './minimap.js';
+import { askHelp, canAskHelp } from './coop.js';
 import { net, sendQuick, placePin, mateColor } from './net.js';
 
 // Acciones que resuelve main.js (evita dependencias circulares con la pantalla de inicio)
@@ -86,7 +87,7 @@ export function playersHTML(onlyOthers) {
     const bi = B[o.biome] || B.GRASS;
     const where = lobby ? '' : `${bi.i} ${bi.n}`;
     const dist = !lobby && st.inGame ? `<span class="pd">${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c ${dirArrow(o.x - P.x, o.y - P.y)}</span>` : '';
-    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
+    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : o.vs ? '👑 vs ' + esc(o.vs) : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
   }
   if (!rows.length || (rows.length === 1 && !onlyOthers && st.inGame)) rows.push(`<div class="mut pempty">${st.online ? 'Comparte el código <b>' + esc(st.room) + '</b> para que tu amigo entre.' : 'Modo sin conexión.'}</div>`);
   return rows.join('');
@@ -356,7 +357,7 @@ export function openParty(tab) { PA = null; NGC = false; PI = null; if (tab) PT 
 
 // ================= Confirmación antes de pelear con un jefe =================
 // Los jefes nunca inician el combate solos: el jugador decide.
-// ETAPA 2 fase D: aquí se agregará el botón "📣 Pedir ayuda".
+// "📣 Pedir ayuda" abre el combate en equipo (coop.js).
 let BC = null;
 function bossRender() {
   const m = BC.m, b = EN[m.group[0]], al = avgLvl(), danger = m.lvl - al >= 2;
@@ -369,7 +370,8 @@ function bossRender() {
     ${escort.length ? `<p class="mut small">Lo acompañan: ${escort.join(', ')}</p>` : ''}
     ${danger ? '<div class="bwarn">⚠️ Muy peligroso</div>' : ''}
     <p class="bnote">Si cae todo tu grupo, despertarás en Ciudad Origen y tus objetos quedarán en una tumba 🪦 por 60 minutos.</p>
-    <div class="bbtns"><button class="btn gold big" data-a="fight">⚔️ Pelear</button><button class="btn big" data-a="retreat">🏃 Retirarse</button></div>
+    <div class="bbtns3"><button class="btn gold big" data-a="fight">⚔️ Pelear solo</button><button class="btn big help" data-a="help" ${canAskHelp() ? '' : 'disabled'}>📣 Pedir ayuda</button><button class="btn big" data-a="retreat">🏃 Retirarse</button></div>
+    ${canAskHelp() ? '<p class="mut small" style="margin:6px 0 0">Con ayuda, cada jugador pelea con 1 héroe y la vida del jefe sube según cuántos sean.</p>' : '<p class="mut small" style="margin:6px 0 0">📣 Pedir ayuda se activa cuando hay compañeros conectados explorando.</p>'}
   </div>`;
 }
 export function openBossConfirm(m, onFight) {
@@ -377,6 +379,7 @@ export function openBossConfirm(m, onFight) {
   openModal(bossRender, a => {
     const c = BC;
     if (a === 'fight') { closeModal(); c.onFight(c.m); }
+    else if (a === 'help') { closeModal(); askHelp(c.m); }
     else if (a === 'retreat') closeModal();
   });
 }

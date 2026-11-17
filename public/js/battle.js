@@ -1,10 +1,9 @@
 // Combate por turnos. Cada jugador pelea sus propios combates (todo local).
 // Versión 2: 6 clases nuevas con estados (aturdido, maldición, espinas, forma de oso, invocación,
 // regeneración, canto del bosque, furia, piel de piedra, trampa) y muerte con tumba 🪦.
-// ETAPA 2 (no implementado): aquí se enchufará el combate cooperativo contra jefes.
-//   - Al tocar un jefe: net 'boss:invite' para que los amigos cercanos se unan.
-//   - 'battle:join' agregaría los héroes del amigo a BT y 'battle:action' sincronizaría
-//     cada turno; el servidor sería la autoridad del orden de turnos y del azar.
+// Jefes en equipo (Versión 2 · Fase 3): el anfitrión corre aquí el combate con los héroes de todos
+// (BT.party); los héroes remotos esperan la acción de su jugador (remoteTurn) y el estado se transmite
+// a los invitados (coopSnapshot). La invitación, la sala y la vista del invitado están en coop.js.
 'use strict';
 import { $, sleep, clamp, pick } from './util.js';
 import { CL, SK, IT, EN, BG } from './data.js';
@@ -22,8 +21,11 @@ export const getBT = () => BT;
 // Para las simulaciones de balance: una función que elige las opciones del menú sin tocar la pantalla
 let AUTO = null;
 export const setAutoPlayer = f => { AUTO = f; };
+// Participantes del combate: el grupo propio o, en un jefe en equipo, 1 héroe por jugador
+const party = () => (BT && BT.party) || heroes();
 // Pasivas de grupo
-const partyHas = cls => heroes().some(h => h.cls === cls);
+const partyHas = cls => party().some(h => h.cls === cls);
+const TURN_MS = 30000;   // tiempo por turno en los combates en equipo
 
 // ================= Participación (para repartir la experiencia) =================
 // Daño realmente aplicado, +25% PV máx. del enemigo por rematarlo, curación real
@@ -53,7 +55,7 @@ function splitXP(party, X) {
 const allEnemiesAoE = async (u, ts, fn, o) => { for (const t of ts) if (t.hp > 0) await strike(u, t, fn(t), Object.assign({ fast: 1 }, o)); };
 const RUN = {
   golpe: async (u, [t]) => { await strike(u, t, phys(u, t, 1.8)); },
-  grito: async u => { for (const h of alive(heroes())) { h.buffs.atk = 3; popup(h, 'ATQ ↑', '#f2c14e'); } support(u); refresh(); await sleep(600); },
+  grito: async u => { for (const h of alive(party())) { h.buffs.atk = 3; popup(h, 'ATQ ↑', '#f2c14e'); } support(u); refresh(); await sleep(600); },
   torbellino: (u, ts) => allEnemiesAoE(u, ts, t => phys(u, t, 1.1)),
   titanico: async (u, [t]) => { await strike(u, t, phys(u, t, 3)); },
   fuego: async (u, [t]) => { await strike(u, t, magic(u, t, 1.7), { col: '#ff9a3d' }); },
@@ -68,7 +70,7 @@ const RUN = {
     if (t.stolen) { popup(t, 'Ya no tiene nada', '#ccc'); await sleep(600); return; }
     if (Math.random() < .65) {
       t.stolen = 1; support(u);
-      if (Math.random() < .65) { const g = Math.round(4 + t.g * (.6 + Math.random())); G.gold += g; popup(t, `+${g} oro`, '#f2c14e'); log(`${u.name} roba <b>${g} de oro</b>`); }
+      if (u.remote || Math.random() < .65) { const g = Math.round(4 + t.g * (.6 + Math.random())); if (u.remote) BT.extra[u.owner] = (BT.extra[u.owner] || 0) + g; else G.gold += g; popup(t, `+${g} oro`, '#f2c14e'); log(`${u.name} roba <b>${g} de oro</b>`); }
       else { const k = pick(['pocion', 'pocion', 'eter', 'pluma']); G.items[k]++; popup(t, IT[k].n, '#46c37b'); log(`${u.name} roba <b>${IT[k].e} ${IT[k].n}</b>`); }
     } else { popup(t, '¡Falló!', '#ccc'); }
     refresh(); await sleep(650);
@@ -83,7 +85,7 @@ const RUN = {
   luz: async (u, [t]) => { await strike(u, t, magic(u, t, t.undead ? 3 : 1.5), { col: '#fff8c4' }); },
   curartodos: async (u, ts) => { for (const t of ts) { heal(t, S(u, 'mag') * 1.5 + 8, u); t.poison = 0; } refresh(); await sleep(600); },
   revivir: async (u, [t]) => { t.hp = Math.round(S(t, 'mhp') * .5); popup(t, '¡Revive!', '#46c37b'); support(u); refresh(); await sleep(600); },
-  bendicion: async u => { for (const h of alive(heroes())) { h.buffs.def = 3; popup(h, 'DEF ↑', '#9fd8ff'); } support(u); refresh(); await sleep(600); },
+  bendicion: async u => { for (const h of alive(party())) { h.buffs.def = 3; popup(h, 'DEF ↑', '#9fd8ff'); } support(u); refresh(); await sleep(600); },
   // ---- Bárbaro
   hachazo: async (u, [t]) => { await strike(u, t, phys(u, t, 1.8)); },
   furia: async u => { const c = Math.max(1, Math.round(S(u, 'mhp') * .1)); u.hp = Math.max(1, u.hp - c); u.buffs.fury = 3; popup(u, '😡 Furia -' + c, '#ff7a5c'); refresh(); await sleep(500); },
@@ -106,7 +108,7 @@ const RUN = {
   sismico: (u, ts) => allEnemiesAoE(u, ts, t => phys(u, t, 1.2)),
   // ---- Elfo
   lunar: async (u, [t]) => { const a = phys(u, t, .8), b = magic(u, t, .8); await strike(u, t, { dmg: a.dmg + b.dmg, crit: a.crit }, { col: '#cfe8ff' }); },
-  canto: async u => { for (const h of alive(heroes())) { h.buffs.song = 3; popup(h, '🎵', '#9fe8b0'); } support(u); refresh(); await sleep(550); },
+  canto: async u => { for (const h of alive(party())) { h.buffs.song = 3; popup(h, '🎵', '#9fe8b0'); } support(u); refresh(); await sleep(550); },
   danza: async u => { for (let i = 0; i < 3; i++) { const t = pick(alive(BT.enemies)); if (!t) break; await strike(u, t, phys(u, t, .8), { fast: 1 }); } },
   luzluna: (u, ts) => allEnemiesAoE(u, ts, t => magic(u, t, t.undead ? 2.4 : 1.2), { col: '#e6f0ff' }),
   // ---- Goblin
@@ -128,8 +130,31 @@ function mkEnemy(key, lvl) {
   e.hp = e.mhp; return e;
 }
 const uel = u => document.getElementById('u-' + u.id);
-function log(m) { $('#b-log').innerHTML = m; }
-function popup(u, txt, col) { const el = uel(u); if (!el) return; const s = document.createElement('div'); s.className = 'pop'; s.textContent = txt; s.style.color = col || '#fff'; el.appendChild(s); setTimeout(() => s.remove(), 1050); }
+function log(m) { $('#b-log').innerHTML = m; if (BT && BT.coop) { BT.lastLog = m; coopSync(); } }
+// Estado que ven los invitados (se manda como mucho ~14 veces por segundo, y al instante al cambiar de turno)
+function coopSnapshot() {
+  return { id: BT.coop.id, bg: BT.m.biome, log: BT.lastLog || '', turn: BT.turn,
+    enemies: BT.enemies.map(e => ({ id: e.id, e: e.e, name: e.name, lvl: e.lvl, boss: e.boss, tint: e.tint, hp: e.hp, mhp: e.mhp, tags: tags(e) })),
+    party: party().map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: h.tmp || 0, tags: tags(h), bear: h.buffs.bear > 0 })),
+    pops: BT.pops.splice(0) };
+}
+function coopSync(now) {
+  if (!BT || !BT.coop) return;
+  if (now) { clearTimeout(BT.syncT); BT.syncT = null; BT.coop.send(coopSnapshot()); return; }
+  if (!BT.syncT) BT.syncT = setTimeout(() => { if (BT && BT.coop) { BT.syncT = null; BT.coop.send(coopSnapshot()); } }, 70);
+}
+// Reloj de turno (combates en equipo): 30 s; si se acaba, el héroe se defiende
+function startClock(h) {
+  BT.timedOut = false; clearTimeout(BT.clock); clearInterval(BT.clockI);
+  BT.turn = { id: h.id, owner: h.owner || BT.coop.me, name: h.name, e: h.e, left: TURN_MS, seq: ++BT.turnSeq };
+  const until = Date.now() + TURN_MS, show = () => { const el = $('#b-clock'); if (el) el.textContent = `⏳ ${Math.max(0, Math.ceil((until - Date.now()) / 1000))} s · Turno de ${h.e} ${h.name} (${BT.turn ? BT.turn.owner : ''})`; };
+  show(); BT.clockI = setInterval(show, 500); $('#b-clock').classList.remove('hidden');
+  if (!h.remote) BT.clock = setTimeout(() => { BT.timedOut = true; const r = BT.curRes; BT.curRes = null; if (r) r('__to'); }, TURN_MS);
+  coopSync(true);
+}
+function stopClock() { if (!BT) return; clearTimeout(BT.clock); clearInterval(BT.clockI); BT.turn = null; BT.curRes = null; const el = $('#b-clock'); if (el) el.classList.add('hidden'); }
+async function autoDefend(h, why) { h.defending = true; log(`${h.name} ${why || 'no alcanzó a elegir'}: se defiende`); popup(h, 'Defensa', '#9fd8ff'); refresh(); await sleep(450); }
+function popup(u, txt, col) { if (BT && BT.coop) BT.pops.push({ id: u.id, txt: String(txt), col: col || '#fff' }); const el = uel(u); if (!el) return; const s = document.createElement('div'); s.className = 'pop'; s.textContent = txt; s.style.color = col || '#fff'; el.appendChild(s); setTimeout(() => s.remove(), 1050); }
 function anim(u, cls) { const el = uel(u); if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 450); }
 const critOf = u => (u.isHero ? CL[u.cls].crit + eqSum(u, 'crit') / 100 : .05) + (u.buffs.song > 0 ? .1 : 0);
 // Estados que cambian el ataque / la defensa
@@ -185,8 +210,8 @@ async function strike(a, d, r, o = {}) {
 }
 function kill(u) { u.hp = 0; u.poison = 0; u.burn = 0; u.stun = 0; u.tmp = 0; u.trap = 0; u.buffs = {}; if (BT) BT.summons = BT.summons.filter(s => s.owner !== u); if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
 function heal(u, amt, by) { const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
-export function useItem(k, t) {
-  G.items[k]--;
+export function useItem(k, t) { G.items[k]--; itemEffect(k, t); }
+function itemEffect(k, t) {
   if (k === 'pocion') { heal(t, S(t, 'mhp') * .5); t.poison = 0; }
   else if (k === 'eter') { const mm = S(t, 'mmp'), b = t.mp; t.mp = Math.min(mm, t.mp + Math.round(mm * .5)); popup(t, '+' + (t.mp - b) + ' PM', '#6fb1ff'); }
   else if (k === 'pluma') { t.hp = Math.round(S(t, 'mhp') * .5); popup(t, '¡Revive!', '#46c37b'); }
@@ -202,23 +227,25 @@ const tags = u => (u.poison > 0 ? '☠️' : '') + (u.burn > 0 ? '🔥' : '') + 
 function buildBattle(biome) {
   $('#battle').style.background = BG[biome] || BG.GRASS;
   $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div><div class="bar"><i></i></div><div class="etags"></div></div>`).join('');
-  $('#b-party').innerHTML = heroes().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${h.e}</span><div style="min-width:0"><div class="nm">${h.name}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${CL[h.cls].n}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
+  $('#b-party').innerHTML = party().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${h.e}</span><div style="min-width:0"><div class="nm">${h.name}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${h.owner ? h.owner : CL[h.cls].n}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
   $('#b-menu').innerHTML = ''; refresh();
 }
 export function refresh() {
   updateHUD(); if (!BT) return;
   for (const e of BT.enemies) { const el = uel(e); if (!el) continue; el.querySelector('.bar>i').style.width = (100 * e.hp / e.mhp) + '%'; el.querySelector('.etags').textContent = tags(e); }
-  for (const h of heroes()) {
+  for (const h of party()) {
     const el = uel(h); if (!el) continue; const mh = S(h, 'mhp'), mm = S(h, 'mmp');
     el.classList.toggle('dead', h.hp <= 0); el.classList.toggle('active', BT.active === h);
     el.querySelector('.hpb>i').style.width = (100 * h.hp / mh) + '%'; el.querySelector('.mpb>i').style.width = (100 * h.mp / mm) + '%';
     el.querySelector('.hpt').textContent = `PV ${h.hp}/${mh}` + (h.tmp > 0 ? ` +${h.tmp}` : ''); el.querySelector('.mpt').textContent = `PM ${h.mp}/${mm}`;
     el.querySelector('.tags').textContent = tags(h); el.querySelector('.lvn').textContent = h.lvl;
   }
+  coopSync();
 }
 function menu(opts) {
   if (AUTO) return Promise.resolve(AUTO(opts, BT));
   return new Promise(res => {
+    if (BT && BT.coop) BT.curRes = res;
     const m = $('#b-menu'); m.innerHTML = '';
     opts.forEach((o, i) => {
       const b = document.createElement('button'); b.className = 'btn' + (o.full ? ' full' : '');
@@ -229,7 +256,7 @@ function menu(opts) {
 }
 function pickTarget(kind) {
   return new Promise(res => {
-    const cands = kind === 'enemy' ? alive(BT.enemies) : kind === 'ally' ? alive(heroes()) : kind === 'dead' ? heroes().filter(h => h.hp <= 0) : [];
+    const cands = kind === 'enemy' ? alive(BT.enemies) : kind === 'ally' ? alive(party()) : kind === 'dead' ? party().filter(h => h.hp <= 0) : [];
     if (!cands.length) { res(null); return; }
     if (cands.length === 1 && kind === 'enemy') { res(cands[0]); return; }
     const cleanup = () => cands.forEach(c => { const el = uel(c); if (el) { el.classList.remove('target'); el.onclick = null; } });
@@ -239,9 +266,51 @@ function pickTarget(kind) {
     menu([...cands.map(c => ({ v: c, l: `${c.e} ${c.name}`, s: `PV ${c.hp}/${S(c, 'mhp')}` })), { v: null, l: '↩ Cancelar', full: 1 }]).then(done);
   });
 }
-async function targetsFor(t) { if (t === 'none') return []; if (t === 'enemies') return alive(BT.enemies); if (t === 'allies') return alive(heroes()); const x = await pickTarget(t); return x ? [x] : null; }
+async function targetsFor(t) { if (t === 'none') return []; if (t === 'enemies') return alive(BT.enemies); if (t === 'allies') return alive(party()); const x = await pickTarget(t); return x ? [x] : null; }
+// Anillo del Eco: 20% de repetir la habilidad gratis
+async function echo(h, k, sk, ts) {
+  if (heroFx(h, 'eco') && h.hp > 0 && sk.t !== 'dead' && alive(BT.enemies).length && Math.random() < .2) {
+    let ts2 = ts;
+    if (sk.t === 'enemies') ts2 = alive(BT.enemies);
+    else if (sk.t === 'allies') ts2 = alive(party());
+    else if (sk.t === 'enemy' && ts[0].hp <= 0) ts2 = alive(BT.enemies).slice(0, 1);
+    else if (sk.t === 'ally' && ts[0].hp <= 0) ts2 = [];
+    if (ts2.length || sk.t === 'none') { popup(h, '🔁 ¡Eco!', '#ffd34d'); log(`¡Eco! ${h.name} repite <b>${sk.n}</b>`); await sleep(300); await runSkill(k, h, ts2); }
+  }
+}
+// Turno de un héroe de otro jugador (jefes en equipo): se espera su acción hasta 30 s
+async function remoteTurn(h) {
+  BT.active = h; startClock(h); refresh();
+  log(`Turno de <b>${h.e} ${h.name}</b> · ${h.owner}`);
+  const a = BT.coop.gone.has(h.owner) ? null : await BT.coop.waitAction(h.id, TURN_MS);
+  stopClock();
+  if (!a) return autoDefend(h, BT.coop.gone.has(h.owner) ? 'se desconectó' : 'no alcanzó a elegir');
+  const en = id => BT.enemies.find(e => e.id === id && e.hp > 0) || alive(BT.enemies)[0];
+  const al = id => party().find(x => x.id === id && x.hp > 0), dd = id => party().find(x => x.id === id && x.hp <= 0);
+  if (a.kind === 'atk') {
+    const t = en(a.target); if (!t) return autoDefend(h);
+    log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
+    if (t.hp > 0 && heroFx(h, 'viento') && Math.random() < .25) { popup(h, '🌬️ ¡Flecha extra!', '#bff0ff'); await strike(h, t, phys(h, t, .6), { fast: 1 }); }
+    return;
+  }
+  if (a.kind === 'skill' && SK[a.key]) {
+    const k = a.key, sk = SK[k];
+    if (!learned(h).includes(k) || h.mp < skillCost(h, k) || h.buffs.bear > 0 || (k === 'cerveza' && BT.used.has('cerveza:' + h.id))) return autoDefend(h, 'no pudo usar la habilidad');
+    const ts = sk.t === 'none' ? [] : sk.t === 'enemies' ? alive(BT.enemies) : sk.t === 'allies' ? alive(party()) : sk.t === 'enemy' ? [en(a.target)] : sk.t === 'ally' ? [al(a.target)] : [dd(a.target)];
+    if (ts.some(x => !x)) return autoDefend(h, 'eligió un objetivo que ya no sirve');
+    h.mp -= skillCost(h, k); log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts); await echo(h, k, sk, ts);
+    return;
+  }
+  if (a.kind === 'item' && IT[a.key]) {
+    const t = IT[a.key].t === 'dead' ? dd(a.target) : al(a.target); if (!t) return autoDefend(h);
+    log(`${h.name} usa ${IT[a.key].e} ${IT[a.key].n} en ${t.name}`); itemEffect(a.key, t); await sleep(600); return;
+  }
+  h.defending = true; log(`${h.name} se pone en guardia`); popup(h, 'Defensa', '#9fd8ff'); refresh(); await sleep(450);
+}
 async function heroTurn(h) {
+  if (h.remote) return remoteTurn(h);
   BT.active = h;
+  if (BT.coop) startClock(h);
   // Báculo de las Mareas: +3 PM al empezar el turno
   if (heroFx(h, 'mareas')) { const mm = S(h, 'mmp'), g = Math.min(3, mm - h.mp); if (g > 0) { h.mp += g; popup(h, '+' + g + ' PM', '#6fb1ff'); } }
   refresh();
@@ -249,8 +318,9 @@ async function heroTurn(h) {
     log(`Turno de <b>${h.e} ${h.name}</b>`);
     const bear = h.buffs.bear > 0;   // Forma de Oso: solo ataques físicos
     const c = await menu([{ v: 'atk', l: bear ? '🐻 Zarpazo' : '⚔️ Atacar' }, { v: 'skill', l: bear ? '✨ Habilidades (oso)' : '✨ Habilidades', dis: bear }, { v: 'item', l: '🎒 Objetos' }, { v: 'def', l: '🛡️ Defender' }, { v: 'run', l: '🏃 Huir', full: 1 }]);
+    if (BT.timedOut) return autoDefend(h);
     if (c === 'atk') {
-      const t = await pickTarget('enemy'); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
+      const t = await pickTarget('enemy'); if (BT.timedOut) return autoDefend(h); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
       // Arco del Viento Norte: 25% de flecha extra
       if (t.hp > 0 && heroFx(h, 'viento') && Math.random() < .25) { popup(h, '🌬️ ¡Flecha extra!', '#bff0ff'); await strike(h, t, phys(h, t, .6), { fast: 1 }); }
       return;
@@ -258,36 +328,28 @@ async function heroTurn(h) {
     if (c === 'skill') {
       const once = k => k === 'cerveza' && BT.used.has('cerveza:' + h.id);
       const list = learned(h).map(k => ({ v: k, l: SK[k].n, s: once(k) ? 'Ya usada en este combate' : `${skillCost(h, k)} PM · ${SK[k].d}`, dis: h.mp < skillCost(h, k) || once(k) })); list.push({ v: null, l: '↩ Volver', full: 1 });
-      const k = await menu(list); if (!k) continue; const sk = SK[k]; const ts = await targetsFor(sk.t); if (ts === null) continue;
+      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue; const sk = SK[k]; const ts = await targetsFor(sk.t); if (BT.timedOut) return autoDefend(h); if (ts === null) continue;
       h.mp -= skillCost(h, k); log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts);
-      // Anillo del Eco: 20% de repetir la habilidad gratis
-      if (heroFx(h, 'eco') && h.hp > 0 && sk.t !== 'dead' && alive(BT.enemies).length && Math.random() < .2) {
-        let ts2 = ts;
-        if (sk.t === 'enemies') ts2 = alive(BT.enemies);
-        else if (sk.t === 'allies') ts2 = alive(heroes());
-        else if (sk.t === 'enemy' && ts[0].hp <= 0) ts2 = alive(BT.enemies).slice(0, 1);
-        else if (sk.t === 'ally' && ts[0].hp <= 0) ts2 = [];
-        if (ts2.length || sk.t === 'none') { popup(h, '🔁 ¡Eco!', '#ffd34d'); log(`¡Eco! ${h.name} repite <b>${sk.n}</b>`); await sleep(300); await runSkill(k, h, ts2); }
-      }
+      await echo(h, k, sk, ts);
       return;
     }
     if (c === 'item') {
       const list = Object.keys(IT).map(k => ({ v: k, l: `${IT[k].e} ${IT[k].n} ×${G.items[k] || 0}`, s: IT[k].d, dis: !G.items[k] })); list.push({ v: null, l: '↩ Volver', full: 1 });
-      const k = await menu(list); if (!k) continue; const ts = await targetsFor(IT[k].t); if (!ts) continue;
+      const k = await menu(list); if (BT.timedOut) return autoDefend(h); if (!k) continue; const ts = await targetsFor(IT[k].t); if (BT.timedOut) return autoDefend(h); if (!ts) continue;
       log(`${h.name} usa ${IT[k].e} ${IT[k].n} en ${ts[0].name}`); useItem(k, ts[0]); await sleep(600); return;
     }
     if (c === 'def') { h.defending = true; log(`${h.name} se pone en guardia`); popup(h, 'Defensa', '#9fd8ff'); refresh(); await sleep(450); return; }
     if (c === 'run') {
       if (BT.enemies.some(e => e.boss)) { log('¡No puedes huir de un jefe!'); await sleep(800); continue; }
       if (partyHas('goblin')) { log('🏃 ¡El goblin encontró una salida!'); await sleep(700); return 'fled'; }   // pasiva del Goblin
-      const ps = alive(heroes()).reduce((a, u) => a + S(u, 'spd'), 0) / alive(heroes()).length, es = alive(BT.enemies).reduce((a, u) => a + u.spd, 0) / alive(BT.enemies).length;
+      const ps = alive(party()).reduce((a, u) => a + S(u, 'spd'), 0) / alive(party()).length, es = alive(BT.enemies).reduce((a, u) => a + u.spd, 0) / alive(BT.enemies).length;
       if (Math.random() < clamp(.5 + (ps - es) * .03, .25, .9)) { log('🏃 ¡Escaparon!'); await sleep(700); return 'fled'; }
       log('¡No pudieron escapar!'); await sleep(700); return;
     }
   }
 }
 async function enemyTurn(e) {
-  const ts = alive(heroes()); if (!ts.length) return;
+  const ts = alive(party()); if (!ts.length) return;
   anim(e, 'lunge'); await sleep(220);
   const t = pick(ts); const s = e.sk.length && Math.random() < .35 ? pick(e.sk) : null;
   if (!s) { log(`${e.name} ataca a ${t.name}`); await strike(e, t, e.magic ? magic(e, t, 1) : phys(e, t, 1)); return; }
@@ -296,10 +358,10 @@ async function enemyTurn(e) {
   else if (s === 'drenar') { log(`${e.name} <b>drena la vida</b> de ${t.name}`); const d = await strike(e, t, magic(e, t, 1.1), { col: '#c27bff' }); if (d) { const hh = Math.round(d / 2); e.hp = Math.min(e.mhp, e.hp + hh); popup(e, '+' + hh, '#46c37b'); refresh(); } }
   else if (s === 'fuego') { log(`${e.name} lanza <b>Aliento de Fuego</b>`); for (const h of ts) await strike(e, h, magic(e, h, .85), { fast: 1, col: '#ff9a3d' }); }
 }
-const outcome = () => !alive(BT.enemies).length ? 'win' : !alive(heroes()).length ? 'lose' : null;
+const outcome = () => !alive(BT.enemies).length ? 'win' : !alive(party()).length ? 'lose' : null;
 async function runBattle() {
   while (true) {
-    const order = [...alive(heroes()), ...alive(BT.enemies)].map(u => ({ u, i: S(u, 'spd') * spdMul(u) * (.75 + Math.random() * .5) })).sort((a, b) => b.i - a.i).map(o => o.u);
+    const order = [...alive(party()), ...alive(BT.enemies)].map(u => ({ u, i: S(u, 'spd') * spdMul(u) * (.75 + Math.random() * .5) })).sort((a, b) => b.i - a.i).map(o => o.u);
     for (const u of order) {
       const end = outcome(); if (end) return end;
       if (u.hp <= 0) continue;
@@ -316,6 +378,7 @@ async function runBattle() {
       let r;
       if (u.stun > 0) { u.stun--; popup(u, '💫 Aturdido', '#ffe08a'); log(`${u.name} está aturdido y pierde el turno`); refresh(); await sleep(500); }
       else r = u.isHero ? await heroTurn(u) : await enemyTurn(u);
+      if (BT.coop) stopClock();
       if (u.isHero) BT.acted.add(u.id);
       for (const k in u.buffs) if (u.buffs[k] > 0) u.buffs[k]--;
       if (!(u.buffs.bear > 0)) u.tmp = 0;      // se acabó la Forma de Oso
@@ -336,20 +399,28 @@ async function runBattle() {
 }
 function waitButton(label) { if (AUTO) return Promise.resolve(); return new Promise(res => { const m = $('#b-menu'); const b = document.createElement('button'); b.className = 'btn gold full'; b.innerHTML = `<span class="kn">1</span> ${label}`; b.onclick = () => res(); m.appendChild(b); }); }
 
-export async function startBattle(m) {
+// opts.party: participantes (por defecto el grupo propio) · opts.coop: datos del jefe en equipo (coop.js)
+// opts.bossMul: multiplica la vida del jefe (1 + 0.7 × (jugadores − 1))
+// opts.dmgMul: ajusta el daño de los enemigos (jefes en equipo, ver coop.js)
+export async function startBattle(m, opts = {}) {
   if (st.busy) return; st.busy = true; held.clear();
   const ens = m.group.map((k, i) => mkEnemy(k, Math.max(1, m.boss && i > 0 ? m.lvl - 2 : m.lvl)));
+  if (opts.bossMul && ens[0] && ens[0].boss) { ens[0].mhp = Math.round(ens[0].mhp * opts.bossMul); ens[0].hp = ens[0].mhp; }
+  if (opts.dmgMul) for (const e of ens) { e.atk *= opts.dmgMul; e.mag *= opts.dmgMul; }
   const supp = Math.round(.15 * ens.reduce((a, e) => a + e.mhp, 0) / ens.length);
-  BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set() };
+  BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set(),
+    party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null };
   buildBattle(m.biome); $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
-  log(m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`);
+  log(m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!${BT.coop ? ' · ¡En equipo!' : ''}` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`);
+  coopSync(true);
   await sleep(1000);
   const res = await runBattle();
   for (const h of G.roster) { h.buffs = {}; h.defending = false; h.stun = 0; h.tmp = 0; h.trap = 0; }
-  if (res === 'win') await victory();
+  if (BT.coop) await coopFinish(res);
+  else if (res === 'win') await victory();
   else if (res === 'lose') await defeat();
   else m.stun = 5;
-  $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
+  stopClock(); $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); BT = null; st.busy = false; held.clear(); updateHUD(); save('now');
 }
 async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);
@@ -357,10 +428,10 @@ async function victory() {
   const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1));   // pasiva del Enano: +25% de oro
   G.gold += gold; const lines = [`🏆 <b>¡Victoria!</b> +${xp} XP · +${gold} de oro`];
   // Experiencia según participación; los que esperan en la taberna reciben el 10%
-  const party = heroes(), before = party.map(h => h.lvl), shares = splitXP(party, xp), lvMsgs = [];
-  party.forEach((h, i) => lvMsgs.push(...gainXP(h, shares[i])));
+  const team = heroes(), before = team.map(h => h.lvl), shares = splitXP(team, xp), lvMsgs = [];
+  team.forEach((h, i) => lvMsgs.push(...gainXP(h, shares[i])));
   for (let i = 0; i < G.roster.length; i++) if (!G.party.includes(i)) gainXP(G.roster[i], xp * .1);
-  lines.push(`<div class="xpl">${party.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
+  lines.push(`<div class="xpl">${team.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
   lines.push(...lvMsgs);
   if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
@@ -371,7 +442,7 @@ async function victory() {
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>`
       : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
   }
-  if (party.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
+  if (team.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
   if (!m.sea) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }  // los del mar no se registran
   // Misiones: cacerías y jefes
   lines.push(...onVictory(BT.enemies, m));
@@ -379,6 +450,30 @@ async function victory() {
   const ups = heroes().filter((h, i) => h.lvl > before[i]).map(h => `${h.name} Nv ${h.lvl}`);
   if (ups.length) notice('level', ups.join(', '));
   if (m.boss) notice('boss', BT.enemies[0].name);
+  log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
+  await waitButton('Continuar');
+}
+// Fin de un jefe en equipo (anfitrión): manda el resultado a los invitados y aplica el propio.
+// Ganar: cada jugador recibe la experiencia completa y su propio botín; si su héroe cayó, revive con 25%.
+// Perder: cada jugador despierta en Ciudad Origen con la regla de la tumba 🪦.
+async function coopFinish(res) {
+  const m = BT.m, xp = BT.enemies.reduce((a, e) => a + e.xp, 0), gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4));
+  const win = res === 'win';
+  BT.coop.end({ id: BT.coop.id, result: win ? 'win' : 'lose', xp, gold, extra: BT.extra,
+    boss: { id: m.id, lvl: m.lvl, name: BT.enemies[0].name, keys: BT.enemies.map(e => e.key), x: m.x, y: m.y },
+    heroes: party().filter(h => h.remote).map(h => ({ owner: h.owner, hp: h.hp, mp: h.mp, poison: h.poison || 0 })) });
+  if (!win) { await defeat(); return; }
+  const lines = [`🏆 <b>¡Victoria en equipo!</b> +${xp} XP · +${gold} de oro`];
+  for (const h of party().filter(x => !x.remote)) {
+    if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
+    const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
+  }
+  G.gold += gold; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter');
+  const it = rollLoot(m.lvl, Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
+  lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
+  monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps;
+  lines.push(...onVictory(BT.enemies, m));
+  notice('boss', BT.enemies[0].name);
   log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
   await waitButton('Continuar');
 }
