@@ -520,6 +520,7 @@ async function partyAct(a, k) {
   }
   if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; }
   if (a === 'title') { setTitle(k); save(); }
+  if (a === 'daily') { closeModal(); const { checkDaily } = await import('./daily.js'); const v = await checkDaily(true); if (!v) toast('🎁 La recompensa diaria necesita conexión'); return; }
   if (a === 'rank') { rerender(); await loadRank(); }
   if (a === 'qtrack') track(k);
   if (a === 'qdrop') { if (QD !== k) QD = k; else { abandon(k); QD = null; save(); } }

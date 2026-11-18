@@ -60,7 +60,7 @@ function newCode() {
 }
 function makeRoom(code) {
   const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false,
-    chat: [], chatLoad: null, chatSeq: 0, stats: new Map(), wb: null, wbLoad: null, city: null, cityLoad: null };
+    chat: [], chatLoad: null, chatSeq: 0, stats: new Map(), wb: null, wbLoad: null, city: null, cityLoad: null, daily: new Map() };
   rooms.set(code, room); return room;
 }
 
@@ -107,6 +107,23 @@ async function cityOf(room) {
 }
 const cityPublic = c => ({ p: c.p, donors: c.donors, credits: c.credits, vv: Object.values(c.vv) });
 const citySave = room => { if (db.isReady() && room.city) db.saveCity(room.code, room.city).catch(e => console.warn('ciudad:', e.message)); };
+// ================= Recompensa diaria (Versión 3 · Fase 6.2) =================
+// El día se calcula en el servidor con la hora de Chile (America/Santiago). Racha: días seguidos; si se salta uno,
+// vuelve al día 1. Cada 7 días empieza un ciclo nuevo con premios algo mejores. Un cobro por jugador y por día.
+// DAILY_SHIFT (solo para pruebas) adelanta el calendario N días.
+const CL_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' });
+function chileDay() { const [y, m, d] = CL_DAY.format(new Date()).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000) + (Number(process.env.DAILY_SHIFT) || 0); }
+// Una sola lectura por jugador (así dos cobros simultáneos no pueden pasar los dos)
+function dailyOf(room, name) {
+  const k = name.toLowerCase(); let pr = room.daily.get(k);
+  if (!pr) { pr = (async () => { let d = null; if (db.isReady()) { try { d = await db.getDaily(room.code, name); } catch (e) { d = null; } } return d || { last: null, streak: 0, best: 0, days: 0 }; })(); room.daily.set(k, pr); }
+  return pr;
+}
+function dailyView(d) {
+  const today = chileDay(), claimed = d.last === today, cont = d.last === today - 1;
+  const streakNext = claimed ? d.streak : cont ? d.streak + 1 : 1;   // la racha si cobra hoy
+  return { today, claimed, streak: claimed ? d.streak : (cont ? d.streak : 0), next: streakNext, day: (streakNext - 1) % 7 + 1, cycle: Math.floor((streakNext - 1) / 7), best: d.best, days: d.days };
+}
 const wbSave = room => { if (db.isReady() && room.wb) db.saveWB(room.code, room.wb).catch(e => console.warn('jefe de mundo:', e.message)); };
 // Carga el historial de la base de datos la primera vez que alguien entra a la sala (una sola vez)
 function loadChat(room) {
@@ -363,6 +380,21 @@ io.on('connection', socket => {
     if (db.isReady()) { try { for (const r of await db.roomStats(c.room.code)) all.set(r.name, r.data); } catch (e) { /* solo memoria */ } }
     for (const [n, st] of c.room.stats) all.set(n, st);
     ack({ ok: true, list: [...all.entries()].map(([name, st]) => Object.assign({ name }, st)) });
+  });
+
+  // ================= Recompensa diaria =================
+  socket.on('daily:get', async (d, ack) => {
+    if (typeof ack !== 'function') return; const c = ctxOf(socket); if (!c || !allow(socket, 'daily', 10, 10000)) return ack({ ok: false });
+    ack(Object.assign({ ok: true }, dailyView(await dailyOf(c.room, c.p.name))));
+  });
+  socket.on('daily:claim', async (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c = ctxOf(socket);
+    if (!c || !allow(socket, 'daily', 10, 10000)) return reply({ ok: false, error: 'Espera un momento.' });
+    const st = await dailyOf(c.room, c.p.name), v = dailyView(st);
+    if (v.claimed) return reply(Object.assign({ ok: false, error: 'Ya recogiste el premio de hoy.' }, v));
+    st.streak = v.next; st.last = v.today; st.best = Math.max(st.best || 0, st.streak); st.days = (st.days || 0) + 1;
+    if (db.isReady()) await db.saveDaily(c.room.code, c.p.name, st).catch(e => console.warn('diaria:', e.message));
+    reply(Object.assign({ ok: true }, dailyView(st), { day: v.day, cycle: v.cycle }));
   });
 
   // ================= Ciudad Origen: donaciones y aldeas compartidas =================

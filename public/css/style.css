@@ -609,3 +609,15 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .rtop{display:flex;justify-content:space-between;gap:6px;font-size:13px;align-items:center}
 .ring{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:12px}
 .ring .have{color:#46c37b}.ring .miss{color:#ff6b6b}
+
+/* ===== Versión 3 · Fase 6.2: recompensa diaria ===== */
+.daily .streak{margin:10px 0 6px;font-size:16px;color:#ffb36b;text-align:center}
+.dcal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:6px 0 10px}
+@media (max-width:420px){.dcal{grid-template-columns:repeat(4,1fr)}}
+.dday{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;min-height:76px}
+.dday .emoji{font-size:24px}
+.dday small{font-size:10px;color:var(--mut);line-height:1.2}
+.dday.done{opacity:.6;border-color:#46c37b}
+.dday.now{border:2px solid var(--gold);background:#2d2a1c;box-shadow:0 0 12px #f2c14e55}
+.achhead>b{display:flex;align-items:center;gap:8px}
+.achhead .btn{margin-left:auto}

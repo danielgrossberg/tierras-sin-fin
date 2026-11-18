@@ -81,7 +81,7 @@ function rankHTML() {
 export function achTabHTML() {
   checkAch();
   const s = full(), have = G.ach || {}, titles = ACH.filter(a => have[a.id]);
-  let h = `<div class="achhead"><b>🏆 ${achCount()} de ${ACH.length} logros</b><div class="titles"><span class="mut small">Título bajo tu nombre:</span>
+  let h = `<div class="achhead"><b>🏆 ${achCount()} de ${ACH.length} logros</b><button class="btn sm gold" data-a="daily">🎁 Recompensa diaria</button><div class="titles"><span class="mut small">Título bajo tu nombre:</span>
     <button class="tchip ${!G.title ? 'on' : ''}" data-a="title" data-k="">Sin título</button>${titles.map(a => `<button class="tchip ${G.title === a.title ? 'on' : ''}" data-a="title" data-k="${a.id}">${esc(a.title)}</button>`).join('')}</div></div>`;
   for (const [cat, cn] of Object.entries(ACH_CATS)) {
     h += `<h3 class="achcat">${cn}</h3><div class="achlist">` + ACH.filter(a => a.cat === cat).map(a => {

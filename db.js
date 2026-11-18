@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS city_state (
   data JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Versión 3 · Fase 6.2: recompensa diaria (racha por jugador, validada en el servidor)
+CREATE TABLE IF NOT EXISTS daily_rewards (
+  room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS daily_room_name ON daily_rewards (room_code, lower(name));
 CREATE TABLE IF NOT EXISTS world_boss (
   room_code TEXT PRIMARY KEY REFERENCES rooms(code) ON DELETE CASCADE,
   data JSONB NOT NULL,
@@ -152,6 +160,12 @@ export async function getCity(code) { const r = await pool.query('SELECT data FR
 export async function saveCity(code, data) {
   await pool.query(`INSERT INTO city_state (room_code, data) VALUES ($1, $2::jsonb)
     ON CONFLICT (room_code) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [code, JSON.stringify(data)]);
+}
+
+export async function getDaily(code, name) { const r = await pool.query('SELECT data FROM daily_rewards WHERE room_code = $1 AND lower(name) = lower($2)', [code, name]); return r.rows[0] ? r.rows[0].data : null; }
+export async function saveDaily(code, name, data) {
+  await pool.query(`INSERT INTO daily_rewards (room_code, name, data) VALUES ($1, $2, $3::jsonb)
+    ON CONFLICT (room_code, lower(name)) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [code, name, JSON.stringify(data)]);
 }
 
 // Solo guarda si la partida que llega no es más vieja que la guardada (evita que un celular viejo pise a uno nuevo)

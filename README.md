@@ -399,6 +399,15 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
 - **Misiones:** nuevo tipo **⛏️ Recolecta X** (~12% de los puestos; el resto de las misiones no cambia).
 - **Guardado:** `saveVersion` 13: `mats`, `prof`, `gath`, `food` y `items.antidoto`.
 
+### Fase 6.2 (lista): recompensa diaria 🎁
+- Al entrar por primera vez en el día aparece un **calendario de 7 días** (también en 🎒 Grupo → Logros → 🎁).
+  Premios: 1 oro · 2 pociones, éter y antídotos · 3 materiales de tu zona · 4 un elixir · 5 más oro · 6 equipo Raro ·
+  7 huevo de mascota o equipo Épico. Después del día 7 se repite con premios mejores (×1,25 por ciclo, máx. ×2; desde
+  el ciclo 2 el día 7 da huevo **y** Épico).
+- **El día lo calcula el servidor con la hora de Chile (`America/Santiago`)** y el cobro se valida ahí: uno por jugador y
+  por día (tabla `daily_rewards`). Racha "🔥 5 días seguidos"; si se salta un día vuelve al día 1. Se guardan los días
+  jugados y la mejor racha. Necesita conexión. `DAILY_SHIFT` (variable de entorno) adelanta el calendario solo para pruebas.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -413,7 +422,7 @@ Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y si
    - Value: la connection string que copiaste
    - **Save Changes** (Render redespliega solo).
 5. Comprueba en `https://<tu-servicio>.onrender.com/health` que diga `"db":"ok"`.
-   Las tablas `rooms`, `players`, `chat_messages`, `player_stats`, `world_boss` y `city_state` se crean solas al arrancar.
+   Las tablas `rooms`, `players`, `chat_messages`, `player_stats`, `world_boss`, `city_state` y `daily_rewards` se crean solas al arrancar.
 
 **Probar sin base de datos (local):** `npm start` sin `DATABASE_URL` → `/health` dice `"db":"off"`, no se pide PIN
 y todo se guarda en el navegador. **Probar con base de datos (local):** `DATABASE_URL="postgresql://…" npm start`
@@ -448,6 +457,7 @@ public/js/pets.js      Mascotas: huevos, eclosión, efectos y experiencia
 public/js/achievements.js Logros, títulos y ranking de la sala
 public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
 public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, tesoros, apariencias y donaciones
+public/js/daily.js     Recompensa diaria (calendario de 7 días)
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
@@ -480,6 +490,7 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `wb:get` / `wb:hit` | cliente → servidor (ack) | estado del jefe de mundo / daño de un intento `{week, parts:{nombre: daño}}` |
 | `wb:state` | servidor → sala | `{week, gen, hp, mhp, lvl, contrib, killed}` |
 | `city:donate` / `city:vv` | cliente → servidor | donación `{k, amount}` (ack) / aldeas descubiertas `{list:[[x, y, nombre]]}`; la sala recibe `city:state` |
+| `daily:get` / `daily:claim` | cliente → servidor (ack) | estado del día (hora de Chile) / cobro validado `{day, cycle, streak, best, days}` |
 | `pvp:invite` / `pvp:accept` / `pvp:decline` | retador ↔ desafiado | duelo en la arena; luego `pvp:start` al retador y el combate usa `battle:state/action/end` |
 
 El servidor valida tipos, largos y frecuencias de todo lo que llega. Los eventos de los jefes en equipo están en `server.js` (sesiones) y `public/js/coop.js` (cliente).

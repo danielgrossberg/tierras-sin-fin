@@ -14,6 +14,7 @@ import { gatherAt, nodeReady, matLabel } from './gather.js';
 import { veinHere, veinTier } from './dungeon.js';
 import { onGather } from './quests.js';
 import { NODES } from './data.js';
+import { checkDaily } from './daily.js';
 // ================= Recolección (Versión 3 · Fase 6.1): botón grande al pisar un punto =================
 const gBtn = $('#gather');
 function gatherSpot() {
@@ -194,8 +195,10 @@ function dayNightTick() {
 }
 // Mercader ambulante: aviso al entrar y cuando cambia el día · aldeas descubiertas para el Portal mayor
 let merchDay = null, vvSent = 0;
+let dailyT = 0;
 function merchTick() {
   if (!st.inGame) return;
+  if (st.online && Date.now() - dailyT > 5 * 60000) { if (dailyT) checkDaily(); dailyT = Date.now(); }   // si cambia el día jugando
   const d = today(); if (d !== merchDay) { merchDay = d; const v = merchVillage(); if (v) toast(`🐪 El mercader ambulante está hoy en <b>${v.name}</b><br><span style="font-size:13px">Sigue la flecha 🐪 · cambia de aldea cada día</span>`); }
   const n = Object.keys(G.vv || {}).length; if (n !== vvSent && net.joined) { vvSent = n; cityVV(Object.values(G.vv).map(v => [v.x, v.y, v.name])); }
 }
@@ -211,6 +214,7 @@ function enterWorld() {
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
   updateHUD(); updatePlayersUI(); checkTomb(); updateMini(); save('now');
   onWB(); pushStats(true);
+  if (st.online) setTimeout(() => checkDaily(), 1500);   // 🎁 recompensa diaria (Versión 3 · Fase 6.2)
 }
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
