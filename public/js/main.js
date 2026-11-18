@@ -10,6 +10,35 @@ import { PETS } from './data.js';
 import { checkAch, pushStats, noteDist, bump } from './achievements.js';
 import { isWBTile, openWorldBoss, onWB } from './worldboss.js';
 import { digTreasure, merchVillage, today, cosPublic } from './economy.js';
+import { gatherAt, nodeReady, matLabel } from './gather.js';
+import { veinHere, veinTier } from './dungeon.js';
+import { onGather } from './quests.js';
+import { NODES } from './data.js';
+// ================= Recolección (Versión 3 · Fase 6.1): botón grande al pisar un punto =================
+const gBtn = $('#gather');
+function gatherSpot() {
+  if (inDungeon()) { const v = veinHere(); return v && nodeReady(v.id) ? { node: v, tier: veinTier() } : null; }
+  const f = feats.get(P.x + ',' + P.y); return f && f.type === 'node' && nodeReady(f.id) ? { node: f } : null;
+}
+let lastGS = '';
+function gatherTick() {
+  const s = st.inGame && !st.busy && !st.titleOpen ? gatherSpot() : null, key = s ? s.node.id : '';
+  if (key === lastGS) return; lastGS = key;
+  gBtn.classList.toggle('hidden', !s);
+  if (s) gBtn.innerHTML = `<span class="emoji">${NODES[s.node.kind].e}</span> Recolectar <small>${NODES[s.node.kind].n}</small>`;
+}
+async function doGather() {
+  const s = gatherSpot(); if (!s || st.busy) return;
+  st.busy = true; held.clear(); gBtn.classList.add('working'); lastGS = '#';
+  await new Promise(r => setTimeout(r, 1300));   // animación breve
+  const r = gatherAt(s.node, s.tier); st.busy = false; gBtn.classList.remove('working');
+  if (!r) return;
+  const got = r.got.filter(x => x[1] > 0);
+  toast(`${got.length ? got.map(([k, n]) => matLabel(k, n)).join('<br>') : 'Ya tienes 999 de eso'}` + (r.ups.length ? `<br><span style="font-size:13px">${r.ups.join(' · ')}</span>` : ''));
+  const done = []; for (const [k, n] of got) done.push(...onGather(k, n)); if (done.length) feed(done.join('<br>'));
+  save(); updateHUD();
+}
+gBtn.addEventListener('click', doGather);
 import { cityVV } from './net.js';
 import { itemLabel as iLabel } from './items.js';
 import { resize, draw, clearCanvas } from './render.js';
@@ -102,6 +131,7 @@ addEventListener('keydown', e => {
   if (isModalOpen()) { if (k === 'escape' || (k === 'g' && modalIs('party')) || (k === 'm' && modalIs('map'))) closeModal(); return; }
   // Una tecla que quedó apretada mientras se abría una ventana no vuelve a caminar sola
   if (KEYMAP[k]) { e.preventDefault(); if (e.repeat && !held.includes(KEYMAP[k])) return; if (!held.includes(KEYMAP[k])) { held.push(KEYMAP[k]); tapDir = KEYMAP[k]; } }
+  else if (k === 'e') doGather();
   else if (k === 'g') openParty(); else if (k === 'm') openMap(); else if (k === 'c') toggleSocial(); else if (k === 'escape') closeSocial();
 });
 addEventListener('keyup', e => { const d = KEYMAP[e.key.toLowerCase()]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
@@ -143,6 +173,7 @@ function frame(t) {
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     if (t - lastDN > 500) { lastDN = t; dayNightTick(); }
     if (t - lastAch > 2000) { lastAch = t; checkAch(); pushStats(); }
+    gatherTick();
     draw(t);
     updateMini(t);
     tick(t, myState);

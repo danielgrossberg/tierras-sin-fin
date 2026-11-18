@@ -269,6 +269,7 @@ export const IT = {
   pocion: { n: 'Poción', e: '🧪', d: 'Cura 50% PV y quita veneno', t: 'ally', p: 12 },
   eter: { n: 'Éter', e: '🔷', d: 'Recupera 50% PM', t: 'ally', p: 25 },
   pluma: { n: 'Pluma Fénix', e: '🪶', d: 'Revive con 50% PV', t: 'dead', p: 50 },
+  antidoto: { n: 'Antídoto', e: '💧', d: 'Quita veneno y quemadura', t: 'ally', p: 8 },   // Versión 3 · Fase 6.1
 };
 
 // ================= Bestiario =================
@@ -353,6 +354,62 @@ export const ACH = [
   A('forge10', 'col', 'Maestro Herrero', 'Lleva un objeto a +10 en la forja', 'Maestro Herrero', s => s.forgeMax >= 10, { gold: 500 }),
 ];
 export const TITLES = ACH.map(a => a.title);
+// ================= Recolección y fabricación (Versión 3 · Fase 6.1) =================
+// Materiales: el nivel (t) sube con la distancia a Ciudad Origen, igual que el peligro.
+export const MATS = {
+  cobre: { n: 'Cobre', e: '🟫', k: 'ore', t: 0 }, hierro: { n: 'Hierro', e: '⬛', k: 'ore', t: 1 }, plata: { n: 'Plata', e: '⬜', k: 'ore', t: 2 }, mithril: { n: 'Mithril', e: '🔷', k: 'ore', t: 3 }, adamantita: { n: 'Adamantita', e: '🟪', k: 'ore', t: 4 },
+  gema: { n: 'Gema', e: '💎', k: 'ore', t: 9 },
+  hverde: { n: 'Hierba Verde', e: '🌿', k: 'herb', t: 0 }, flunar: { n: 'Flor de Luna', e: '🌼', k: 'herb', t: 1 }, rfuego: { n: 'Raíz de Fuego', e: '🌶️', k: 'herb', t: 2 }, loto: { n: 'Loto Sombrío', e: '🪷', k: 'herb', t: 3 },
+  sardina: { n: 'Sardina', e: '🐟', k: 'fish', t: 0 }, trucha: { n: 'Trucha', e: '🐠', k: 'fish', t: 1 }, salmon: { n: 'Salmón Real', e: '🍣', k: 'fish', t: 2 }, abisal: { n: 'Pez Abisal', e: '🐡', k: 'fish', t: 3 },
+  roble: { n: 'Roble', e: '🪵', k: 'wood', t: 0 }, pino: { n: 'Pino', e: '🌲', k: 'wood', t: 1 }, ebano: { n: 'Ébano', e: '🟤', k: 'wood', t: 2 },
+  cuero: { n: 'Cuero', e: '🟧', k: 'mon', t: 0 }, colmillo: { n: 'Colmillo', e: '🦷', k: 'mon', t: 0 }, hueso: { n: 'Hueso', e: '🦴', k: 'mon', t: 0 }, esencia: { n: 'Esencia Espectral', e: '👻', k: 'mon', t: 0 },
+};
+export const MAT_MAX = 999;
+// Puntos de recolección: ⛏️ junto a montañas (y en mazmorras), 🌿 pradera/bosque/pantano, 🎣 costa, 🪵 bosque/tundra
+export const NODES = { ore: { n: 'Veta de mineral', e: '⛏️', prof: 'min', list: ['cobre', 'hierro', 'plata', 'mithril', 'adamantita'] }, herb: { n: 'Hierbas', e: '🌿', prof: 'herb', list: ['hverde', 'flunar', 'rfuego', 'loto'] },
+  fish: { n: 'Pesca', e: '🎣', prof: 'fish', list: ['sardina', 'trucha', 'salmon', 'abisal'] }, wood: { n: 'Madera', e: '🪵', prof: 'herb', list: ['roble', 'pino', 'ebano'] } };
+export const NODE_RESPAWN = 15 * 60 * 1000;
+// Profesiones del jugador (compartidas por todos sus héroes)
+export const PROFS = { min: { n: 'Minería', e: '⛏️' }, herb: { n: 'Herboristería', e: '🌿' }, fish: { n: 'Pesca', e: '🎣' }, alq: { n: 'Alquimia', e: '⚗️' }, herr: { n: 'Herrería', e: '⚒️' }, coc: { n: 'Cocina', e: '🍳' } };
+export const PROF_MAX = 30;
+// Comidas (Cocina): una activa a la vez, 30 minutos. fx: % a stats, oro o experiencia
+export const FOODS = {
+  sardinas: { n: 'Sardinas asadas', e: '🍢', d: '+5% PV máximos', fx: { mhpP: .05 } },
+  trucha: { n: 'Trucha a las hierbas', e: '🐠', d: '+8% ATQ', fx: { atkP: .08 } },
+  sopa: { n: 'Sopa de raíz de fuego', e: '🍲', d: '+8% MAG', fx: { magP: .08 } },
+  guiso: { n: 'Guiso del cazador', e: '🥘', d: '+10% DEF', fx: { defP: .1 } },
+  salmon: { n: 'Salmón asado', e: '🍣', d: '+10% PV máximos', fx: { mhpP: .1 } },
+  pastel: { n: 'Pastel de la fortuna', e: '🥧', d: '+15% de oro', fx: { goldP: .15 } },
+  banquete: { n: 'Banquete abisal', e: '🍱', d: '+10% PV, ATQ, DEF y MAG', fx: { mhpP: .1, atkP: .1, defP: .1, magP: .1 } },
+};
+// Recetas: in = ingredientes, g = oro, lv = nivel de profesión, out = resultado
+const RC = (id, prof, lv, ins, g, out) => ({ id, prof, lv, in: ins, g, out });
+export const RECIPES = [
+  RC('pocion', 'alq', 1, { hverde: 2 }, 2, { item: 'pocion', n: 1 }),
+  RC('antidoto', 'alq', 1, { hverde: 1, sardina: 1 }, 2, { item: 'antidoto', n: 2 }),
+  RC('eter', 'alq', 4, { flunar: 2, hverde: 1 }, 5, { item: 'eter', n: 1 }),
+  RC('pluma', 'alq', 10, { rfuego: 1, flunar: 1, esencia: 1 }, 15, { item: 'pluma', n: 1 }),
+  RC('el_vela', 'alq', 3, { roble: 2, sardina: 1 }, 10, { elix: 'vela' }),
+  RC('el_coloso', 'alq', 7, { rfuego: 1, hueso: 2 }, 20, { elix: 'coloso' }),
+  RC('el_sabio', 'alq', 9, { flunar: 2, gema: 1 }, 25, { elix: 'sabio' }),
+  RC('el_fortuna', 'alq', 12, { rfuego: 2, plata: 1 }, 30, { elix: 'fortuna' }),
+  RC('el_suerte', 'alq', 15, { loto: 1, gema: 1 }, 30, { elix: 'suerte' }),
+  ...['cobre', 'hierro', 'plata', 'mithril', 'adamantita'].flatMap((o, t) => [
+    RC('arma_' + o, 'herr', 1 + 5 * t, { [o]: 3, [['roble', 'roble', 'pino', 'pino', 'ebano'][t]]: 1, cuero: 1 }, 20 * (t + 1), { gear: 'weapon', t }),
+    RC('armad_' + o, 'herr', 1 + 5 * t, { [o]: 4, cuero: 2 }, 20 * (t + 1), { gear: 'armor', t }),
+    RC('acc_' + o, 'herr', 3 + 5 * t, { [o]: 2, gema: 1 }, 30 * (t + 1), { gear: 'acc', t }),
+    RC('fundir_' + o, 'herr', 1, { [o]: 2 }, 0, { frags: 2 * (t + 1) }),
+  ]),
+  RC('c_sardinas', 'coc', 1, { sardina: 2 }, 2, { food: 'sardinas' }),
+  RC('c_trucha', 'coc', 4, { trucha: 2, hverde: 1 }, 5, { food: 'trucha' }),
+  RC('c_sopa', 'coc', 6, { rfuego: 1, sardina: 1 }, 5, { food: 'sopa' }),
+  RC('c_guiso', 'coc', 8, { trucha: 1, colmillo: 2 }, 8, { food: 'guiso' }),
+  RC('c_salmon', 'coc', 10, { salmon: 2 }, 10, { food: 'salmon' }),
+  RC('c_pastel', 'coc', 12, { flunar: 2, salmon: 1 }, 15, { food: 'pastel' }),
+  RC('c_banquete', 'coc', 18, { abisal: 1, loto: 1 }, 30, { food: 'banquete' }),
+];
+export const GEAR_ILVL = [3, 8, 13, 18, 24];
+
 // ================= Usos del oro (Versión 3 · Fase 5) =================
 // Precios fijados con la simulación de oro por hora (~1.500–3.000 oro/h al principio y a mitad de juego,
 // ~7.000–10.000 al final): lo cotidiano es barato y lo de largo plazo (forja +10, apariencias, ciudad) es una meta.

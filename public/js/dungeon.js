@@ -80,13 +80,15 @@ export function floorOf(cave, f) {
     const p = list.splice(Math.floor(r() * list.length), 1)[0]; used.add(idx(p.x, p.y));
     traps.push({ id: f + ':t' + k, x: p.x, y: p.y, type: r() < .5 ? 'spike' : 'gas' });
   }
+  // Vetas de mineral (Versión 3 · Fase 6.1): 1 o 2 por piso
+  const veins = []; for (let k = 0, n = 1 + (r() < .5 ? 1 : 0); k < n && others.length; k++) { const p = spotIn(pick(others, r)); if (p) veins.push({ id: cave.id + ':' + f + ':v' + k, x: p.x, y: p.y, kind: 'ore' }); }
   // Último piso: jefe en la sala más lejana (y el portal de salida aparece ahí al derrotarlo)
   let boss = null;
   if (last) {
     const g = [C.boss]; for (let m = 0, mn = 1 + Math.floor(r() * 2); m < mn; m++) g.push(pick(pool.length ? pool : C.pool, r));
     boss = { id: cave.id + ':boss', x: end.x, y: end.y, lvl: lvl + 1, group: g, boss: true };
   }
-  fl = { key, f, grid, rooms, up, down: last ? null : end, exit: last ? end : null, chests, traps, spawns, boss, can: null, kind: cave.kind };
+  fl = { key, f, grid, rooms, up, down: last ? null : end, exit: last ? end : null, chests, traps, spawns, boss, veins, can: null, kind: cave.kind };
   floors.set(key, fl);
   return fl;
 }
@@ -288,6 +290,9 @@ export function resumeDungeon() {
   const s = G.inDun; if (!s || !s.cave || !s.cave.id || !CAVE[s.cave.kind]) { G.inDun = null; return false; }
   enterDungeon(s.cave, s.f, { x: s.x, y: s.y }, true); return true;
 }
+// Veta donde está parado el grupo (y el nivel del mineral: el de la zona de la entrada, +1 en los pisos hondos)
+export function veinHere() { if (!D.on || !D.fl) return null; const v = (D.fl.veins || []).find(x => x.x === D.x && x.y === D.y); return v || null; }
+export const veinTier = () => Math.min(4, Math.floor(Math.hypot(D.cave.x - START.x, D.cave.y - START.y) / 60) + (D.f >= 2 ? 1 : 0));
 // Al empezar o cargar otra partida (puede ser otra sala, con otra semilla)
 export function resetDungeon() { D.on = false; D.mons.clear(); D.mpos.clear(); D.vis.clear(); D.dead.clear(); floors.clear(); }
 // Movimiento suave (lo llama el loop principal)

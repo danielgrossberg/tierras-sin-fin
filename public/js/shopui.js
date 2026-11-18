@@ -97,6 +97,7 @@ export function cosHTML() {
 
 // ---- Acciones (devuelve { msg, view } o null si no es de aquí)
 export async function shopAct(a, k) {
+  const cr = await craftAct(a, k); if (cr) return cr;
   if (a === 'elix') return buyElix(k) ? { msg: `${ELIX[k].e} ${ELIX[k].n}: activo por 30 minutos más.` } : { msg: 'No te alcanza el oro.' };
   if (a === 'forgeview') { FSEL = null; return { view: 'forge' }; }
   if (a === 'fsel') { const p = k.split(':'); FSEL = p[0] === 'i' ? { src: 'inv', i: +p[1] } : { src: 'eq', h: +p[1], sl: p[2] }; return {}; }
@@ -114,5 +115,32 @@ export async function shopAct(a, k) {
   if (a === 'abuy') return buyAlt(k, ALT_PRICE) ? { msg: `😀 Ahora puedes usar ${k} en tus héroes.`, save: true } : { msg: 'No te alcanza el oro.' };
   if (a === 'aset') { const [hi, e] = k.split(':'); const h = G.roster[+hi]; if (h) setHeroE(h, e); return { save: true }; }
   if (a === 'noop') return {};
+  return null;
+}
+
+// ================= Taller: libro de recetas (Versión 3 · Fase 6.1) =================
+import { RECIPES, MATS, PROFS, FOODS } from './data.js';
+import { prof, profNeed, matN, canCraft, recipeOk, craft, outLabel, foodActive } from './gather.js';
+let CT = 'alq';
+export function craftHTML() {
+  const tabs = [['alq', '⚗️ Alquimia'], ['herr', '⚒️ Herrería'], ['coc', '🍳 Cocina']], p = prof(CT);
+  const f = foodActive();
+  return `<h2>🛠️ Taller</h2><p class="mut" style="margin:0">Fabrica con tus materiales. Tienes 💰 ${fmt(G.gold)}${G.frags ? ` · 🔩 ${G.frags}` : ''}.${f ? ` Comida activa: ${FOODS[f.k].e} ${FOODS[f.k].n} (${mmss(f.until - Date.now())}).` : ''}</p>
+    <div class="tabs tabs3">${tabs.map(([k, l]) => `<button class="tab ${CT === k ? 'on' : ''}" data-a="ctab" data-k="${k}">${l}</button>`).join('')}</div>
+    <p class="small">${PROFS[CT].e} <b>${PROFS[CT].n} Nv ${p.lvl}</b> <span class="mut">· XP ${p.xp}/${profNeed(p.lvl)}</span></p>
+    <div class="recipes">${RECIPES.filter(r => r.prof === CT).map(r => { const ok = recipeOk(r);
+      return `<div class="recipe ${ok ? '' : 'lock'}"><div class="rtop"><b>${outLabel(r)}</b>${ok ? '' : `<span class="mut small">🔒 ${PROFS[r.prof].n} Nv ${r.lv}</span>`}</div>
+        <div class="ring">${Object.entries(r.in).map(([k, n]) => `<span class="${matN(k) >= n ? 'have' : 'miss'}">${MATS[k].e} ${MATS[k].n} ${matN(k)}/${n}</span>`).join('')}${r.g ? `<span class="${G.gold >= r.g ? 'have' : 'miss'}">💰 ${r.g}</span>` : ''}</div>
+        ${ok ? `<div class="frow"><button class="btn sm gold" data-a="craft" data-k="${r.id}:1" ${canCraft(r) ? '' : 'disabled'}>Fabricar</button><button class="btn sm" data-a="craft" data-k="${r.id}:5" ${canCraft(r, 5) ? '' : 'disabled'}>Fabricar ×5</button></div>` : ''}</div>`; }).join('')}</div>
+    <div class="row end"><button class="btn gold" data-a="vback">← Volver a la aldea</button></div>`;
+}
+export async function craftAct(a, k) {
+  if (a === 'craftview') return { view: 'craft' };
+  if (a === 'ctab') { CT = k; return {}; }
+  if (a === 'craft') {
+    const [id, n] = k.split(':'); const r = craft(id, +n || 1); if (!r || !r.done) return { msg: 'Te faltan materiales u oro.' };
+    const gear = r.res.filter(x => x && typeof x === 'object'), txt = r.res.filter(x => typeof x === 'string');
+    return { msg: `🛠️ Fabricaste ${r.done > 1 ? r.done + ' × ' : ''}${outLabel(r.r)}${gear.length ? ': ' + gear.map(itemLabel).join(', ') : ''}${txt.length ? '<br>' + txt.join(' · ') : ''}`, save: true };
+  }
   return null;
 }

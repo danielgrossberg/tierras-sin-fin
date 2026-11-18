@@ -9,7 +9,9 @@ import { isNight, clockText, darkness } from './daynight.js';
 import { achTabHTML, loadRank, setTitle, achCount } from './achievements.js';
 import { challenge, coopBusy } from './coop.js';
 import { wbAlive, wbPos, wbWhere } from './worldboss.js';
-import { elixRows, forgeHTML, merchHTML, trainerHTML, cityBtnsHTML, cityHTML, cosHTML, shopAct } from './shopui.js';
+import { elixRows, forgeHTML, merchHTML, trainerHTML, cityBtnsHTML, cityHTML, cosHTML, shopAct, craftHTML } from './shopui.js';
+import { MATS, PROFS, FOODS, NODES } from './data.js';
+import { prof, profNeed, foodActive } from './gather.js';
 import { cityLvl, giveElix, activeElix, elixLeft } from './economy.js';
 import { ELIX } from './data.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
@@ -65,7 +67,7 @@ export function updateDayNight() {
   el.classList.remove('hidden'); el.classList.toggle('night', n);
   el.textContent = `${n ? '🌙' : d > 0 ? '🌇' : '☀️'} ${clockText()}`;
   el.title = n ? 'Noche: tiempo para el amanecer' : 'Día: tiempo para la noche';
-  const ex = $('#elix'); if (ex) { const list = activeElix(); ex.innerHTML = list.map(k => { const ms = elixLeft(k), sc = Math.ceil(ms / 1000); return `<span class="ech" title="${k === 'descanso' ? 'Bien descansados' : ELIX[k].n}">${k === 'descanso' ? '😊' : ELIX[k].e} ${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}</span>`; }).join(''); ex.classList.toggle('hidden', !list.length); }
+  const ex = $('#elix'); if (ex) { const list = activeElix(), fd = foodActive(); ex.innerHTML = list.map(k => { const ms = elixLeft(k), sc = Math.ceil(ms / 1000); return `<span class="ech" title="${k === 'descanso' ? 'Bien descansados' : ELIX[k].n}">${k === 'descanso' ? '😊' : ELIX[k].e} ${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}</span>`; }).join('') + (fd ? `<span class="ech" title="${FOODS[fd.k].n}">${FOODS[fd.k].e} ${Math.ceil((fd.until - Date.now()) / 60000)}′</span>` : ''); ex.classList.toggle('hidden', !list.length && !fd); }
 }
 
 // ================= Coordenadas (relativas a Ciudad Origen; este = X+, norte = Y+) =================
@@ -162,7 +164,7 @@ function villageRender() {
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
-  ${merchHTML(f)}${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
+  ${merchHTML(f)}<div class="sec"><h3>🛠️ Taller</h3><div class="shop"><span>⚗️ Alquimia · ⚒️ Herrería · 🍳 Cocina <small class="mut">fabrica pociones, elixires, equipo y comidas con tus materiales</small></span><button class="btn sm gold" data-a="craftview">Abrir taller</button></div></div>${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div>
@@ -363,7 +365,7 @@ function drawPortalMap() {
   };
 }
 const msgBox = () => VMSG ? `<div class="pend" style="margin-top:8px">${VMSG}</div>` : '';
-function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : VVIEW === 'forge' ? msgBox() + forgeHTML() : VVIEW === 'city' ? msgBox() + cityHTML() : VVIEW === 'cos' ? msgBox() + cosHTML() : villageRender(); }
+function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : VVIEW === 'forge' ? msgBox() + forgeHTML() : VVIEW === 'city' ? msgBox() + cityHTML() : VVIEW === 'cos' ? msgBox() + cosHTML() : VVIEW === 'craft' ? msgBox() + craftHTML() : villageRender(); }
 function travelTo(v) {
   P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
   toast(`🌀 Llegaste a ${v.name}`);
@@ -473,6 +475,17 @@ function equipTab() {
   if (PI) h += detailHTML(sel);
   return h;
 }
+// ---- Materiales y profesiones (Versión 3 · Fase 6.1) ----
+function matsTab() {
+  const f = foodActive(), groups = [['ore', '⛏️ Minerales'], ['herb', '🌿 Hierbas'], ['fish', '🎣 Pescados'], ['wood', '🪵 Madera'], ['mon', '🐾 De monstruos']];
+  let h = `<div class="sec"><h3>Profesiones <small class="mut">de todo tu grupo</small></h3><div class="profs">${Object.entries(PROFS).map(([k, x]) => { const p = prof(k); return `<div class="prof"><span>${x.e} <b>${x.n}</b> Nv ${p.lvl}</span><span class="bar xp"><i style="width:${Math.round(100 * p.xp / profNeed(p.lvl))}%"></i></span></div>`; }).join('')}</div>
+    ${f ? `<p class="small" style="margin:8px 0 0">Comida activa: ${FOODS[f.k].e} <b>${FOODS[f.k].n}</b> · ${FOODS[f.k].d} · ${Math.ceil((f.until - Date.now()) / 60000)} min</p>` : ''}</div>`;
+  for (const [k, title] of groups) {
+    const list = Object.entries(MATS).filter(([id, m]) => m.k === k && (G.mats || {})[id] > 0);
+    h += `<div class="sec"><h3>${title}</h3>${list.length ? `<div class="mgrid">${list.map(([id, m]) => `<div class="mcell"><span class="emoji">${m.e}</span><b>${G.mats[id]}</b><small>${m.n}</small></div>`).join('')}</div>` : '<p class="mut small" style="margin:0">Nada todavía.</p>'}</div>`;
+  }
+  return h + '<p class="mut small">Los puntos de recolección (⛏️ 🌿 🎣 🪵) están en el mapa: párate encima y toca "Recolectar". Reaparecen a los 15 minutos. Los materiales se usan en el 🛠️ Taller de las aldeas y quedan en la tumba 🪦 si el grupo cae.</p>';
+}
 // ---- Registro de misiones ----
 let QD = null;   // misión a la que se tocó "Abandonar" una vez (pide confirmación)
 function questsTab() {
@@ -485,12 +498,12 @@ function questsTab() {
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`]];
+  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`]];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
-  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : heroesTab();
+  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
   h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;

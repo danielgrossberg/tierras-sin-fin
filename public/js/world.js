@@ -119,6 +119,19 @@ function makeChunk(cx, cy) {
       break;
     }
   }
+  // Puntos de recolección (Versión 3 · Fase 6.1): 2–4 por chunk según el terreno. Azar propio (no cambia lo demás).
+  {
+    const rg = mulberry(hashI(cx, cy, seed + 6262)), want = 2 + Math.floor(rg() * 3);
+    const taken = (x, y) => feats.has(x + ',' + y) || c.spawns.some(s => s.x === x && s.y === y) || (c.night && c.night.x === x && c.night.y === y) || (x === START.x && y === START.y);
+    for (let k = 0, made = 0; k < 40 && made < want; k++) {
+      const i = Math.floor(rg() * CH), j = Math.floor(rg() * CH), t = c.tiles[j * CH + i], x = cx * CH + i, y = cy * CH + j, r = rg();
+      if (blockT(t) || t.b === 'WATER' || taken(x, y)) continue;
+      const near = b => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, d]) => genTile(x + a, y + d).b === b);
+      const kind = near('MOUNT') ? 'ore' : near('WATER') && (t.b === 'SAND' || t.b === 'GRASS') ? 'fish' : t.b === 'SNOW' ? 'wood' : t.b === 'FOREST' ? (r < .5 ? 'wood' : 'herb') : (t.b === 'GRASS' || t.b === 'SWAMP') ? 'herb' : null;
+      if (!kind) continue;
+      addFeat('node', x, y, { kind }); made++;
+    }
+  }
   // Lugares creados por misiones (Fase C) que no existían en el mundo: se guardan en G.extraFeats
   if (G.extraFeats) for (const f of G.extraFeats) {
     if (Math.floor(f.x / CH) === cx && Math.floor(f.y / CH) === cy && !feats.has(f.x + ',' + f.y)) addFeat(f.type, f.x, f.y, f.name ? { name: f.name } : null);

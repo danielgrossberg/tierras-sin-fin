@@ -1,7 +1,9 @@
 // Estado compartido entre módulos y funciones de los héroes.
 // G es siempre el mismo objeto: al empezar o cargar partida se reemplaza su contenido.
 'use strict';
-import { CL, SK, ADV, ADV_LVL, TAL, TAL_LVLS } from './data.js';
+import { CL, SK, ADV, ADV_LVL, TAL, TAL_LVLS, FOODS } from './data.js';
+// Comida activa (Versión 3 · Fase 6.1): G.food = { k, until }
+export const foodP = k => { const f = G.food; return f && f.until > Date.now() && FOODS[f.k] ? (FOODS[f.k].fx[k] || 0) : 0; };
 
 // ================= Talentos y clase avanzada (Versión 3 · Fase 2) =================
 // h.tal = { 5: 0|1, 10: 0|1, … } (índice de la opción elegida) · h.adv = 'paladin' | null
@@ -43,7 +45,7 @@ export function hs(h, k) {
   // Clase avanzada: el crecimiento cambia un poco desde el nivel 15
   const a = h.adv && ADV[h.adv], ag = a && a.g[k] ? c.g[k] * (a.g[k] - 1) * Math.max(0, h.lvl - ADV_LVL) : 0;
   const v = Math.round(c.b[k] + c.g[k] * (h.lvl - 1) + ag) + (h.bonus[k] || 0) + (k === 'atk' ? ua * 2 : k === 'def' ? ud * 2 : 0) + eqSum(h, k);
-  const p = talFx(h, k + 'P') + (k === 'mhp' && !h.remote && elix('coloso') ? .15 : 0);   // talentos y Elixir del Coloso: +% a un stat
+  const p = talFx(h, k + 'P') + (k === 'mhp' && !h.remote && elix('coloso') ? .15 : 0) + (h.remote ? 0 : foodP(k + 'P'));   // talentos y Elixir del Coloso: +% a un stat
   return p ? Math.round(v * (1 + p)) : v;
 }
 export const S = (u, k) => u.isHero ? hs(u, k) : u[k];
@@ -81,7 +83,7 @@ export function gainXP(h, x) {
 }
 // Partida nueva: oro y objetos iniciales
 export const START_GOLD = 30;
-export const startItems = () => ({ pocion: 3, eter: 1, pluma: 1 });
+export const startItems = () => ({ pocion: 3, eter: 1, pluma: 1, antidoto: 1 });
 
 // (La muerte de todo el grupo ahora la maneja battle.js + tomb.js: se conserva el progreso y los objetos
 //  quedan en una tumba 🪦. La regla anterior de "empezar de cero" se eliminó en la Versión 2.)

@@ -8,7 +8,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -58,6 +58,10 @@ export function migrate(o) {
     // Versión 3 · Fase 3: mascotas (ninguna todavía) y huevos
     o.pets = o.pets || []; o.pet = o.pet || null; o.eggs = o.eggs || [];
   }
+  if (v < 13) {
+    // Versión 3 · Fase 6.1: materiales, profesiones, puntos usados, comida y antídotos
+    o.mats = o.mats || {}; o.prof = o.prof || {}; o.gath = o.gath || {}; o.food = o.food || null;
+  }
   if (v < 12) {
     // Versión 3 · Fase 5: forja (fragmentos), elixires, apariencias, mapas del tesoro y mercader
     o.frags = o.frags || 0; o.elix = o.elix || {}; o.cos = o.cos || { owned: [] }; o.tmaps = o.tmaps || []; o.merch = o.merch || null;
@@ -70,7 +74,8 @@ export function migrate(o) {
     if (o.pos && o.start) o.stats.maxDist = Math.max(o.stats.maxDist || 0, Math.round(Math.hypot(o.pos.x - o.start.x, o.pos.y - o.start.y)));
   }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
-  o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0 }, o.items || {});
+  o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0, antidoto: 0 }, o.items || {});
+  o.mats = o.mats && typeof o.mats === 'object' ? o.mats : {}; o.prof = o.prof && typeof o.prof === 'object' ? o.prof : {}; o.gath = o.gath && typeof o.gath === 'object' ? o.gath : {};
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
   for (const k of ['gold', 'upA', 'upD', 'steps', 'bosses']) o[k] = o[k] || 0;
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];

@@ -379,6 +379,26 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
   y luego gratis). Cada mejora se anuncia, se ve en el mapa alrededor del castillo y da el logro «el Constructor».
 - **Guardado:** `saveVersion` 12: `frags`, `elix`, `cos`, `tmaps`, `merch`; el equipo guarda `up` (nivel de forja).
 
+### Fase 6.1 (lista): recolección y fabricación
+(La Fase 6 va por partes: 6.1, 6.2, 6.3, 6.5, 6.6 y 6.7. Los clanes (6.4) se quitaron por decisión del dueño.)
+- **Puntos de recolección** en el mapa (deterministas por semilla, con azar propio para no cambiar lo demás; 2–4 por chunk):
+  ⛏️ vetas junto a las montañas (y 1–2 por piso en las mazmorras) · 🌿 hierbas en pradera, bosque y pantano · 🎣 pesca en la
+  costa · 🪵 madera en bosque y tundra. Al pararse encima aparece el botón grande **Recolectar** (tecla E): animación de 1,3 s
+  y toast con lo obtenido. Se agotan y reaparecen a los **15 minutos reales**, por jugador.
+- **Materiales por distancia:** Cobre → Hierro → Plata → Mithril → Adamantita (+ 💎 Gema rara) · Hierba Verde → Flor de Luna →
+  Raíz de Fuego → Loto Sombrío · Sardina → Trucha → Salmón Real → Pez Abisal · Roble → Pino → Ébano. Los monstruos sueltan
+  Cuero, Colmillo, Hueso o Esencia Espectral (40% por enemigo).
+- **Profesiones** del jugador (las comparten sus héroes, máx. nivel 30): Minería, Herboristería (también madera), Pesca,
+  Alquimia, Herrería y Cocina. Con más nivel se recolecta más, sale más material raro y se desbloquean recetas.
+- **🛠️ Taller** en cada aldea, con libro de recetas (ingredientes en verde/rojo, oro, resultado, **Fabricar** y **×5**):
+  Alquimia (Poción, Antídoto, Éter, Pluma Fénix y los 5 elixires) · Herrería (arma, armadura y accesorio por nivel de
+  mineral, con mejor rareza según la profesión; y **Fundir** mineral en fragmentos 🔩 para la forja) · Cocina (7 comidas de
+  30 minutos, una activa a la vez: por ejemplo Salmón asado +10% PV; se ven en el HUD).
+- **Nuevo objeto:** 💧 Antídoto (quita veneno y quemadura).
+- **🪨 Materiales:** pestaña nueva en 🎒 Grupo con las profesiones y los montones (hasta 999). Quedan en la tumba 🪦 si el grupo cae.
+- **Misiones:** nuevo tipo **⛏️ Recolecta X** (~12% de los puestos; el resto de las misiones no cambia).
+- **Guardado:** `saveVersion` 13: `mats`, `prof`, `gath`, `food` y `items.antidoto`.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -428,7 +448,8 @@ public/js/pets.js      Mascotas: huevos, eclosión, efectos y experiencia
 public/js/achievements.js Logros, títulos y ranking de la sala
 public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
 public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, tesoros, apariencias y donaciones
-public/js/shopui.js    Pantallas de la forja, el mercader, el entrenador, las apariencias y el tablón
+public/js/gather.js    Recolección, profesiones, recetas y comidas
+public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})

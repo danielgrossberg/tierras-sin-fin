@@ -173,6 +173,10 @@ export function itemPreview(k, H) {
     const g = Math.min(H.mhp - H.hp, Math.round(H.mhp * .5));
     return { show: true, prev: `🧪 +${g} PV → ${H.hp + g}/${H.mhp}${H.poison > 0 ? ' · quita veneno' : ''}`, need: H.hp / H.mhp - (H.poison > 0 ? .05 : 0) };
   }
+  if (k === 'antidoto') {
+    if (!(H.poison > 0) && !(H.burn > 0)) return { show: true, dis: 'Sin veneno', need: 9 };
+    return { show: true, prev: '💧 Quita veneno y quemadura', need: 0 };
+  }
   if (k === 'eter') {
     if (H.mp >= H.mmp) return { show: true, dis: 'Magia llena', need: 9 };
     const g = Math.min(H.mmp - H.mp, Math.round(H.mmp * .5));

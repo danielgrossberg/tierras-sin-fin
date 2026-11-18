@@ -4,17 +4,17 @@
 // Tipos: caza, entrega, exploración y jefe. (Mazmorra llegará con la fase F.)
 'use strict';
 import { mulberry, hashI, pick } from './util.js';
-import { CH, EN, POOL } from './data.js';
-import { G, st, P, heroes, gainXP } from './state.js';
+import { CH, EN, POOL, NODES, MATS } from './data.js';
+import { G, st, P, START, heroes, gainXP } from './state.js';
 import { getChunk, feats, tileAt, isBlocked, dangerAt, addFeat, vName } from './world.js';
 import { rollLoot, addItem, itemLabel } from './items.js';
 import { addEgg } from './pets.js';
 
 export const MAX_ACTIVE = 5;
 export const SLOTS_PER_BOARD = 3;
-const TMULT = { hunt: 1, deliver: 1.3, explore: 1.2, boss: 2.5, dungeon: 2.8 };
-export const QICON = { hunt: '🏹', deliver: '✉️', explore: '🧭', boss: '👑', dungeon: '🕳️' };
-export const QNAME = { hunt: 'Caza', deliver: 'Entrega', explore: 'Exploración', boss: 'Jefe', dungeon: 'Mazmorra' };
+const TMULT = { hunt: 1, deliver: 1.3, explore: 1.2, boss: 2.5, dungeon: 2.8, gather: 1.1 };
+export const QICON = { hunt: '🏹', deliver: '✉️', explore: '🧭', boss: '👑', dungeon: '🕳️', gather: '⛏️' };
+export const QNAME = { hunt: 'Caza', deliver: 'Entrega', explore: 'Exploración', boss: 'Jefe', dungeon: 'Mazmorra', gather: 'Recolección' };
 const DIRS = ['este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste', 'norte', 'noreste'];
 export const compass = (dx, dy) => DIRS[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8];
 
@@ -81,12 +81,20 @@ function genQuest(v, slot, n) {
   // para que el resto de las misiones de cada tablón siga siendo la misma de antes.
   const rd = mulberry(hashI(v.x * 13 + slot * 101, v.y * 29 + n * 37, st.seed + 7177));
   if (want !== 'boss' && rd() < .15) want = 'dungeon';
+  // Versión 3 · Fase 6.1: ~12% de los puestos pasan a ser "Recolecta X" (azar aparte: el resto no cambia)
+  const rgq = mulberry(hashI(v.x * 7 + slot * 53, v.y * 11 + n * 97, st.seed + 7373));
+  if (want !== 'boss' && want !== 'dungeon' && rgq() < .12) want = 'gather';
   const base = { id: vid(v) + '#' + slot + '#' + n, slot, from: { x: v.x, y: v.y, name: v.name } };
   let q = null;
   if (want === 'dungeon') {
     const t = scan(v, 25, 150, rd, c => { const f = featIn(c, 'cave'); return f && !(G.dungeons && G.dungeons[f.id] && G.dungeons[f.id].done) ? f : null; }, true, 400);
     if (t) q = { type: 'dungeon', target: { x: t.x, y: t.y, name: t.name }, caveId: t.id, title: `Completa la mazmorra ${t.name}`, desc: `${t.name} (${t.floors} pisos) está al ${compass(t.x - v.x, t.y - v.y)} de ${v.name}. Derrota a su jefe.` };
     else want = r < .35 ? 'hunt' : r < .6 ? 'deliver' : 'explore';
+  }
+  if (want === 'gather') {
+    const kinds = ['ore', 'herb', 'fish', 'wood'], kind = kinds[Math.floor(rgq() * 4)], N = NODES[kind], t = Math.min(N.list.length - 1, Math.floor(Math.hypot(v.x - START.x, v.y - START.y) / 60));
+    const mat = N.list[t], needN = 4 + Math.floor(rgq() * 5);
+    q = { type: 'gather', mat, need: needN, title: `Recolecta ${needN} × ${MATS[mat].e} ${MATS[mat].n}`, desc: `En ${v.name} necesitan ${MATS[mat].n.toLowerCase()} (${N.e} ${N.n.toLowerCase()} de la zona).` };
   }
   if (want === 'deliver') {
     const t = scan(v, 40, 120, rng, c => featIn(c, 'village', vid(v))) || forceFeat(v, 'village', 40, 120, rng);
@@ -98,6 +106,7 @@ function genQuest(v, slot, n) {
     const t = scan(v, 0, 170, rng, c => c.spawns.find(s => s.boss && G.defeated[s.id] === undefined), false, 500);
     if (t) { const e = EN[t.group[0]]; q = { type: 'boss', target: { x: t.x, y: t.y }, bossId: t.id, title: `Derrota al ${e.n} de la región`, desc: `Un ${e.n} 👑 aterroriza la región, al ${compass(t.x - v.x, t.y - v.y)}.` }; }
   }
+  if (!q && want === 'gather') want = 'hunt';
   if (!q) {   // caza (o si no se encontró lugar para el tipo pedido)
     const lvl = dangerAt(v.x, v.y), b = tileAt(v.x, v.y).b, pool = (POOL[b] || POOL.GRASS).filter(k => (EN[k].min || 1) <= lvl + 1);
     const key = pick(pool.length ? pool : POOL.GRASS, rng), need = 3 + Math.floor(rng() * 4);
@@ -122,7 +131,7 @@ export function accept(q) {
 }
 export function abandon(id) { G.quests = active().filter(q => q.id !== id); if (G.qtrack === id) G.qtrack = active()[0] ? active()[0].id : null; }
 export function track(id) { G.qtrack = id; }
-export const progressText = q => q.type === 'hunt' ? `${q.have}/${q.need}` : q.target ? `${Math.round(Math.hypot(q.target.x - P.x, q.target.y - P.y))} c` : '';
+export const progressText = q => q.type === 'hunt' || q.type === 'gather' ? `${q.have}/${q.need}` : q.target ? `${Math.round(Math.hypot(q.target.x - P.x, q.target.y - P.y))} c` : '';
 export const rewardText = (r, type) => `💰 ${r.gold} · ⭐ ${r.xp} XP${r.gear >= 1 ? ' · 🎁 equipo' : r.gear ? ` · ${Math.round(r.gear * 100)}% equipo` : ''}${type === 'boss' || type === 'dungeon' ? ' · 30% 🥚' : ''}`;
 
 // Completa una misión: recompensa, renueva el puesto del tablón y devuelve líneas para mostrar
@@ -146,6 +155,12 @@ export function onVictory(enemies, m) {
     if (q.type === 'hunt') { q.have = Math.min(q.need, q.have + enemies.filter(e => e.key === q.key).length); if (q.have >= q.need) out.push(...complete(q)); }
     else if (q.type === 'boss' && m && m.id === q.bossId) out.push(...complete(q));
   }
+  return out;
+}
+// Al recolectar: avanza "Recolecta X"
+export function onGather(mat, n) {
+  const out = [];
+  for (const q of [...active()]) if (q.type === 'gather' && q.mat === mat) { q.have = Math.min(q.need, q.have + n); if (q.have >= q.need) out.push(...complete(q)); }
   return out;
 }
 // Al completar una mazmorra (jefe derrotado)

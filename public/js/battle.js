@@ -13,6 +13,8 @@ import { isNight, NIGHT_STATS, NIGHT_REWARD } from './daynight.js';
 import { activePet, petPower, catBonus, foxBonus, turtleShield, petGainXP, addEgg } from './pets.js';
 import { PETS, PET_MAX, WB_ROUNDS } from './data.js';
 import { bump } from './achievements.js';
+import { battleMats, matLabel } from './gather.js';
+import { foodP } from './state.js';
 import { wbReport } from './worldboss.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName, elix } from './state.js';
 import { createTomb } from './tomb.js';
@@ -313,6 +315,7 @@ function itemEffect(k, t) {
   if (k === 'pocion') { heal(t, S(t, 'mhp') * .5); t.poison = 0; }
   else if (k === 'eter') { const mm = S(t, 'mmp'), b = t.mp; t.mp = Math.min(mm, t.mp + Math.round(mm * .5)); popup(t, '+' + (t.mp - b) + ' PM', '#6fb1ff'); }
   else if (k === 'pluma') { t.hp = Math.round(S(t, 'mhp') * .5); popup(t, '¡Revive!', '#46c37b'); }
+  else if (k === 'antidoto') { t.poison = 0; t.burn = 0; popup(t, '💧 Curado', '#9fe8b0'); }
   refresh();
 }
 // Íconos de estado en las tarjetas de combate
@@ -615,7 +618,7 @@ async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);
   const fort = elix('fortuna') ? 1.3 : 1;   // Elixir de Fortuna: +30% de oro y botín
   const cat = ownPet('gato'), loot = (partyHas('goblin') ? 1.3 : 1) * (BT.night ? NIGHT_REWARD : 1) * (cat ? 1 + catBonus(cat) : 1) * fort;   // Goblin +30% · noche +30% · gato
-  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))) * (cat ? 1 + catBonus(cat) : 1) * fort);   // pasiva del Enano: +25% de oro · talentos de oro
+  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))) * (cat ? 1 + catBonus(cat) : 1) * fort * (1 + foodP('goldP')));   // pasiva del Enano: +25% de oro · talentos de oro
   G.gold += gold; const lines = [`🏆 <b>¡Victoria!</b> +${xp} XP · +${gold} de oro`];
   // Experiencia según participación; los que esperan en la taberna reciben el 10%
   const team = heroes(), before = team.map(h => h.lvl), shares = splitXP(team, xp), lvMsgs = [];
@@ -635,6 +638,7 @@ async function victory() {
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>`
       : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
   }
+  { const mats = battleMats(BT.enemies.map(e => e.key)); if (mats.length) lines.push('🐾 Materiales: ' + mats.map(([k, n]) => matLabel(k, n)).join(' · ')); }
   if (team.some(h => h.hp <= 0)) lines.push('<span class="mut">Los héroes caídos siguen caídos: revívelos en una posada o con una Pluma Fénix.</span>');
   if (!m.sea && !m.dun) { monsters.delete(m.id); mpos.delete(m.x + ',' + m.y); G.defeated[m.id] = G.steps; }  // los del mar y de mazmorra no se registran
   if (m.onWin) lines.push(...(m.onWin() || []));   // mazmorras: el monstruo cae y, si era el jefe, se completa

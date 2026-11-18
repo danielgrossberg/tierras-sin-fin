@@ -9,7 +9,8 @@ import { tracked, QICON } from './quests.js';
 import { tombMinutes } from './tomb.js';
 import { mateOnMap, othersBubbles, chatMuted } from './prefs.js';
 import { D, DW, DH, VISION, inDungeon, isSeen, isVisible, dunProg, caveDone } from './dungeon.js';
-import { CAVE, PETS } from './data.js';
+import { CAVE, PETS, NODES } from './data.js';
+import { nodeReady } from './gather.js';
 import { darkness, twilight } from './daynight.js';
 import { activePet } from './pets.js';
 import { wbAlive, wbPos } from './worldboss.js';
@@ -231,6 +232,7 @@ function drawDungeon(t) {
   const stairs = (p, up) => { if (p && seen(p.x, p.y)) sprites.push({ y: p.y, fn: () => { const X = sx(p.x), Y = sy(p.y); ctx.fillStyle = 'rgba(242,193,78,.18)'; ctx.fillRect(X - TS / 2, Y - TS / 2, TS, TS); emoji('🪜', X, Y, TS * .85); label(up ? (D.f === 0 ? 'Salida' : 'Subir') : 'Bajar', X, Y - TS * .62, 11, up ? '#ffe6a0' : '#9fd8ff'); } }); };
   stairs(fl.up, true); stairs(fl.down, false);
   if (fl.exit && pr.done && seen(fl.exit.x, fl.exit.y)) sprites.push({ y: fl.exit.y, fn: () => { const X = sx(fl.exit.x), Y = sy(fl.exit.y), r = TS * (.7 + .08 * Math.sin(t / 250)); const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(127,224,255,.6)'); gr.addColorStop(1, 'rgba(127,224,255,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill(); emoji('🌀', X, Y, TS * .9); label('Salida', X, Y - TS * .65, 11, '#bff0ff'); } });
+  for (const v of fl.veins || []) if (seen(v.x, v.y)) sprites.push({ y: v.y - .2, fn: () => emoji('⛏️', sx(v.x), sy(v.y), TS * .55, nodeReady(v.id) ? .95 : .3) });
   for (const c of fl.chests) if (!pr.ch[c.id] && seen(c.x, c.y)) sprites.push({ y: c.y, fn: () => { shadow(sx(c.x), sy(c.y) + TS * .3, TS * .3); emoji('📦', sx(c.x), sy(c.y) + Math.sin(t / 300 + c.x) * 2, TS * .72); } });
   for (const tr of fl.traps) {
     const known = D.trapSeen.get(tr.id), gone = D.trapGone.has(tr.id);
@@ -311,6 +313,11 @@ export function draw(t) {
       emoji('🕳️', X, Y, TS * .95);
       if (done) emoji('✅', X + TS * .42, Y - TS * .38, TS * .42);
       ctx.font = `bold ${Math.max(11, Math.round(TS * .28))}px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText(f.name, X, Y - TS * .78); ctx.fillStyle = '#e9ddff'; ctx.fillText(f.name, X, Y - TS * .78);
+    } });
+    else if (f.type === 'node') sprites.push({ y: y - .2, fn: () => {
+      // Punto de recolección (Versión 3 · Fase 6.1): tenue si está agotado
+      const ok = nodeReady(f.id); ctx.fillStyle = ok ? 'rgba(255,240,180,.22)' : 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(sx(x), sy(y) + TS * .25, TS * .3, TS * .12, 0, 0, 7); ctx.fill();
+      emoji(NODES[f.kind].e, sx(x), sy(y) + (ok ? Math.sin(t / 500 + x) * 1.5 : 0), TS * .5, ok ? .95 : .3);
     } });
     else if (f.type === 'chest' && !G.opened[f.id]) sprites.push({ y, fn: () => { shadow(sx(x), sy(y) + TS * .3, TS * .3); emoji('📦', sx(x), sy(y) + Math.sin(t / 300 + x) * 2, TS * .72); } });
     else if (f.type === 'shrine') sprites.push({ y, fn: () => {

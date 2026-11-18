@@ -25,12 +25,12 @@ function freeSpot(x, y) {
 // Crea la tumba con todo lo que el grupo lleva y lo saca del grupo. Devuelve si se perdió una tumba anterior.
 export function createTomb(x, y) {
   const lostOld = !!G.tomb;
-  const items = Object.assign({}, G.items), inventory = G.inventory || [], gear = [];
+  const items = Object.assign({}, G.items), inventory = G.inventory || [], gear = [], mats = Object.assign({}, G.mats || {});
   for (const h of heroes()) for (const slot in (h.equip || {})) if (h.equip[slot]) gear.push({ h: h.id, slot, it: h.equip[slot] });
-  const has = Object.values(items).some(n => n > 0) || inventory.length || gear.length;
+  const has = Object.values(items).some(n => n > 0) || inventory.length || gear.length || Object.values(mats).some(n => n > 0);
   G.tomb = null;
-  if (has) { const s = freeSpot(x, y); G.tomb = { x: s.x, y: s.y, at: Date.now(), items, inventory, gear }; }
-  G.items = { pocion: 0, eter: 0, pluma: 0 }; G.inventory = [];
+  if (has) { const s = freeSpot(x, y); G.tomb = { x: s.x, y: s.y, at: Date.now(), items, inventory, gear, mats }; }
+  G.items = { pocion: 0, eter: 0, pluma: 0, antidoto: 0 }; G.inventory = []; G.mats = {};
   for (const h of heroes()) changeEquip(h, () => { h.equip = {}; });
   return { lostOld, created: !!G.tomb };
 }
@@ -39,6 +39,7 @@ export function createTomb(x, y) {
 export function recoverTomb() {
   const t = G.tomb; if (!t) return false;
   for (const k in t.items) G.items[k] = (G.items[k] || 0) + t.items[k];
+  G.mats = G.mats || {}; for (const k in t.mats || {}) G.mats[k] = Math.min(999, (G.mats[k] || 0) + t.mats[k]);
   G.inventory = (G.inventory || []).concat(t.inventory || []);
   for (const g of t.gear || []) {
     const h = G.roster.find(x => x.id === g.h);
