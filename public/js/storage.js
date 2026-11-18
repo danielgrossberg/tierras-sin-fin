@@ -1,14 +1,14 @@
 // Guardado local (localStorage). Todo en try/catch: si falla, se juega igual.
 'use strict';
 import { G, P, st } from './state.js';
-import { CL, ADV, PETS } from './data.js';
+import { CL, ADV, PETS, MOUNTS } from './data.js';
 import { pushSave } from './net.js';
 
 export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -80,12 +80,19 @@ export function migrate(o) {
     o.stats.killsBy = o.stats.killsBy || {}; o.stats.maxHit = o.stats.maxHit || null;
     for (const h of o.roster) h.st = h.st || { battles: 0, dmg: 0, kills: 0 };
   }
+  if (v < 15) {
+    // Versión 3 · Fase 6.5: monturas. Quien ya tenía los logros que ahora dan montura la recibe.
+    o.mounts = o.mounts || []; o.mount = o.mount || null; o.riding = !!o.riding;
+    for (const [a, k] of [['exp250', 'camello'], ['boss10', 'lobog'], ['dun5', 'lagarto']]) if (o.ach && o.ach[a] && !o.mounts.includes(k)) o.mounts.push(k);
+    if (!o.mount && o.mounts.length) { o.mount = o.mounts[0]; o.riding = true; }
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0, antidoto: 0 }, o.items || {});
   o.mats = o.mats && typeof o.mats === 'object' ? o.mats : {}; o.prof = o.prof && typeof o.prof === 'object' ? o.prof : {}; o.gath = o.gath && typeof o.gath === 'object' ? o.gath : {};
   for (const k of ['opened', 'defeated', 'visited']) o[k] = o[k] || {};
   for (const k of ['gold', 'upA', 'upD', 'steps', 'bosses']) o[k] = o[k] || 0;
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];
+  o.mounts = Array.isArray(o.mounts) ? o.mounts.filter(k => MOUNTS[k]) : []; if (!o.mounts.includes(o.mount)) o.mount = null; o.riding = !!o.riding;
   o.favs = o.favs && typeof o.favs === 'object' ? o.favs : {};
   o.dungeons = o.dungeons && typeof o.dungeons === 'object' ? o.dungeons : {};
   o.cos = o.cos && typeof o.cos === 'object' ? o.cos : { owned: [] }; o.cos.owned = Array.isArray(o.cos.owned) ? o.cos.owned : []; o.tmaps = Array.isArray(o.tmaps) ? o.tmaps : []; o.elix = o.elix && typeof o.elix === 'object' ? o.elix : {};

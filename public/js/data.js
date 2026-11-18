@@ -321,7 +321,7 @@ export const ACH_CATS = { exp: '🧭 Exploración', fight: '⚔️ Combate', dun
 const A = (id, cat, n, d, title, need, reward) => ({ id, cat, n, d, title, need, reward: reward || null });
 export const ACH = [
   A('exp100', 'exp', 'Primeros Pasos', 'Llega a 100 casillas de Ciudad Origen', 'el Caminante', s => s.maxDist >= 100, { gold: 100 }),
-  A('exp250', 'exp', 'Más Allá', 'Llega a 250 casillas de Ciudad Origen', 'el Explorador', s => s.maxDist >= 250, { gold: 300 }),
+  A('exp250', 'exp', 'Más Allá', 'Llega a 250 casillas de Ciudad Origen', 'el Explorador', s => s.maxDist >= 250, { gold: 300, mount: 'camello' }),
   A('exp500', 'exp', 'Fin del Mapa', 'Llega a 500 casillas de Ciudad Origen', 'el Trotamundos', s => s.maxDist >= 500, { gold: 800, item: 'epico' }),
   A('vil10', 'exp', 'Cartógrafo', 'Descubre 10 aldeas', 'el Cartógrafo', s => s.villages >= 10, { gold: 200 }),
   A('vil25', 'exp', 'Viajero Incansable', 'Descubre 25 aldeas', 'el Viajero', s => s.villages >= 25, { gold: 500 }),
@@ -329,11 +329,11 @@ export const ACH = [
   A('k100', 'fight', 'Cazador', 'Derrota 100 monstruos', 'el Cazador', s => s.kills >= 100, { gold: 150 }),
   A('k500', 'fight', 'Implacable', 'Derrota 500 monstruos', 'el Implacable', s => s.kills >= 500, { gold: 600, item: 'raro' }),
   A('boss1', 'fight', 'Primer Jefe', 'Derrota a tu primer jefe', 'Matajefes', s => s.bosses >= 1, { gold: 150 }),
-  A('boss10', 'fight', 'Matadragones', 'Derrota 10 jefes', 'Matadragones', s => s.bosses >= 10, { gold: 800, item: 'epico' }),
+  A('boss10', 'fight', 'Matadragones', 'Derrota 10 jefes', 'Matadragones', s => s.bosses >= 10, { gold: 800, item: 'epico', mount: 'lobog' }),
   A('clean', 'fight', 'Intocable', 'Derrota a un jefe sin que caiga nadie del grupo', 'el Intocable', s => s.cleanBoss >= 1, { gold: 200 }),
   A('night50', 'fight', 'Criatura de la Noche', 'Derrota 50 monstruos de noche', 'el Nocturno', s => s.nightKills >= 50, { gold: 300 }),
   A('dun1', 'dun', 'Espeleólogo', 'Completa 1 mazmorra', 'el Espeleólogo', s => s.dungeons >= 1, { gold: 200 }),
-  A('dun5', 'dun', 'Saqueador de Criptas', 'Completa 5 mazmorras', 'Saqueador de Criptas', s => s.dungeons >= 5, { gold: 600, item: 'epico' }),
+  A('dun5', 'dun', 'Saqueador de Criptas', 'Completa 5 mazmorras', 'Saqueador de Criptas', s => s.dungeons >= 5, { gold: 600, item: 'epico', mount: 'lagarto' }),
   A('dun10', 'dun', 'Señor de las Profundidades', 'Completa 10 mazmorras', 'Señor de las Profundidades', s => s.dungeons >= 10, { gold: 1200, item: 'legendario' }),
   A('coop1', 'coop', 'Compañero', 'Gana tu primer jefe en equipo', 'el Compañero', s => s.coopWins >= 1, { gold: 150 }),
   A('coop5', 'coop', 'Hermanos de Armas', 'Gana 5 jefes en equipo', 'Hermano de Armas', s => s.coopWins >= 5, { gold: 500, item: 'epico' }),
@@ -477,6 +477,17 @@ export const PETS = {
 };
 export const PET_EMOJIS = Object.values(PETS).map(p => p.e);
 export const EGG_STEPS = 300, EGG_PRICE = 800, PET_MAX = 20;
+// Monturas (Versión 3 · Fase 6.5): spd = velocidad extra al caminar en el mapa. No se usan en mazmorras, en el agua ni en las aldeas.
+// En el pantano las monturas van a la mitad de su velocidad extra, salvo el lagarto.
+export const MOUNTS = {
+  caballo: { n: 'Caballo', e: '🐴', ride: '🐎', spd: .4, d: '+40% de velocidad' },
+  camello: { n: 'Camello', e: '🐫', ride: '🐫', spd: .4, desert: .6, d: '+40% de velocidad · +60% en el desierto' },
+  lagarto: { n: 'Lagarto', e: '🦎', ride: '🦎', spd: .45, swamp: true, d: '+45% de velocidad · no le afecta el pantano' },
+  lobog: { n: 'Lobo Gigante', e: '🐺', ride: '🐕', tint: 'grayscale(1) brightness(.85) contrast(1.2)', spd: .5, stealth: true, d: '+50% de velocidad · los monstruos te detectan a menos distancia' },
+  unicornio: { n: 'Unicornio', e: '🦄', ride: '🐎', tint: 'grayscale(1) brightness(1.9)', spark: true, spd: .6, d: '+60% de velocidad · muy raro' },
+};
+export const MOUNT_EMOJIS = Object.values(MOUNTS).map(m => m.e);
+export const HORSE_PRICE = 600, MERCH_MOUNT = 2500;
 
 // ================= Mazmorras (Versión 3 · Fase 1) =================
 // Tipo de cueva: monstruos, jefe, nombres ({V} = nombre inventado) y colores del piso

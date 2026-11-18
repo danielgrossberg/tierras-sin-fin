@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { roomSeed, cleanName } from './public/js/util.js';
-import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS, TITLES, ACH, wbWeek, wbStats, CITY, CITY_GOALS, COS } from './public/js/data.js';
+import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS, MOUNT_EMOJIS, TITLES, ACH, wbWeek, wbStats, CITY, CITY_GOALS, COS } from './public/js/data.js';
 import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,7 +19,7 @@ const GRACE = 15 * 1000;            // tiempo para reconectar antes de "salir" d
 const MAX_ROOMS = 1000;
 const STATUSES = new Set(['map', 'battle', 'village', 'dungeon']);
 const BIOMES = new Set(Object.keys(B));
-const EMOJIS = new Set(LEADER_EMOJIS), PETS_E = new Set(PET_EMOJIS);
+const EMOJIS = new Set(LEADER_EMOJIS), PETS_E = new Set(PET_EMOJIS), MOUNTS_E = new Set(MOUNT_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
 const NOTICE_TYPES = new Set(['level', 'boss', 'death', 'ach']);
 const TITLE_SET = new Set(TITLES);
@@ -134,7 +134,7 @@ function loadChat(room) {
   })();
   return room.chatLoad;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null, title: p.title || null, cos: p.cos || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null, mount: p.mount || null, title: p.title || null, cos: p.cos || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -223,9 +223,10 @@ function validState(d) {
   const dun = typeof d.dun === 'string' ? cleanText(d.dun, 40) || null : null;
   // Mascota que lo sigue en el mapa (Versión 3 · Fase 3)
   const pet = PETS_E.has(d.pet) ? d.pet : null;
+  const mount = MOUNTS_E.has(d.mount) ? d.mount : null;   // montura (Versión 3 · Fase 6.5)
   // Apariencias (solo visuales): cada una debe existir y ser de su tipo
   const cos = {}; if (isObj(d.cos)) for (const k of ['ring', 'aura', 'frame', 'acc']) { const id = d.cos[k]; if (typeof id === 'string' && COS[id] && COS[id].k === k) cos[k] = id; }
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun, pet, cos };
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun, pet, mount, cos };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;

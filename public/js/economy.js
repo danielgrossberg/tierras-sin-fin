@@ -10,6 +10,8 @@ import { now as srvNow } from './daynight.js';
 import { makeItem, rollLoot, RAR, RAR_KEYS, TYPES, LEGENDS, STAT_ORDER, extraValue, buyPrice, addItem } from './items.js';
 import { addEgg } from './pets.js';
 import { blockT } from './data.js';
+import { addMount } from './mounts.js';
+import { MOUNTS, MERCH_MOUNT } from './data.js';
 
 const R = Math.round;
 // ================= Proyectos de Ciudad Origen (estado del servidor en net.city) =================
@@ -94,6 +96,8 @@ export function merchStock() {
   if (r() < .6) out.push({ kind: 'egg', n: 'Huevo de mascota', e: '🥚', d: 'Más barato que en Ciudad Origen', p: MERCH_EGG });
   out.push({ kind: 'supremo', n: 'Elixir Supremo', e: '⚗️', d: 'Sabiduría + Fortuna + Suerte por 30 min', p: R(420 * (1 + lvl / 10)) });
   if (out.length < 4 || r() < .5) { const k = pick(Object.keys(ELIX), r); out.push({ kind: 'elix', k, n: ELIX[k].n + ' ×2', e: ELIX[k].e, d: '1 hora de efecto', p: R(ELIX[k].p * 1.5 * (1 + lvl / 10)) }); }
+  // Montura (Versión 3 · Fase 6.5): 1 de cada 4 días trae un Camello, un Lagarto o un Lobo Gigante (va al principio)
+  if (r() < .25) { const k = pick(['camello', 'lagarto', 'lobog'], r); out.unshift({ kind: 'mount', k, n: MOUNTS[k].n, e: MOUNTS[k].e, d: MOUNTS[k].d, p: R(MERCH_MOUNT * (1 + lvl / 20)) }); }
   return out.slice(0, 6);
 }
 export const merchBought = i => !!(G.merch && G.merch.day === today() && G.merch.b.includes(i));
@@ -101,8 +105,10 @@ export function buyMerch(i) {
   const s = merchStock()[i]; if (!s || merchBought(i)) return null;
   if (G.gold < s.p) return { ok: false, msg: 'No te alcanza el oro.' };
   if (s.kind === 'gear' && !addItem(s.it)) return { ok: false, msg: 'Tu inventario está lleno.' };
+  if (s.kind === 'mount' && (G.mounts || []).includes(s.k)) return { ok: false, msg: 'Ya tienes esa montura.' };
   G.gold -= s.p; G.merch = G.merch && G.merch.day === today() ? G.merch : { day: today(), b: [] }; G.merch.b.push(i);
   if (s.kind === 'egg') addEgg('mercader');
+  if (s.kind === 'mount') addMount(s.k);
   if (s.kind === 'supremo') { giveElix('sabio'); giveElix('fortuna'); giveElix('suerte'); }
   if (s.kind === 'elix') giveElix(s.k, 2 * ELIX_MS);
   if (s.kind === 'tmap') return { ok: true, map: makeTreasure() };

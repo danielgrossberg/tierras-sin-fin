@@ -418,6 +418,24 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
 - El **ranking de la sala** suma tres columnas: más monstruos, golpe más fuerte y tiempo jugado (validados en el servidor).
 - **Guardado:** `saveVersion` 14: `stats.playMs`, `earned`, `spent`, `healed`, `killsBy`, `maxHit` y `st` por héroe.
 
+### Fase 6.5 (lista): monturas 🐴
+| Montura | Velocidad | Ventaja | Cómo se consigue |
+|---|---|---|---|
+| 🐴 Caballo | +40% | — | Establo de cualquier aldea (600 de oro) |
+| 🐫 Camello | +40% | +60% en el desierto | Logro «Más Allá», botín de jefes, mercader |
+| 🦎 Lagarto | +45% | No le afecta el pantano (las demás van a media velocidad extra ahí) | Logro «Saqueador de Criptas», botín, mercader |
+| 🐺 Lobo Gigante | +50% | Los monstruos te ven a 4 casillas en vez de 6 | Logro «Matadragones», botín, mercader |
+| 🦄 Unicornio | +60% | Muy raro | Solo botín de jefes (0,5%; 1% en mazmorras) |
+
+- Botín de jefes: 4% de Camello, Lagarto o Lobo Gigante (8% en jefes de mazmorra). El mercader ambulante trae una
+  montura 1 de cada 4 días.
+- **Botón 🐴 en el HUD** para montar y desmontar. No se cabalga en mazmorras, en el agua (bote) ni dentro de las aldeas:
+  ahí se va a pie y se vuelve a montar solo al salir. Al perder un combate se desmonta. Las monturas no mueren.
+- La velocidad es menos tiempo entre pasos al mantener la dirección (el ritmo ya no depende de los cuadros por segundo).
+- El líder se dibuja sobre la montura; los demás jugadores también la ven (el servidor valida el emoji).
+- Se cambia la montura activa en el establo; en 🎒 Grupo se ve cuál llevas.
+- **Guardado:** `saveVersion` 15: `mounts`, `mount`, `riding`. Quien ya tenía uno de los tres logros recibe su montura.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -469,6 +487,7 @@ public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
 public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, tesoros, apariencias y donaciones
 public/js/daily.js     Recompensa diaria (calendario de 7 días)
 public/js/stats.js     Estadísticas del jugador (panel 📊 y registro de daño, curación, oro y tiempo)
+public/js/mounts.js    Monturas: velocidad, dónde se puede montar, botín y premios
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso

@@ -17,8 +17,20 @@ import { wbAlive, wbPos } from './worldboss.js';
 import { cityLvl, cosPublic, merchVillage } from './economy.js';
 import { COS, CITY } from './data.js';
 import { elix } from './state.js';
+import { mountEmoji } from './mounts.js';
+import { MOUNTS } from './data.js';
+const MOUNT_BY_E = new Map(Object.values(MOUNTS).map(m => [m.e, m]));
 // Título del jugador bajo sus pies (Versión 3 · Fase 4)
 function titleTag(txt, X, Y, alpha) { if (!txt) return; ctx.save(); ctx.globalAlpha = alpha; ctx.font = `italic bold 10px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText('«' + txt + '»', X, Y); ctx.fillStyle = '#ffe08a'; ctx.fillText('«' + txt + '»', X, Y); ctx.restore(); }
+// Montura (Versión 3 · Fase 6.5): el animal abajo, mirando hacia donde camina; devuelve cuánto subir al jinete
+function mountSprite(e, X, Y, TS, t, faceR, moving, alpha) {
+  const m = MOUNT_BY_E.get(e) || { ride: e }, gal = moving ? Math.abs(Math.sin(t / 60)) * 3 : 0;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(X, Y + TS * .18 - gal); if (faceR) ctx.scale(-1, 1);
+  ctx.fillStyle = '#000'; ctx.filter = m.tint || 'none'; ctx.font = `${Math.round(TS * 1.05)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.ride || e, 0, 0);
+  ctx.filter = 'none'; if (m.spark) { ctx.globalAlpha = alpha * (.6 + .4 * Math.sin(t / 200)); ctx.font = `${Math.round(TS * .35)}px ${EF}`; ctx.fillText('✨', -TS * .42, -TS * .3); }
+  ctx.restore();
+  return TS * .45 + gal;
+}
 // Mascota que sigue al grupo: más chica, detrás del líder, saltando un poco
 function petSprite(e, X, Y, TS, t, face, alpha, acc) {
   const px = X - face * TS * .5, py = Y + TS * .18 - Math.abs(Math.sin(t / 180)) * 2.5;
@@ -375,7 +387,8 @@ export function draw(t) {
       const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .5 : 1;
       shadow(X, Y + TS * .4, TS * .34);
       if (o.pet && o.biome !== 'WATER' && o.status !== 'dungeon') petSprite(o.pet, X, Y, TS, t, 1, a, o.cos && o.cos.acc);
-      heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * .95, mateColor(o.name), t, false, a,
+      const om = o.mount && o.biome !== 'WATER' && o.status === 'map' ? o.mount : null, oup = om ? mountSprite(om, X, Y, TS, t, false, moving, a) : 0;
+      heroSprite(X, Y - (om ? oup : moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * (om ? .78 : .95), mateColor(o.name), t, false, a,
         statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18', o.cos || null);
       titleTag(o.title, X, Y + TS * .62, a);
     } });
@@ -401,7 +414,8 @@ export function draw(t) {
     { const pt = activePet(); if (pt && !onWater) petSprite(PETS[pt.k].e, X, Y, TS, t, P.face > 0 ? 1 : -1, 1, cosPublic().acc); }
     shadow(X, Y + TS * .4, TS * .36);
     // 18% más grande que un monstruo normal (TS*.82), anillo dorado con pulso y nombre en dorado
-    heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00', cosPublic());
+    const me = !onWater && mountEmoji(), up = me ? mountSprite(me, X, Y, TS, t, P.face > 0, moving, 1) : 0;
+    heroSprite(X, Y + (me ? -up : bob), onWater ? '⛵' : leader().e, TS * (me ? .8 : .97), '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00', cosPublic());
     titleTag(G.title, X, Y + TS * .62, 1);
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());

@@ -638,3 +638,6 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .hsh{color:var(--mut);font-size:11px}
 .hsr span:not(:first-child),.hsh span:not(:first-child){text-align:right}
 .hsr span:first-child{overflow-wrap:anywhere}
+/* ===== Monturas (V3 · Fase 6.5) ===== */
+@media (hover:hover) and (pointer:fine){#dock{grid-template-columns:repeat(6,auto)}}
+#bRide.on{border-color:var(--gold);box-shadow:0 0 0 1px #f2c14e66 inset}

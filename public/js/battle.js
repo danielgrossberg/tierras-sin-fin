@@ -25,6 +25,7 @@ import { onVictory } from './quests.js';
 import { updateHUD, toast } from './ui.js';
 import { save } from './storage.js';
 import { notice } from './net.js';
+import { mountDrop } from './mounts.js';
 
 let BT = null, eid = 0;
 export const getBT = () => BT;
@@ -44,7 +45,7 @@ function credit(u, v) { if (BT && u && u.isHero && v > 0) BT.pts[u.id] = (BT.pts
 const support = u => credit(u, BT ? BT.supp : 0);
 function hurtEnemy(by, d, before) {
   if (d.isHero) return; credit(by, before - d.hp); if (d.hp <= 0) credit(by, d.mhp * .25);
-  if (BT && by && by.isHero && before > d.hp) { const n = by.remote ? by.owner : st.name; BT.dmgBy[n] = (BT.dmgBy[n] || 0) + (before - d.hp); noteHit(by, before - d.hp, d.hp <= 0, BT.sk); }
+  if (BT && by && by.isHero && before > d.hp) { const n = by.remote ? by.owner : st.name; BT.dmgBy[n] = (BT.dmgBy[n] || 0) + (before - d.hp); noteHit(by, before - Math.max(0, d.hp), d.hp <= 0, BT.sk); }
 }
 // Reparte X de experiencia entre los héroes del grupo según sus puntos
 function splitXP(party, X) {
@@ -629,7 +630,7 @@ async function victory() {
   lines.push(...lvMsgs);
   bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
   if (BT.night) lines.push('🌙 <span class="mut">Bonus nocturno: +30% de experiencia y botín</span>');
-  if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); }
+  if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); lines.push(...mountDrop(!!m.dun)); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
   lines.push(...petGainXP(activePet(), xp * .5));
   // Equipo: 15% en combates normales; los jefes siempre sueltan uno (mínimo Raro)
@@ -669,7 +670,7 @@ async function coopFinish(res) {
   }
   bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
   const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1) * (elix('fortuna') ? 1.3 : 1));
-  G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg());
+  G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); lines.push(...mountDrop(!!m.dun));
   lines.push(...petGainXP(activePet(), xp * .5));
   const it = rollLoot(m.lvl, m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
   lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
@@ -718,7 +719,7 @@ async function pvpFinish(res) {
 // Todo el grupo cayó (Versión 2): despiertan en Ciudad Origen con todos revividos; se conservan niveles,
 // experiencia, oro y mejoras; los objetos (pociones, inventario y equipo puesto) quedan en una tumba 🪦 por 60 minutos.
 async function defeat() {
-  const old = !!G.tomb; noteDeath();
+  const old = !!G.tomb; noteDeath(); G.riding = false;   // al caer, se desmonta
   log('💀 Tu grupo ha caído…');
   $('#b-menu').innerHTML = `<div class="res">💀 <b>Tu grupo ha caído…</b> Tus objetos quedaron donde caíste. Despertarás en <b>Ciudad Origen</b>.<br>
     <span class="mut">Conservas niveles, experiencia, oro y mejoras. Tienes <b>60 minutos</b> para volver a la tumba 🪦 y recuperar tus objetos y tu equipo.</span>

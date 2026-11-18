@@ -23,6 +23,7 @@ import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { inDungeon } from './dungeon.js';
 import { bump } from './achievements.js';
+import { mountDrop } from './mounts.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -303,6 +304,7 @@ async function guestEnd(d) {
     const extra = (d.extra && d.extra[st.name]) || 0, cat = activePet() && activePet().k === 'gato' ? activePet() : null; G.gold += Math.round(d.gold * (cat ? 1 + catBonus(cat) : 1)) + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);
     G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter');
     if (Math.random() < .15) { addEgg('jefe'); lines.push('🥚 <b>¡Un huevo de mascota!</b> Eclosiona en 300 pasos.'); }
+    lines.push(...mountDrop(!!(d.boss && /:boss$/.test(d.boss.id || ''))));
     lines.push(...petGainXP(activePet(), d.xp * .5));
     const b = d.boss || {}, it = rollLoot(b.lvl || 1, Math.min(1, Math.hypot((b.x || 0) - START.x, (b.y || 0) - START.y) / 400), 'raro');
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>` : `<span class="mut">🎒 Inventario lleno: dejaste ${itemLabel(it)}</span>`);
@@ -312,7 +314,7 @@ async function guestEnd(d) {
     // Se perdió: la regla de la tumba, con los objetos donde estaba antes del combate
     lost = true;
     P.x = g.prev.x; P.y = g.prev.y;
-    noteDeath(); const t = createTomb(g.prev.x, g.prev.y);
+    noteDeath(); G.riding = false; const t = createTomb(g.prev.x, g.prev.y);
     for (const x of G.roster) { x.hp = S(x, 'mhp'); x.mp = S(x, 'mmp'); x.poison = 0; x.buffs = {}; }
     lines.push(`💀 <b>El equipo cayó…</b> Tus objetos quedaron donde estabas${t.created ? ' (tumba 🪦, 60 min)' : ''}. Despertarás en <b>Ciudad Origen</b>.`);
     notice('death', 'Ciudad Origen');

@@ -11,6 +11,8 @@ import { esc } from './util.js';
 import { notice, statsPush, netAsk, net } from './net.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { toast, feed } from './ui.js';
+import { addMount } from './mounts.js';
+import { MOUNTS } from './data.js';
 
 const S0 = { kills: 0, nightKills: 0, cleanBoss: 0, dungeons: 0, coopWins: 0, chests: 0, maxDist: 0, legend: 0, wbHits: 0, wbKills: 0, pvpWins: 0 };
 export const stats = () => (G.stats = Object.assign({}, S0, G.stats || {}));
@@ -49,6 +51,7 @@ export function checkAch() {
     let rw = '';
     if (a.reward && a.reward.gold) { G.gold += a.reward.gold; rw += ` · +${a.reward.gold} oro`; }
     if (a.reward && a.reward.item) { const it = rollLoot(Math.max(1, s.maxLvl), .5, a.reward.item); if (addItem(it)) { noteItem(it); rw += ' · ' + itemLabel(it); } }
+    if (a.reward && a.reward.mount) { const mm = addMount(a.reward.mount); if (mm) rw += ` · ${MOUNTS[a.reward.mount].e} ${MOUNTS[a.reward.mount].n}`; }
     feed(`🏆 <b>¡Logro!</b> ${esc(a.n)} · título «${esc(a.title)}»${rw}`);
     notice('ach', a.n);
   }
@@ -87,7 +90,7 @@ export function achTabHTML() {
   for (const [cat, cn] of Object.entries(ACH_CATS)) {
     h += `<h3 class="achcat">${cn}</h3><div class="achlist">` + ACH.filter(a => a.cat === cat).map(a => {
       const ok = !!have[a.id], pg = PROG[a.id], v = pg ? Math.min(s[pg[0]] || 0, pg[1]) : 0;
-      const rw = a.reward ? [a.reward.gold ? `💰 ${a.reward.gold}` : '', a.reward.item ? `🎁 ${a.reward.item === 'legendario' ? 'Legendario' : a.reward.item === 'epico' ? 'Épico' : 'Raro'}` : ''].filter(Boolean).join(' · ') : '';
+      const rw = a.reward ? [a.reward.gold ? `💰 ${a.reward.gold}` : '', a.reward.item ? `🎁 ${a.reward.item === 'legendario' ? 'Legendario' : a.reward.item === 'epico' ? 'Épico' : 'Raro'}` : '', a.reward.mount ? `${MOUNTS[a.reward.mount].e} ${MOUNTS[a.reward.mount].n}` : ''].filter(Boolean).join(' · ') : '';
       return `<div class="achrow ${ok ? 'ok' : ''}"><span class="achi">${ok ? '🏆' : '🔒'}</span><div class="acht"><b>${esc(a.n)}</b><small>${esc(a.d)}</small><small class="goldt">«${esc(a.title)}»${rw ? ' · ' + rw : ''}</small>
         ${pg && !ok ? `<span class="bar xp"><i style="width:${Math.round(100 * v / pg[1])}%"></i></span><small class="mut">${v}/${pg[1]}</small>` : ''}</div></div>`;
     }).join('') + '</div>';

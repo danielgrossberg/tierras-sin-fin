@@ -5,6 +5,7 @@ import { hash, hashI, mulberry, fbm, pick } from './util.js';
 import { CH, B, blockT, EN, POOL, BOSS, SYL1, SYL2, VSUF, RESPAWN, CAVE, NIGHT_POOL } from './data.js';
 import { isNight } from './daynight.js';
 import { st, G, P, START } from './state.js';
+import { sightRange } from './mounts.js';
 
 export const chunks = new Map(), feats = new Map(), monsters = new Map(), mpos = new Map();
 export function resetWorld() { chunks.clear(); feats.clear(); monsters.clear(); mpos.clear(); }
@@ -181,7 +182,7 @@ export function moveMonsters() {
     if (m.boss) continue;
     const dx = P.x - m.x, dy = P.y - m.y, md = Math.abs(dx) + Math.abs(dy);
     let opts = [];
-    if (md <= 6 && !safe && Math.random() < .7) { const ax = [Math.sign(dx), 0], ay = [0, Math.sign(dy)]; opts = Math.abs(dx) >= Math.abs(dy) ? [ax, ay] : [ay, ax]; opts = opts.filter(o => o[0] || o[1]); }
+    if (md <= sightRange() && !safe && Math.random() < .7) { const ax = [Math.sign(dx), 0], ay = [0, Math.sign(dy)]; opts = Math.abs(dx) >= Math.abs(dy) ? [ax, ay] : [ay, ax]; opts = opts.filter(o => o[0] || o[1]); }
     else if (Math.random() < .3) { const d = pick([[1, 0], [-1, 0], [0, 1], [0, -1]]); if (Math.abs(m.x + d[0] - m.hx) <= 5 && Math.abs(m.y + d[1] - m.hy) <= 5) opts = [d]; }
     for (const [sx, sy] of opts) {
       const nx = m.x + sx, ny = m.y + sy;

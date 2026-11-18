@@ -16,6 +16,8 @@ import { onGather } from './quests.js';
 import { NODES } from './data.js';
 import { checkDaily } from './daily.js';
 import { statsTick, resetTrack } from './stats.js';
+import { speedMul, mountEmoji, toggleRide, hasMounts, riding, activeMount } from './mounts.js';
+import { MOUNTS } from './data.js';
 // ================= Recolección (Versión 3 · Fase 6.1): botón grande al pisar un punto =================
 const gBtn = $('#gather');
 function gatherSpot() {
@@ -116,7 +118,7 @@ function useShrine(f) {
 }
 // Estado que ven los demás
 const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : inDungeon() ? 'dungeon' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel(), pet: activePet() ? PETS[activePet().k].e : null, cos: cosPublic() });
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel(), mount: mountEmoji(), pet: activePet() ? PETS[activePet().k].e : null, cos: cosPublic() });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -160,20 +162,29 @@ for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) dpad.addE
 addEventListener('contextmenu', e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); });
 document.addEventListener('gesturestart', e => e.preventDefault()); // evita zoom con pellizco en iOS
 
+// ================= Montura (Versión 3 · Fase 6.5) =================
+$('#bRide').addEventListener('click', () => { if (st.busy || getBT()) return; const r = toggleRide(); toast(r.msg); updateRideBtn(); save(); });
+let rideKey = '';
+function updateRideBtn() {
+  const b = $('#bRide'), k = hasMounts() + ':' + riding() + ':' + G.riding + ':' + G.mount; if (k === rideKey) return; rideKey = k;
+  b.classList.toggle('hidden', !hasMounts()); b.classList.toggle('on', !!G.riding);
+  b.querySelector('.ri').textContent = G.riding && activeMount() ? MOUNTS[G.mount].e : '🚶'; b.querySelector('.rl').textContent = G.riding ? ' Desmontar' : ' Montar';
+  b.setAttribute('aria-label', G.riding ? 'Desmontar' : 'Montar');
+}
 // ================= Loop principal =================
 let lastT = 0, lastSt = 0;
 function frame(t) {
   const dt = Math.min(.05, (t - lastT) / 1000 || 0); lastT = t;
   if (st.inGame && !st.titleOpen) {
     if (st.busy) tapDir = null;
-    else if ((held.length || tapDir) && t - lastMove > 140) { move(held.length ? held[held.length - 1] : tapDir); lastMove = t; tapDir = null; }
+    else if ((held.length || tapDir) && t - lastMove >= 140 / speedMul()) { const iv = 140 / speedMul(); move(held.length ? held[held.length - 1] : tapDir); lastMove = t - lastMove < iv * 2 ? lastMove + iv : t; tapDir = null; }   // el resto se guarda: el ritmo no depende de los cuadros por segundo
     const a = 1 - Math.exp(-dt * 20); P.px += (P.x - P.px) * a; P.py += (P.y - P.py) * a;
     if (Math.abs(P.x - P.px) > 3 || Math.abs(P.y - P.py) > 3) { P.px = P.x; P.py = P.y; }
     for (const m of monsters.values()) { m.px += (m.x - m.px) * a; m.py += (m.y - m.py) * a; }
     if (inDungeon()) dunLerp(a);
     lerpOthers(dt);
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
-    if (t - lastDN > 500) { lastDN = t; dayNightTick(); }
+    if (t - lastDN > 500) { lastDN = t; dayNightTick(); updateRideBtn(); }
     if (t - lastAch > 2000) { lastAch = t; checkAch(); pushStats(); }
     if (t - lastSt > 1000) { if (lastSt) statsTick(t - lastSt); lastSt = t; }
     gatherTick();
@@ -221,7 +232,7 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], frags: 0, elix: {}, cos: { owned: [] }, tmaps: [], merch: null, stats: {}, ach: {}, title: null, arena: { pts: 0, w: 0, l: 0 }, wbClaim: null, wbSeen: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, mounts: [], mount: null, riding: false, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], frags: 0, elix: {}, cos: { owned: [] }, tmaps: [], merch: null, stats: {}, ach: {}, title: null, arena: { pts: 0, w: 0, l: 0 }, wbClaim: null, wbSeen: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);

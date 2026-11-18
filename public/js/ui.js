@@ -15,6 +15,8 @@ import { MATS, PROFS, FOODS, NODES } from './data.js';
 import { prof, profNeed, foodActive } from './gather.js';
 import { cityLvl, giveElix, activeElix, elixLeft } from './economy.js';
 import { ELIX } from './data.js';
+import { MOUNTS, HORSE_PRICE } from './data.js';
+import { addMount, setMount, activeMount } from './mounts.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
@@ -165,7 +167,7 @@ function villageRender() {
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
-  ${merchHTML(f)}<div class="sec"><h3>🛠️ Taller</h3><div class="shop"><span>⚗️ Alquimia · ⚒️ Herrería · 🍳 Cocina <small class="mut">fabrica pociones, elixires, equipo y comidas con tus materiales</small></span><button class="btn sm gold" data-a="craftview">Abrir taller</button></div></div>${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
+  ${merchHTML(f)}<div class="sec"><h3>🛠️ Taller</h3><div class="shop"><span>⚗️ Alquimia · ⚒️ Herrería · 🍳 Cocina <small class="mut">fabrica pociones, elixires, equipo y comidas con tus materiales</small></span><button class="btn sm gold" data-a="craftview">Abrir taller</button></div></div>${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${mountsHTML()}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div>
@@ -197,6 +199,8 @@ async function villageAct(a, k) {
   if (a === 'buyegg' && VF.start && G.gold >= EGG_PRICE) { G.gold -= EGG_PRICE; addEgg('tienda'); save('now'); VMSG = `🥚 Compraste un huevo de mascota. Eclosiona en ${EGG_STEPS} pasos.`; }
   if (a === 'petuse') { const q = (G.pets || []).find(x => x.id === k); if (q) { G.pet = q.id; save('now'); VMSG = `🐾 Ahora te acompaña ${PETS[q.k].e} ${PETS[q.k].n}.`; } }
   if (a === 'duel') { const i = k.indexOf(':'), mode = k.slice(0, i), to = k.slice(i + 1); closeModal(); challenge(to, mode); return; }
+  if (a === 'buyhorse' && !(G.mounts || []).includes('caballo') && G.gold >= HORSE_PRICE) { G.gold -= HORSE_PRICE; addMount('caballo'); setMount('caballo'); save('now'); VMSG = '🐴 ¡Compraste un caballo! Monta con el botón 🐴 (fuera de la aldea vas más rápido).'; }
+  if (a === 'mountuse' && setMount(k)) { save('now'); VMSG = `${MOUNTS[k].e} Ahora usas tu ${MOUNTS[k].n}.`; }
   if (a === 'petstay') { G.pet = null; save('now'); VMSG = '🐾 Tu mascota se quedó en el establo.'; }
   // ---- Misiones, bote y portal (fase C) ----
   if (a === 'qacc') {
@@ -266,6 +270,15 @@ function stableHTML(f) {
     ${f.start ? `<div class="shop"><span>🥚 <b>Huevo de mascota</b> <small class="mut">eclosiona en ${EGG_STEPS} pasos; la mascota es al azar</small></span><button class="btn sm" data-a="buyegg" ${G.gold < EGG_PRICE ? 'disabled' : ''}>Comprar · ${EGG_PRICE} oro</button></div>` : ''}
     ${eggs.map(e => `<div class="shop"><span>🥚 Huevo <small class="mut">faltan ${e.left} pasos</small></span><span class="eggbar"><i style="width:${Math.round(100 * (1 - e.left / EGG_STEPS))}%"></i></span></div>`).join('')}
     ${rows || `<p class="mut small" style="margin:4px 0 0">Aún no tienes mascotas. Los huevos 🥚 salen de los jefes y de las misiones de jefe y de mazmorra${f.start ? ', o cómpralos aquí' : ', y se compran en Ciudad Origen'}.</p>`}</div>`;
+}
+// ---- Monturas en el establo (Versión 3 · Fase 6.5) ----
+function mountsHTML() {
+  const own = G.mounts || [], act = activeMount();
+  const rows = own.map(k => `<div class="shop petrow ${act === k ? 'on' : ''}"><span class="ishop"><b><span class="emoji">${MOUNTS[k].e}</span> ${MOUNTS[k].n}${act === k ? ' · activa' : ''}</b><small class="mut">${MOUNTS[k].d}</small></span>${act === k ? '<span class="qon">✅</span>' : `<button class="btn sm" data-a="mountuse" data-k="${k}">Usar</button>`}</div>`).join('');
+  return `<div class="sec"><h3>🐴 Monturas <small class="mut">más rápido por el mapa; no en mazmorras, agua ni aldeas</small></h3>
+    ${own.includes('caballo') ? '' : `<div class="shop"><span><span class="emoji">🐴</span> <b>Caballo</b> <small class="mut">+40% de velocidad al caminar</small></span><button class="btn sm" data-a="buyhorse" ${G.gold < HORSE_PRICE ? 'disabled' : ''}>Comprar · ${HORSE_PRICE} oro</button></div>`}
+    ${rows}
+    <p class="mut small" style="margin:6px 0 0">Monta y desmonta con el botón 🐴 de abajo. Otras monturas: botín raro de jefes y mazmorras, premios de logros y el mercader ambulante. Las monturas no mueren.</p></div>`;
 }
 // ---- Muelle (solo aldeas costeras) ----
 function dockHTML(f) {
@@ -502,7 +515,7 @@ function partyRender() {
   const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas']];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
-  <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}</p>
+  <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}${activeMount() ? ` · ${MOUNTS[G.mount].e} ${MOUNTS[G.mount].n}${G.riding ? '' : ' <small class="mut">(a pie)</small>'}` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
   h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
