@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { roomSeed, cleanName } from './public/js/util.js';
-import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS, TITLES, ACH, wbWeek, wbStats } from './public/js/data.js';
+import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS, TITLES, ACH, wbWeek, wbStats, CITY, CITY_GOALS, COS } from './public/js/data.js';
 import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +60,7 @@ function newCode() {
 }
 function makeRoom(code) {
   const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false,
-    chat: [], chatLoad: null, chatSeq: 0, stats: new Map(), wb: null, wbLoad: null };
+    chat: [], chatLoad: null, chatSeq: 0, stats: new Map(), wb: null, wbLoad: null, city: null, cityLoad: null };
   rooms.set(code, room); return room;
 }
 
@@ -92,6 +92,21 @@ async function wbOf(room) {
   }
   return w;
 }
+// ================= Proyectos de Ciudad Origen (Versión 3 · Fase 5) =================
+// p: { proyecto: { lvl, don } } · donors: { nombre: total } · credits: { nombre: mejoras completadas en que donó }
+// round: { proyecto: Set de quienes donaron al nivel en curso } · vv: aldeas descubiertas por la sala (Portal mayor)
+const CITY_KEYS = Object.keys(CITY);
+async function cityOf(room) {
+  if (!room.city) {
+    let d = null; if (db.isReady()) { if (!room.cityLoad) room.cityLoad = db.getCity(room.code).catch(() => null); d = await room.cityLoad; }
+    room.city = d || { p: {}, donors: {}, credits: {}, round: {}, vv: {} };
+    for (const k of CITY_KEYS) room.city.p[k] = room.city.p[k] || { lvl: 0, don: 0 };
+    room.city.round = room.city.round || {}; room.city.vv = room.city.vv || {}; room.city.credits = room.city.credits || {};
+  }
+  return room.city;
+}
+const cityPublic = c => ({ p: c.p, donors: c.donors, credits: c.credits, vv: Object.values(c.vv) });
+const citySave = room => { if (db.isReady() && room.city) db.saveCity(room.code, room.city).catch(e => console.warn('ciudad:', e.message)); };
 const wbSave = room => { if (db.isReady() && room.wb) db.saveWB(room.code, room.wb).catch(e => console.warn('jefe de mundo:', e.message)); };
 // Carga el historial de la base de datos la primera vez que alguien entra a la sala (una sola vez)
 function loadChat(room) {
@@ -102,7 +117,7 @@ function loadChat(room) {
   })();
   return room.chatLoad;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null, title: p.title || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null, title: p.title || null, cos: p.cos || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -191,7 +206,9 @@ function validState(d) {
   const dun = typeof d.dun === 'string' ? cleanText(d.dun, 40) || null : null;
   // Mascota que lo sigue en el mapa (Versión 3 · Fase 3)
   const pet = PETS_E.has(d.pet) ? d.pet : null;
-  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun, pet };
+  // Apariencias (solo visuales): cada una debe existir y ser de su tipo
+  const cos = {}; if (isObj(d.cos)) for (const k of ['ring', 'aura', 'frame', 'acc']) { const id = d.cos[k]; if (typeof id === 'string' && COS[id] && COS[id].k === k) cos[k] = id; }
+  return { x: d.x, y: d.y, leaderEmoji: d.leaderEmoji, biome: d.biome, status: d.status, avgLvl: Math.round(lv * 10) / 10, tomb, vs, dun, pet, cos };
 }
 function ctxOf(socket) {
   const room = rooms.get(socket.data.room); if (!room) return null;
@@ -283,7 +300,7 @@ io.on('connection', socket => {
     room.players.set(name, p); room.emptySince = null;
     socket.join(code); socket.data.room = code; socket.data.name = name; socket.data.playerId = row ? row.id : null;
     ack({ ok: true, code, name, seed: room.seed, players: publicPlayers(room), pins: publicPins(room),
-      db: !!row, save: row ? row.data : null, chat: room.chat, now: Date.now(), wb: wbPublic(await wbOf(room)) });   // now: hora del servidor (día y noche)
+      db: !!row, save: row ? row.data : null, chat: room.chat, now: Date.now(), wb: wbPublic(await wbOf(room)), city: cityPublic(await cityOf(room)) });   // now: hora del servidor (día y noche)
     if (!existing) { socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` }); sysMsg(room, `👋 ${name} entró a la sala`); }
     markDirty(room);
   });
@@ -346,6 +363,41 @@ io.on('connection', socket => {
     if (db.isReady()) { try { for (const r of await db.roomStats(c.room.code)) all.set(r.name, r.data); } catch (e) { /* solo memoria */ } }
     for (const [n, st] of c.room.stats) all.set(n, st);
     ack({ ok: true, list: [...all.entries()].map(([name, st]) => Object.assign({ name }, st)) });
+  });
+
+  // ================= Ciudad Origen: donaciones y aldeas compartidas =================
+  socket.on('city:donate', async (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d) || !CITY_KEYS.includes(d.k) || !Number.isInteger(d.amount) || d.amount < 1 || d.amount > 1e6 || !allow(socket, 'donate', 10, 10000)) return reply({ ok: false, error: 'Donación inválida.' });
+    const c = await cityOf(c0.room), pr = c.p[d.k];
+    if (pr.lvl >= CITY_GOALS.length) return reply({ ok: false, error: 'Este proyecto ya está completo.' });
+    let left = d.amount, used = 0;
+    while (left > 0 && pr.lvl < CITY_GOALS.length) {
+      const need = CITY_GOALS[pr.lvl] - pr.don, put = Math.min(need, left);
+      pr.don += put; left -= put; used += put;
+      (c.round[d.k] = c.round[d.k] || []); if (!c.round[d.k].includes(c0.p.name)) c.round[d.k].push(c0.p.name);
+      if (pr.don >= CITY_GOALS[pr.lvl]) {
+        pr.lvl++; pr.don = 0;
+        for (const n of c.round[d.k]) c.credits[n] = (c.credits[n] || 0) + 1;
+        c.round[d.k] = [];
+        sysMsg(c0.room, `🏰 ¡Ciudad Origen mejoró! ${CITY[d.k].e} ${CITY[d.k].n} nivel ${pr.lvl}: ${CITY[d.k].d[pr.lvl - 1]}`);
+      }
+    }
+    c.donors[c0.p.name] = (c.donors[c0.p.name] || 0) + used;
+    citySave(c0.room);
+    io.to(c0.room.code).emit('city:state', cityPublic(c));
+    reply({ ok: true, used, city: cityPublic(c) });
+  });
+  // Aldeas descubiertas por cada jugador (para el Portal mayor)
+  socket.on('city:vv', async d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d) || !Array.isArray(d.list) || !allow(socket, 'cityvv', 6, 60000)) return;
+    const c = await cityOf(c0.room); let added = 0;
+    for (const v of d.list.slice(0, 300)) {
+      if (!Array.isArray(v) || !isCoord(v[0]) || !isCoord(v[1])) continue; const key = v[0] + ',' + v[1];
+      if (c.vv[key] || Object.keys(c.vv).length >= 600) continue;
+      c.vv[key] = [v[0], v[1], cleanText(v[2] || '', 30) || 'Aldea']; added++;
+    }
+    if (added) { citySave(c0.room); io.to(c0.room.code).emit('city:state', cityPublic(c)); }
   });
 
   // ================= Jefe de mundo =================

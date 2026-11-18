@@ -349,8 +349,58 @@ export const ACH = [
   A('wbkill', 'world', 'Azote de Titanes', 'Ayuda a derrotar al jefe de mundo', 'Azote de Titanes', s => s.wbKills >= 1),
   A('pvp1', 'world', 'Duelista', 'Gana un duelo en la arena', 'el Duelista', s => s.pvpWins >= 1, { gold: 100 }),
   A('pvp10', 'world', 'Campeón de la Arena', 'Gana 10 duelos en la arena', 'Campeón de la Arena', s => s.pvpWins >= 10, { gold: 1000, item: 'epico' }),
+  A('city1', 'world', 'Constructor', 'Dona para una mejora de Ciudad Origen que se complete', 'el Constructor', s => s.cityDone >= 1, { gold: 200 }),
+  A('forge10', 'col', 'Maestro Herrero', 'Lleva un objeto a +10 en la forja', 'Maestro Herrero', s => s.forgeMax >= 10, { gold: 500 }),
 ];
 export const TITLES = ACH.map(a => a.title);
+// ================= Usos del oro (Versión 3 · Fase 5) =================
+// Precios fijados con la simulación de oro por hora (~1.500–3.000 oro/h al principio y a mitad de juego,
+// ~7.000–10.000 al final): lo cotidiano es barato y lo de largo plazo (forja +10, apariencias, ciudad) es una meta.
+// Elixires: 30 minutos reales; el precio sube con el nivel del grupo (base × (1 + nivel/10))
+export const ELIX = {
+  sabio: { n: 'Elixir de Sabiduría', e: '📗', d: '+30% de experiencia', p: 150 },
+  fortuna: { n: 'Elixir de Fortuna', e: '💰', d: '+30% de oro y botín', p: 180 },
+  suerte: { n: 'Elixir de Suerte', e: '🍀', d: '+10% de crítico y mejor rareza de equipo', p: 180 },
+  coloso: { n: 'Elixir del Coloso', e: '🛡️', d: '+15% de PV máximos', p: 140 },
+  vela: { n: 'Vela de Exploración', e: '🕯️', d: 'Ves más lejos de noche y en las mazmorras', p: 80 },
+};
+export const ELIX_MS = 30 * 60 * 1000;
+// Forja: +1 a +10 (cada nivel +8% a los stats del objeto). Desde +5 puede fallar (se pierde el oro, nunca el objeto).
+export const FORGE_MAX = 10, FORGE_UP = .08;
+export const FORGE_RAR = { comun: 1, raro: 1.6, epico: 2.6, legendario: 4 };
+export const FRAG_RAR = { comun: 1, raro: 3, epico: 8, legendario: 20 };   // 🔩 fragmentos al desarmar
+export const FRAG_VALUE = 15;                                                  // 1 fragmento = 15 de oro en la forja (hasta la mitad)
+// Apariencias (solo visuales; los compañeros las ven)
+export const COS = {
+  ring_fuego: { k: 'ring', n: 'Anillo de fuego', e: '🔥', p: 1500 },
+  ring_hielo: { k: 'ring', n: 'Anillo de hielo', e: '❄️', p: 1500 },
+  ring_arcoiris: { k: 'ring', n: 'Anillo arcoíris', e: '🌈', p: 2500 },
+  ring_estrellas: { k: 'ring', n: 'Anillo de estrellas', e: '✨', p: 2500 },
+  aura_oro: { k: 'aura', n: 'Aura dorada', e: '🌟', p: 2000 },
+  aura_sombra: { k: 'aura', n: 'Aura de sombra', e: '🌑', p: 2000 },
+  frame_oro: { k: 'frame', n: 'Marco de oro', e: '🟨', p: 800 },
+  frame_neon: { k: 'frame', n: 'Marco neón', e: '🟪', p: 800 },
+  frame_real: { k: 'frame', n: 'Marco real', e: '👑', p: 1200 },
+  acc_lazo: { k: 'acc', n: 'Lazo para la mascota', e: '🎀', p: 500 },
+  acc_sombrero: { k: 'acc', n: 'Sombrero para la mascota', e: '🎩', p: 700 },
+  acc_corona: { k: 'acc', n: 'Corona para la mascota', e: '👑', p: 1200 },
+};
+// Emojis alternativos para los héroes (se compra cada uno una vez y se le pone a cualquier héroe)
+export const ALT_EMOJIS = ['🦸', '🦹', '🧝', '🧛', '🧜', '🧞', '🤴', '👸', '🧙', '🧚', '🧟', '🥷'];
+export const ALT_PRICE = 600;
+// Mejorar Ciudad Origen entre todos: 3 niveles por proyecto (metas de oro de toda la sala)
+export const CITY = {
+  posada: { n: 'Posada', e: '🏨', d: ['Descanso 25% más barato y +10% de experiencia por 10 min al salir', 'Descanso 50% más barato y +20% de experiencia', 'Descanso 75% más barato y +30% de experiencia'] },
+  tienda: { n: 'Tienda', e: '🏪', d: ['Armería con 5 objetos y 10% de descuento', 'Armería con 6 objetos y 20% de descuento', 'Armería con 6 objetos (uno Raro) y 30% de descuento'] },
+  herreria: { n: 'Herrería', e: '⚒️', d: ['−5 puntos de fallo en la forja', '−10 puntos de fallo en la forja', '−15 puntos de fallo en la forja'] },
+  muralla: { n: 'Muralla y torres', e: '🧱', d: ['Ciudad Origen con murallas; de noche ves 15% más lejos', 'Torres; de noche ves 30% más lejos', 'Fortaleza; de noche ves 45% más lejos'] },
+  estatua: { n: 'Estatua de los héroes', e: '🗿', d: ['Estatua con el nombre de quien más donó', 'Con los 2 que más donaron', 'Con los 3 que más donaron'] },
+  portal: { n: 'Portal mayor', e: '🌀', d: ['Desde Ciudad Origen viajas a las aldeas que descubrió cualquier jugador de la sala', 'Ese viaje cuesta la mitad', 'Ese viaje es gratis'] },
+};
+export const CITY_GOALS = [2500, 7500, 20000];
+// Mercader ambulante: cambia de aldea cada día real (la misma para toda la sala)
+export const MERCH_TMAP = 450, MERCH_EGG = 650;
+
 // ================= Jefe de mundo semanal (Versión 3 · Fase 4) =================
 export const WB_KEY = 'titan', WB_ROUNDS = 10, WEEK_MS = 7 * 24 * 3600 * 1000, WB_EPOCH = Date.UTC(2026, 0, 5);   // lunes
 export const wbWeek = now => Math.floor((now - WB_EPOCH) / WEEK_MS);
@@ -401,7 +451,7 @@ export const QUICK = [
   { id: 'risa', t: '😂' },
 ];
 // Emojis de líder válidos: los de las clases y los de las clases avanzadas
-export const LEADER_EMOJIS = [...Object.values(CL).map(c => c.e), ...Object.values(ADV).map(a => a.e)];
+export const LEADER_EMOJIS = [...Object.values(CL).map(c => c.e), ...Object.values(ADV).map(a => a.e), ...ALT_EMOJIS];
 export const MAX_PARTY = 3;
 export const MAX_PLAYERS = 4;
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin I ni O (ni números)

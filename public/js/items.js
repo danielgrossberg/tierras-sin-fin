@@ -42,7 +42,7 @@ export const STAT = {
   mhp: 'PV', mmp: 'PM', atk: 'ATQ', def: 'DEF', mag: 'MAG', spd: 'VEL',
   crit: '% crítico', ls: '% robo de vida', pres: '% res. veneno',
 };
-const STAT_ORDER = Object.keys(STAT);
+export const STAT_ORDER = Object.keys(STAT);
 
 // Legendarios con nombre propio y un efecto único (se aplican en battle.js)
 export const LEGENDS = {
@@ -62,7 +62,7 @@ const SUFFIX = ['del Lobo', 'de la Tormenta', 'del Alba', 'de las Cenizas', 'del
 
 // ================= Generación =================
 const r1 = v => Math.max(1, Math.round(v));
-function extraValue(k, ilvl, R, rng) {
+export function extraValue(k, ilvl, R, rng) {
   const b = (1 + ilvl * .6) * (1 + (R.m - 1) * .5) * (.8 + rng() * .4);
   if (k === 'mhp') return r1(b * 3);
   if (k === 'mmp') return r1(b * 2);
@@ -110,17 +110,22 @@ export function rollLoot(ilvl, luck = 0, min = 'comun', rng = Math.random, bump 
 // ================= Consultas =================
 export const slotOf = it => TYPES[it.t].slot;
 export const canUse = (h, it) => TYPES[it.t].cls.includes(h.cls);
-export const itemValue = it => Math.round((8 + it.ilvl * 5) * Math.pow(RAR[it.r].m, 2));
+export const itemValue = it => Math.round((8 + it.ilvl * 5) * Math.pow(RAR[it.r].m, 2) * (1 + .15 * (it.up || 0)));
 export const sellPrice = it => Math.max(1, Math.round(itemValue(it) * .3));
 export const buyPrice = it => Math.round(itemValue(it) * 1.5);
+export const statListIt = it => statList(statsOf(it));
 export const statList = s => STAT_ORDER.filter(k => s[k]).map(k => `${STAT[k].startsWith('%') ? '+' + s[k] + STAT[k] : STAT[k] + ' +' + s[k]}`);
 export const classesText = it => TYPES[it.t].cls.length === ALL.length ? 'Todas las clases' : TYPES[it.t].cls.map(c => CL[c].n).join(', ');
 // Etiqueta con el color de la rareza
-export const itemLabel = it => `<span class="emoji">${TYPES[it.t].e}</span> <b class="rr" style="color:${RAR[it.r].c}">${it.n}</b>`;
+export const itemLabel = it => `<span class="emoji">${TYPES[it.t].e}</span> <b class="rr" style="color:${RAR[it.r].c}">${it.n}${it.up ? ' +' + it.up : ''}</b>`;
+// Stats con la mejora de la forja (+8% por nivel)
+export const upMul = it => 1 + .08 * (it.up || 0);
+export const statsOf = it => { const o = {}; for (const k in it.st) o[k] = Math.round(it.st[k] * upMul(it)); return o; };
 // Diferencias de stats contra lo que lleva equipado (para el botón "Comparar")
 export function compare(it, cur) {
-  const keys = STAT_ORDER.filter(k => (it.st[k] || 0) || (cur && cur.st[k]));
-  return keys.map(k => ({ k, v: it.st[k] || 0, d: (it.st[k] || 0) - (cur ? cur.st[k] || 0 : 0) }));
+  const a = statsOf(it), b = cur ? statsOf(cur) : {};
+  const keys = STAT_ORDER.filter(k => (a[k] || 0) || b[k]);
+  return keys.map(k => ({ k, v: a[k] || 0, d: (a[k] || 0) - (b[k] || 0) }));
 }
 export function addItem(it) {
   if (!G.inventory) G.inventory = [];
@@ -130,11 +135,12 @@ export function addItem(it) {
 
 // ================= Armería de la aldea =================
 // 4 objetos Comunes del nivel de la zona; se renuevan cada 400 pasos. Determinista por aldea.
-export function shopStock(f, ilvl) {
+// n: cantidad (la mejora de la Tienda de Ciudad Origen da 5 o 6) · rare: el último es Raro
+export function shopStock(f, ilvl, n = 4, rare = false) {
   const period = Math.floor((G.steps || 0) / 400);
   const rng = mulberry(hashI(f.x, f.y, st.seed + 9001 + period));
   const types = Object.keys(TYPES), list = [];
-  for (let i = 0; i < 4; i++) list.push(makeItem(pick(types, rng), 'comun', ilvl, rng));
+  for (let i = 0; i < n; i++) list.push(makeItem(pick(types, rng), rare && i === n - 1 ? 'raro' : 'comun', ilvl, rng));
   G.shop = G.shop || {};
   const rec = G.shop[f.id];
   if (!rec || rec.p !== period) G.shop[f.id] = { p: period, b: [] };

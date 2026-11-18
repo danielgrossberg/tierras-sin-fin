@@ -9,9 +9,13 @@ import { isNight, clockText, darkness } from './daynight.js';
 import { achTabHTML, loadRank, setTitle, achCount } from './achievements.js';
 import { challenge, coopBusy } from './coop.js';
 import { wbAlive, wbPos, wbWhere } from './worldboss.js';
+import { elixRows, forgeHTML, merchHTML, trainerHTML, cityBtnsHTML, cityHTML, cosHTML, shopAct } from './shopui.js';
+import { cityLvl, giveElix, activeElix, elixLeft } from './economy.js';
+import { ELIX } from './data.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
+import { statsOf } from './items.js';
 import { INV_MAX, SLOTS, SLOT_KEYS, TYPES, RAR, STAT, LEGENDS, slotOf, canUse, sellPrice, buyPrice, statList, classesText, itemLabel, compare, addItem, shopStock, markBought } from './items.js';
 import { save } from './storage.js';
 import { tombMinutes } from './tomb.js';
@@ -56,11 +60,12 @@ export function updateHUD() {
 // ================= Día y noche (Versión 3 · Fase 3): ☀️/🌙 y tiempo para el cambio =================
 export function updateDayNight() {
   const el = $('#dn'); if (!el) return;
-  if (!st.inGame || inDungeon()) { el.classList.add('hidden'); return; }   // en las mazmorras no hay día ni noche
+  if (!st.inGame || inDungeon()) { el.classList.add('hidden'); const ex = $('#elix'); if (ex && !st.inGame) ex.classList.add('hidden'); if (st.inGame) { const list = activeElix(); if (ex) { ex.innerHTML = list.map(k => `<span class="ech">${k === 'descanso' ? '😊' : ELIX[k].e} ${Math.ceil(elixLeft(k) / 60000)}′</span>`).join(''); ex.classList.toggle('hidden', !list.length); } } return; }   // en las mazmorras no hay día ni noche
   const n = isNight(), d = darkness();
   el.classList.remove('hidden'); el.classList.toggle('night', n);
   el.textContent = `${n ? '🌙' : d > 0 ? '🌇' : '☀️'} ${clockText()}`;
   el.title = n ? 'Noche: tiempo para el amanecer' : 'Día: tiempo para la noche';
+  const ex = $('#elix'); if (ex) { const list = activeElix(); ex.innerHTML = list.map(k => { const ms = elixLeft(k), sc = Math.ceil(ms / 1000); return `<span class="ech" title="${k === 'descanso' ? 'Bien descansados' : ELIX[k].n}">${k === 'descanso' ? '😊' : ELIX[k].e} ${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}</span>`; }).join(''); ex.classList.toggle('hidden', !list.length); }
 }
 
 // ================= Coordenadas (relativas a Ciudad Origen; este = X+, norte = Y+) =================
@@ -138,40 +143,49 @@ export const modalIs = k => (k === 'party' && MR === partyRender) || (k === 'map
 // ================= Aldea =================
 let VF = null, VMSG = '', VSELL = false;
 const upCost = n => Math.round(50 * Math.pow(n + 1, 1.5));
-function restCost() { return VF.start ? 0 : Math.max(3, Math.round(avgLvl() * 4)); }
+function restCost() { return VF.start ? 0 : Math.max(1, Math.round(Math.max(3, Math.round(avgLvl() * 4)) * (1 - .25 * cityLvl('posada')))); }
+// Tienda mejorada: descuento y más objetos en la armería
+const disc = () => 1 - .1 * cityLvl('tienda'), shopP = n => Math.max(1, Math.round(n * disc()));
+const armN = () => [4, 5, 6, 6][cityLvl('tienda')];
 const zoneLvl = f => Math.max(1, dangerAt(f.x, f.y));
 function villageRender() {
-  const f = VF, cost = restCost(), ilvl = zoneLvl(f), stock = shopStock(f, ilvl), inv = G.inventory, full = inv.length >= INV_MAX;
+  const f = VF, cost = restCost(), ilvl = zoneLvl(f), stock = shopStock(f, ilvl, armN(), cityLvl('tienda') >= 3), inv = G.inventory, full = inv.length >= INV_MAX;
   return `<h2>🏘️ ${f.name}</h2><p class="mut" style="margin:0">Refugio seguro: los monstruos no entran aquí. Tienes <b class="goldt">💰 ${G.gold}</b> de oro.</p>
   ${VMSG ? `<div class="pend" style="margin-top:10px">${VMSG}</div>` : ''}
   <div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div>
     ${heroes().filter(h => talList(h).length).map(h => { const i = G.roster.indexOf(h), c = talResetCost(h); return `<div class="shop"><span>🔄 <b>Reiniciar talentos</b> de ${h.e} ${h.name} <small class="mut">vuelve a elegirlos en 🎒 Grupo</small></span><button class="btn sm" data-a="talreset" data-k="${i}" ${G.gold < c ? 'disabled' : ''}>${c} oro</button></div>`; }).join('')}</div>
-  <div class="sec"><h3>🛒 Tienda</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < IT[k].p ? 'disabled' : ''}>Comprar · ${IT[k].p} oro</button></span></div>`).join('')}</div>
+  <div class="sec"><h3>🛒 Tienda</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < shopP(IT[k].p) ? 'disabled' : ''}>Comprar · ${shopP(IT[k].p)} oro</button></span></div>`).join('')}
+    <h3 style="margin-top:10px">⚗️ Alquimista <small class="mut">elixires de 30 minutos; se pueden tener varios a la vez</small></h3>${elixRows()}</div>
   <div class="sec"><h3>⚔️ Armería <small class="mut">equipo común de la zona · Nv ${ilvl}</small></h3>
-    ${stock.map(({ it, sold }, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small class="mut">${statList(it.st).join(' · ')} · ${classesText(it)}</small></span>${sold ? '<span class="mut small">Vendido</span>' : `<button class="btn sm" data-a="buyeq" data-k="${i}" ${G.gold < buyPrice(it) || full ? 'disabled' : ''}>Comprar · ${buyPrice(it)} oro</button>`}</div>`).join('')}
+    ${stock.map(({ it, sold }, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small class="mut">${statList(it.st).join(' · ')} · ${classesText(it)}</small></span>${sold ? '<span class="mut small">Vendido</span>' : `<button class="btn sm" data-a="buyeq" data-k="${i}" ${G.gold < shopP(buyPrice(it)) || full ? 'disabled' : ''}>Comprar · ${shopP(buyPrice(it))} oro</button>`}</div>`).join('')}
     <div class="shop"><span>💰 <b>Vender equipo</b> <small class="mut">te pagan el 30% de su valor · ${inv.length}/${INV_MAX} en el inventario</small></span><button class="btn sm" data-a="togsell">${VSELL ? 'Ocultar' : 'Ver inventario'}</button></div>
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
-  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${arenaHTML(f)}
+  ${merchHTML(f)}${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
-    <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div></div>
+    <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div>
+    <div class="shop"><span>⚒️ <b>Forja</b> <small class="mut">mejora un objeto de +1 a +10, reforja propiedades o desarma lo que no sirve · 🔩 ${G.frags || 0}</small></span><button class="btn sm gold" data-a="forgeview">Abrir forja</button></div></div>
   <div class="sec"><h3>🍺 Taberna</h3><p class="mut" style="margin:0 0 8px;font-size:13px">Toca para sumar o sacar héroes del grupo (máximo 3). Los que esperan aquí ganan el 10% de la experiencia.</p>
     <div class="tav">${G.roster.map((h, i) => `<button class="tavh ${G.party.includes(i) ? 'on' : ''}" data-a="tog" data-k="${i}"><span class="emoji">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}${hasPending(h) ? " 🌟" : ""}</small><small>${G.party.includes(i) ? '✅ En el grupo' : 'Esperando'}</small></button>`).join('')}</div></div>
   <div class="row end"><button class="btn" data-a="close">Salir de la aldea</button></div>`;
 }
-function villageAct(a, k) {
+async function villageAct(a, k) {
   VMSG = '';
   if (a === 'close') { closeModal(); return; }
-  if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y }; save('now'); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.'; }
-  if (a === 'buy') { if (G.gold >= IT[k].p) { G.gold -= IT[k].p; G.items[k]++; save('now'); } }
+  const sr = await shopAct(a, k);
+  if (sr) { if (sr.view) VVIEW = sr.view; if (sr.msg) VMSG = sr.msg; if (sr.save) save('now'); if (MR === villageView) rerender(); if (sr.view) $('#mcontent').scrollTop = 0; return; }
+  if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y };
+    const pl = cityLvl('posada'); if (pl) { G.restBonus = .1 * pl; giveElix('descanso', 10 * 60 * 1000); }   // Posada mejorada: +10/20/30% de experiencia por 10 min
+    save('now'); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.' + (pl ? ` <b class="goldt">😊 Bien descansados: +${10 * pl}% de experiencia por 10 minutos.</b>` : ''); }
+  if (a === 'buy') { const c = shopP(IT[k].p); if (G.gold >= c) { G.gold -= c; G.items[k]++; save('now'); } }
   if (a === 'talreset') { const h = G.roster[+k], c = h && talResetCost(h); if (h && G.gold >= c) { G.gold -= c; changeEquip(h, () => { h.tal = {}; }); save('now'); VMSG = `🔄 Talentos de ${h.name} reiniciados. Elígelos de nuevo en 🎒 Grupo → Héroes.`; } }
   if (a === 'upA' || a === 'upD') { const key = a === 'upA' ? 'upA' : 'upD', c = upCost(G[key]); if (G.gold >= c) { G.gold -= c; G[key]++; save('now'); VMSG = a === 'upA' ? '🗡️ ¡Armas afiladas!' : '🛡️ ¡Armaduras reforzadas!'; } }
   if (a === 'buyeq') {
-    const s = shopStock(VF, zoneLvl(VF))[+k];
-    if (s && !s.sold && G.gold >= buyPrice(s.it)) {
-      if (addItem(s.it)) { G.gold -= buyPrice(s.it); markBought(VF, +k); save('now'); VMSG = `Compraste ${itemLabel(s.it)}. Equípalo en 🎒 Grupo → Equipo.`; }
+    const s = shopStock(VF, zoneLvl(VF), armN(), cityLvl('tienda') >= 3)[+k];
+    if (s && !s.sold && G.gold >= shopP(buyPrice(s.it))) {
+      if (addItem(s.it)) { G.gold -= shopP(buyPrice(s.it)); markBought(VF, +k); save('now'); VMSG = `Compraste ${itemLabel(s.it)}. Equípalo en 🎒 Grupo → Equipo.`; }
       else VMSG = '🎒 Tu inventario está lleno (40). Vende algo primero.';
     }
   }
@@ -194,6 +208,10 @@ function villageAct(a, k) {
   if (a === 'vback') VVIEW = 'village';
   if (a === 'pzone') PZ = PZ === k ? '' : k;   // tocar la zona abierta la pliega
   if (a === 'fav' && G.vv[k] && k !== startId()) { G.favs = G.favs || {}; if (G.favs[k]) delete G.favs[k]; else G.favs[k] = 1; save(); }
+  if (a === 'travel' && k.startsWith('sv:') && VF.start && cityLvl('portal') >= 1) {
+    const [x, y] = k.slice(3).split(',').map(Number), sv = (net.city && net.city.vv || []).find(v => v[0] === x && v[1] === y), c = sharedCost();
+    if (sv && G.gold >= c) { G.gold -= c; closeModal(); travelTo({ x, y, name: sv[2] }); return; }
+  }
   if (a === 'travel') {
     const v = G.vv[k], cost = travelCost();
     if (v && k !== VF.id && G.gold >= cost) { G.gold -= cost; closeModal(); travelTo(v); return; }
@@ -262,8 +280,14 @@ const zoneOfV = v => zoneOf(v.x - START.x, START.y - v.y);
 // "18 casillas al sur de ti"
 const fromYou = v => { const dx = v.x - P.x, dn = P.y - v.y, d = Math.round(Math.hypot(dx, dn)); return d ? `${d} casilla${d === 1 ? '' : 's'} al ${cardinalWord(dx, dn)} de ti` : 'aquí'; };
 function portalEntries() {
-  return Object.entries(G.vv || {}).map(([id, v]) => ({ id, v, d: Math.hypot(v.x - P.x, v.y - P.y), here: VF && id === VF.id, origin: id === startId() }));
+  const own = Object.entries(G.vv || {}).map(([id, v]) => ({ id, v, d: Math.hypot(v.x - P.x, v.y - P.y), here: VF && id === VF.id, origin: id === startId() }));
+  if (!(VF && VF.start && cityLvl('portal') >= 1 && net.city)) return own;
+  const have = new Set(own.map(e => e.v.x + ',' + e.v.y));
+  const shared = (net.city.vv || []).filter(v => !have.has(v[0] + ',' + v[1])).map(v => ({ id: 'sv:' + v[0] + ',' + v[1], v: { x: v[0], y: v[1], name: v[2] }, d: Math.hypot(v[0] - P.x, v[1] - P.y), shared: true }));
+  return own.concat(shared);
 }
+// Portal mayor: desde Ciudad Origen a las aldeas de la sala (nivel 2: mitad de precio · nivel 3: gratis)
+const sharedCost = () => cityLvl('portal') >= 3 ? 0 : cityLvl('portal') === 2 ? Math.round(travelCost() / 2) : travelCost();
 function portalHTML(f) {
   const n = portalEntries().filter(e => !e.here).length;
   return `<div class="sec"><h3>🌀 Portal</h3><div class="shop"><span>Viaja al instante a una aldea que ya visitaste. <small class="mut">${n} destino${n === 1 ? '' : 's'} · ${travelCost()} oro por viaje</small></span><button class="btn gold" data-a="portal">🌀 Abrir portal</button></div></div>`;
@@ -271,8 +295,9 @@ function portalHTML(f) {
 // Una fila: estrella, nombre (con "…" si es largo), datos chicos debajo y "Viajar" siempre a la derecha
 function prow(e, cost, cls) {
   const fav = !!(G.favs && G.favs[e.id]);
-  const star = e.origin ? '<span class="pstar fixed emoji">🏰</span>' : `<button class="pstar emoji ${fav ? 'on' : ''}" data-a="fav" data-k="${esc(e.id)}" aria-label="${fav ? 'Quitar de favoritas' : 'Marcar como favorita'}">${fav ? '⭐' : '☆'}</button>`;
-  const info = e.here ? '📍 Estás aquí' : `${relCoords(e.v.x, e.v.y)} · ${fromYou(e.v)} · ${cost} oro`;
+  const star = e.origin ? '<span class="pstar fixed emoji">🏰</span>' : e.shared ? '<span class="pstar fixed emoji">🤝</span>' : `<button class="pstar emoji ${fav ? 'on' : ''}" data-a="fav" data-k="${esc(e.id)}" aria-label="${fav ? 'Quitar de favoritas' : 'Marcar como favorita'}">${fav ? '⭐' : '☆'}</button>`;
+  if (e.shared) cost = sharedCost();
+  const info = e.here ? '📍 Estás aquí' : `${relCoords(e.v.x, e.v.y)} · ${fromYou(e.v)} · ${cost ? cost + ' oro' : 'gratis'}${e.shared ? ' · 🤝 de la sala' : ''}`;
   return `<div class="pv ${cls || ''} ${e.here ? 'here' : ''}">${star}<div class="pvi"><b>${esc(e.v.name)}</b><small>${e.here ? `${relCoords(e.v.x, e.v.y)} · ` : ''}${info}</small></div>
     <button class="btn pgo ${e.origin ? 'gold' : ''}" data-a="travel" data-k="${esc(e.id)}" ${e.here || G.gold < cost ? 'disabled' : ''}>${e.here ? '📍' : 'Viajar'}</button></div>`;
 }
@@ -337,7 +362,8 @@ function drawPortalMap() {
     if (best) { PSEL = best.id; rerender(); }
   };
 }
-function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : villageRender(); }
+const msgBox = () => VMSG ? `<div class="pend" style="margin-top:8px">${VMSG}</div>` : '';
+function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : VVIEW === 'forge' ? msgBox() + forgeHTML() : VVIEW === 'city' ? msgBox() + cityHTML() : VVIEW === 'cos' ? msgBox() + cosHTML() : villageRender(); }
 function travelTo(v) {
   P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
   toast(`🌀 Llegaste a ${v.name}`);
@@ -347,7 +373,7 @@ function travelTo(v) {
 // ================= Grupo (pestañas: Héroes · Equipo · Objetos) =================
 let PA = null, NGC = false, PT = 'heroes', PH = null, PI = null, PF = false;
 // Puntaje aproximado de un objeto (para la flechita ▲▼ de la lista)
-const score = it => Object.entries(it.st).reduce((a, [k, v]) => a + v * (k === 'mhp' ? 1 / 3 : k === 'mmp' ? .5 : ['crit', 'ls', 'pres'].includes(k) ? .4 : 1), 0);
+const score = it => Object.entries(statsOf(it)).reduce((a, [k, v]) => a + v * (k === 'mhp' ? 1 / 3 : k === 'mmp' ? .5 : ['crit', 'ls', 'pres'].includes(k) ? .4 : 1), 0);
 // Elegir héroe para un objeto o una habilidad de apoyo (Versión 3 · Fase 0.4): tarjetas con PV/PM y vista previa
 const hv = h => ({ hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), poison: h.poison || 0 });
 const cardOf = h => ({ h, e: h.e, name: esc(h.name), sub: `${clsName(h)} · Nv ${h.lvl}`, H: hv(h) });
@@ -441,7 +467,7 @@ function equipTab() {
   h += list.length ? `<div class="ilist">${list.map(({ it, i }) => {
     const cur = sel.equip[slotOf(it)], ok = canUse(sel, it), d = score(it) - (cur ? score(cur) : 0);
     const badge = !ok ? '<span class="ib no" title="No lo puede usar">✖</span>' : d > 0 ? '<span class="ib up" title="Mejor que lo equipado">▲</span>' : d < 0 ? '<span class="ib down" title="Peor que lo equipado">▼</span>' : '<span class="ib">=</span>';
-    return `<button class="irow ${PI && PI.src === 'inv' && PI.i === i ? 'on' : ''}" data-a="isel" data-k="${i}" style="border-left-color:${RAR[it.r].c}"><span class="in">${itemLabel(it)}<small class="mut">${RAR[it.r].n} · Nv ${it.ilvl} · ${statList(it.st).slice(0, 2).join(' · ')}</small></span>${badge}</button>`;
+    return `<button class="irow ${PI && PI.src === 'inv' && PI.i === i ? 'on' : ''}" data-a="isel" data-k="${i}" style="border-left-color:${RAR[it.r].c}"><span class="in">${itemLabel(it)}<small class="mut">${RAR[it.r].n} · Nv ${it.ilvl} · ${statList(statsOf(it)).slice(0, 2).join(' · ')}</small></span>${badge}</button>`;
   }).join('')}</div>`
     : `<p class="mut small">${G.inventory.length ? 'Nada de esto lo puede usar ' + sel.name + '.' : 'Aún no tienes equipo. Cae de los monstruos (15%), de los jefes (siempre) y de los cofres (50%), y se compra en la armería de las aldeas.'}</p>`;
   if (PI) h += detailHTML(sel);

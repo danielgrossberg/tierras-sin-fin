@@ -563,3 +563,26 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 /* ===== Versión 3 · Fase 1: mazmorras ===== */
 .dundone{margin:10px auto 0;background:#173a24;border:1px solid #46c37b;color:#c8f5d6;border-radius:10px;padding:7px 12px;font-weight:700;display:inline-block}
 @media (max-height:480px){#b-boss{padding:3px 8px;margin-top:3px}#b-boss .bbn{font-size:13px}#b-boss .ebar.big{height:18px}}
+
+/* ===== Versión 3 · Fase 5: usos del oro ===== */
+.elixchips{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:calc(100vw - 170px)}
+.ech{background:rgba(15,18,32,.88);border:1px solid var(--line);border-radius:8px;padding:2px 6px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.isheet.forge{position:static;margin:10px 0}
+.fstats{font-size:12px;margin-top:6px;line-height:1.5}
+.fsub{margin-top:8px;font-size:13px}
+.frow{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.frow .btn{min-height:40px}
+.isheet .btn.full{min-height:46px;margin-top:8px}
+.merch{border-color:#e0a96d}
+.cityp{display:flex;flex-direction:column;gap:4px}
+.cph{display:flex;align-items:center;gap:8px;font-size:15px}
+.cph .emoji{font-size:22px}
+.cplv{margin-left:auto;color:var(--gold);letter-spacing:2px}
+.wbbar.sm{height:18px;margin:4px 0}
+.altgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;margin-bottom:8px}
+.altb{background:var(--panel2);border:1px solid var(--line);border-radius:10px;min-height:52px;color:var(--txt);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px}
+.altb .emoji{font-size:24px}
+.altb small{font-size:10px;color:var(--mut)}
+.altb.own{border-color:#46c37b}
+.altb.on{border-color:var(--gold);background:#2d2a1c}
+.altb.sm{min-height:44px;min-width:44px}

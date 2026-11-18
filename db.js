@@ -53,6 +53,12 @@ CREATE TABLE IF NOT EXISTS player_stats (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS player_stats_room_name ON player_stats (room_code, lower(name));
+-- Versión 3 · Fase 5: proyectos de Ciudad Origen (donaciones de la sala) y aldeas compartidas
+CREATE TABLE IF NOT EXISTS city_state (
+  room_code TEXT PRIMARY KEY REFERENCES rooms(code) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS world_boss (
   room_code TEXT PRIMARY KEY REFERENCES rooms(code) ON DELETE CASCADE,
   data JSONB NOT NULL,
@@ -139,6 +145,12 @@ export async function roomStats(code) {
 export async function getWB(code) { const r = await pool.query('SELECT data FROM world_boss WHERE room_code = $1', [code]); return r.rows[0] ? r.rows[0].data : null; }
 export async function saveWB(code, data) {
   await pool.query(`INSERT INTO world_boss (room_code, data) VALUES ($1, $2::jsonb)
+    ON CONFLICT (room_code) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [code, JSON.stringify(data)]);
+}
+
+export async function getCity(code) { const r = await pool.query('SELECT data FROM city_state WHERE room_code = $1', [code]); return r.rows[0] ? r.rows[0].data : null; }
+export async function saveCity(code, data) {
+  await pool.query(`INSERT INTO city_state (room_code, data) VALUES ($1, $2::jsonb)
     ON CONFLICT (room_code) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [code, JSON.stringify(data)]);
 }
 

@@ -9,7 +9,7 @@
 'use strict';
 import { mulberry, hashI, pick, esc } from './util.js';
 import { EN, CAVE } from './data.js';
-import { G, P, START, st, S, heroes, alive, avgLvl, talFx } from './state.js';
+import { G, P, START, st, S, heroes, alive, avgLvl, talFx, elix } from './state.js';
 import { spawnNearby, visitAround } from './world.js';
 import { startBattle } from './battle.js';
 import { openModal, closeModal, openBossConfirm, toast, feed, updateHUD } from './ui.js';
@@ -121,8 +121,9 @@ function lineClear(x0, y0, x1, y1) {
 const hasScout = () => heroes().some(h => h.cls === 'picaro' || h.cls === 'goblin');
 function updateVision() {
   D.vis.clear();
-  for (let j = -VISION; j <= VISION; j++) for (let i = -VISION; i <= VISION; i++) {
-    const x = D.x + i, y = D.y + j; if (!inb(x, y) || i * i + j * j > VISION * VISION + 1) continue;
+  const V = VISION + (elix('vela') ? 2 : 0);   // 🕯️ Vela de Exploración: +2 casillas
+  for (let j = -V; j <= V; j++) for (let i = -V; i <= V; i++) {
+    const x = D.x + i, y = D.y + j; if (!inb(x, y) || i * i + j * j > V * V + 1) continue;
     if (lineClear(D.x, D.y, x, y)) { D.vis.add(idx(x, y)); D.seen[idx(x, y)] = 1; }
   }
   // Trampas: con Pícaro o Goblin en el grupo, 50% de detectarlas al verlas por primera vez

@@ -12,6 +12,7 @@ import { D, DW, DH, inDungeon, isSeen, isVisible, dunProg, caveDone, owlSees } f
 import { activePet, owlRadius } from './pets.js';
 import { CAVE } from './data.js';
 import { wbAlive, wbPos } from './worldboss.js';
+import { merchVillage } from './economy.js';
 
 // Dentro de una mazmorra: el piso entero, solo lo recorrido (lo que ves ahora más claro)
 function paintDungeon(c, opts) {
@@ -100,6 +101,9 @@ export function paintMap(c, R, opts = {}) {
   if (G.tomb) { const p0 = to(G.tomb.x, G.tomb.y), p = clampP(p0, m); dot(p, 7 * u, 'rgba(255,48,48,.85)'); glyph('🪦', p, 9 * u); if (!inside(p0, m)) edgeTri(p, p0, '#ff4040'); }
   // ---- Invitaciones a jefes en equipo (📣)
   for (const v of net.invites.values()) { if (v.until < now) continue; const p0 = to(v.boss.x, v.boss.y), p = clampP(p0, m); dot(p, 7 * u, '#7c3aed'); glyph('📣', p, 9 * u); if (!inside(p0, m)) edgeTri(p, p0, '#a78bfa'); }
+  // ---- Tesoros 💰 y mercader 🐪
+  for (const tm of G.tmaps || []) { const p0 = to(tm.x, tm.y), p = clampP(p0, m); dot(p, 5 * u, '#ffd34d'); glyph('💰', p, 8 * u); if (!inside(p0, m)) edgeTri(p, p0, '#ffd34d'); }
+  { const mv = merchVillage(); if (mv) { const p0 = to(mv.x, mv.y); if (inside(p0)) glyph('🐪', [p0[0] + 6 * u, p0[1] - 6 * u], 9 * u); } }
   // ---- 🌋 Jefe de mundo (siempre visible; en el borde indica la dirección)
   if (wbAlive()) { const q = wbPos(); if (q) { const p0 = to(q.x, q.y), p = clampP(p0, 11 * u); dot(p, 8 * u, '#ff5a1f'); glyph('🌋', p, 11 * u); if (!inside(p0, 11 * u)) edgeTri(p, p0, '#ff5a1f'); if (opts.labels) text('Titán de Lava', [p[0], p[1] - 12 * u], 10 * u, '#ffd0b0'); } }
   // ---- Ciudad Origen: castillo dorado (siempre visible; en el borde indica la dirección)

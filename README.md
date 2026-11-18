@@ -343,6 +343,42 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   cancela sin efecto. Puntos: ganar 10 (1v1) o 15 (3v3), perder 2. Logros «el Duelista» y «Campeón de la Arena».
 - **Guardado:** `saveVersion` 11: `stats`, `ach`, `title`, `arena`, `wbClaim`, `wbSeen`.
 
+### Fase 5 (lista): más usos para el oro
+**Oro por hora medido** (jugador automático que camina y pelea; 0,14 s por paso y ~20 s por combate; sin misiones ni jefes):
+zona cercana Nv 4 ≈ 1.300/h · media Nv 8 ≈ 2.500/h · lejana Nv 12 ≈ 1.900/h · muy lejana Nv 18 ≈ 7.100/h. Con misiones (+~1.500/h)
+y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.000–10.000 al final.**
+
+| Uso | Precio |
+|---|---|
+| ⚒️ Forja +1 → +10 | 40 × (nivel+1)^1.6 × rareza (Común 1 · Raro 1,6 · Épico 2,6 · Legendario 4) × (1 + nivel del objeto/10). Ej. Común Nv 5: 60, 182, 348, 551, 788 … +10: 2.389 |
+| Fallo de la forja | desde +5: 8% por nivel (+5: 8% … +10: 48%); la Herrería de la ciudad resta 5/10/15 puntos |
+| 🔁 Reforjar 1 propiedad | 80 × rareza × (1 + nivel/10) |
+| 🔩 Desarmar | Común 1 · Raro 3 · Épico 8 · Legendario 20 fragmentos (× nivel y mejora); 1 fragmento = 15 de oro, pagan hasta la mitad |
+| ⚗️ Elixires (30 min) | Sabiduría 150 · Fortuna 180 · Suerte 180 · Coloso 140 · Vela 80, × (1 + nivel del grupo/10) |
+| 🎓 Entrenador | 25 × nivel^1.5 por nivel (Nv 1 → 8 ≈ 1.500) |
+| 🐪 Mercader | mapa del tesoro ~450–700 · huevo 650 · Elixir Supremo ~700 · equipo Épico ×4 y Legendario ×5 del precio de armería |
+| 🎨 Apariencias | anillos 1.500–2.500 · auras 2.000 · marcos 800–1.200 · accesorios de mascota 500–1.200 · emoji alternativo 600 |
+| 🏰 Proyectos de la ciudad | 2.500 · 7.500 · 20.000 por nivel (6 proyectos × 3 niveles, entre toda la sala) |
+
+- **Forja** (en la herrería de cualquier aldea): mejora un arma, armadura o accesorio de +1 a +10 (~8% de stats por nivel; el
+  nombre muestra "+3"). Desde +5 puede fallar: se pierde el oro, nunca el objeto ni su nivel. **Reforjar** vuelve a sortear
+  una propiedad extra. **Desarmar** da fragmentos 🔩 que pagan hasta la mitad de la forja.
+- **Mercader ambulante 🐪:** cada día real está en una aldea distinta (la misma para toda la sala, a menos de ~125 casillas),
+  con aviso y flecha. Vende 4 a 6 artículos: equipo Épico o Legendario, huevo, Elixir Supremo, elixires dobles y **mapa del
+  tesoro** (marca 💰 un cofre muy valioso a 40–90 casillas: mucho oro, equipo Épico o Legendario y a veces un huevo).
+- **Entrenador** (Ciudad Origen): sube a los héroes de la taberna hasta 2 niveles por debajo de tu héroe más alto.
+- **Elixires** (tienda de cualquier aldea, sección Alquimista): 📗 +30% experiencia · 💰 +30% oro y botín · 🍀 +10% crítico y
+  mejor rareza · 🛡️ +15% PV · 🕯️ ves más lejos de noche y en las mazmorras. Duran 30 minutos reales, se acumulan y se
+  ven en el HUD con su tiempo.
+- **Apariencias** (Ciudad Origen): anillo de fuego, hielo, arcoíris o estrellas; aura dorada o de sombra; marco del nombre;
+  emoji alternativo para cualquier héroe; accesorios para la mascota. Solo visuales; los compañeros las ven.
+- **Tablón de construcción** (Ciudad Origen): la sala dona a 6 proyectos de 3 niveles (guardados en el servidor, tabla
+  `city_state`): 🏨 Posada (descanso más barato y +10/20/30% de experiencia 10 min) · 🏪 Tienda (armería con más objetos y
+  10/20/30% de descuento) · ⚒️ Herrería (menos fallo) · 🧱 Muralla (más luz de noche) · 🗿 Estatua (nombres de quienes
+  más donaron) · 🌀 Portal mayor (desde Ciudad Origen, viaje a las aldeas que descubrió cualquier jugador; mitad de precio
+  y luego gratis). Cada mejora se anuncia, se ve en el mapa alrededor del castillo y da el logro «el Constructor».
+- **Guardado:** `saveVersion` 12: `frags`, `elix`, `cos`, `tmaps`, `merch`; el equipo guarda `up` (nivel de forja).
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -357,7 +393,7 @@ Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y si
    - Value: la connection string que copiaste
    - **Save Changes** (Render redespliega solo).
 5. Comprueba en `https://<tu-servicio>.onrender.com/health` que diga `"db":"ok"`.
-   Las tablas `rooms`, `players`, `chat_messages`, `player_stats` y `world_boss` se crean solas al arrancar.
+   Las tablas `rooms`, `players`, `chat_messages`, `player_stats`, `world_boss` y `city_state` se crean solas al arrancar.
 
 **Probar sin base de datos (local):** `npm start` sin `DATABASE_URL` → `/health` dice `"db":"off"`, no se pide PIN
 y todo se guarda en el navegador. **Probar con base de datos (local):** `DATABASE_URL="postgresql://…" npm start`
@@ -391,6 +427,8 @@ public/js/daynight.js  Día y noche con la hora del servidor
 public/js/pets.js      Mascotas: huevos, eclosión, efectos y experiencia
 public/js/achievements.js Logros, títulos y ranking de la sala
 public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
+public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, tesoros, apariencias y donaciones
+public/js/shopui.js    Pantallas de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})
@@ -420,6 +458,7 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `stats:push` / `rank:get` | cliente → servidor | logros, distancia, jefes, arena y título / ranking de la sala (ack) |
 | `wb:get` / `wb:hit` | cliente → servidor (ack) | estado del jefe de mundo / daño de un intento `{week, parts:{nombre: daño}}` |
 | `wb:state` | servidor → sala | `{week, gen, hp, mhp, lvl, contrib, killed}` |
+| `city:donate` / `city:vv` | cliente → servidor | donación `{k, amount}` (ack) / aldeas descubiertas `{list:[[x, y, nombre]]}`; la sala recibe `city:state` |
 | `pvp:invite` / `pvp:accept` / `pvp:decline` | retador ↔ desafiado | duelo en la arena; luego `pvp:start` al retador y el combate usa `battle:state/action/end` |
 
 El servidor valida tipos, largos y frecuencias de todo lo que llega. Los eventos de los jefes en equipo están en `server.js` (sesiones) y `public/js/coop.js` (cliente).

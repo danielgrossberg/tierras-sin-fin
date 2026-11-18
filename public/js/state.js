@@ -30,7 +30,10 @@ held.clear = function () { this.length = 0; };
 
 // ================= Héroes =================
 // Suma de un stat en el equipo puesto (incluye % crítico, robo de vida, res. veneno)
-export function eqSum(h, k) { let s = 0; const e = h.equip; if (e) for (const sl in e) { const it = e[sl]; if (it && it.st && it.st[k]) s += it.st[k]; } return s; }
+// (con la mejora de la forja: +8% por nivel)
+export function eqSum(h, k) { let s = 0; const e = h.equip; if (e) for (const sl in e) { const it = e[sl]; if (it && it.st && it.st[k]) s += Math.round(it.st[k] * (1 + .08 * (it.up || 0))); } return s; }
+// Elixires activos (Versión 3 · Fase 5): G.elix = { clave: hora en que se acaba (ms) }
+export const elix = k => !!(G.elix && G.elix[k] && G.elix[k] > Date.now());
 // ¿Lleva puesto un legendario con este efecto?
 export function heroFx(h, fx) { const e = h && h.isHero && h.equip; if (e) for (const sl in e) if (e[sl] && e[sl].fx === fx) return true; return false; }
 export function hs(h, k) {
@@ -40,7 +43,7 @@ export function hs(h, k) {
   // Clase avanzada: el crecimiento cambia un poco desde el nivel 15
   const a = h.adv && ADV[h.adv], ag = a && a.g[k] ? c.g[k] * (a.g[k] - 1) * Math.max(0, h.lvl - ADV_LVL) : 0;
   const v = Math.round(c.b[k] + c.g[k] * (h.lvl - 1) + ag) + (h.bonus[k] || 0) + (k === 'atk' ? ua * 2 : k === 'def' ? ud * 2 : 0) + eqSum(h, k);
-  const p = talFx(h, k + 'P');   // talentos: +% a un stat
+  const p = talFx(h, k + 'P') + (k === 'mhp' && !h.remote && elix('coloso') ? .15 : 0);   // talentos y Elixir del Coloso: +% a un stat
   return p ? Math.round(v * (1 + p)) : v;
 }
 export const S = (u, k) => u.isHero ? hs(u, k) : u[k];
@@ -62,6 +65,8 @@ export const alive = a => a.filter(u => u.hp > 0);
 export const need = l => Math.round(12 * Math.pow(l, 1.7));
 export const learned = h => [...CL[h.cls].sk, ...(h.adv && ADV[h.adv] ? ADV[h.adv].sk : [])].filter(k => SK[k].lv <= (h.skLvl || h.lvl));   // skLvl: nivel real en un duelo nivelado
 export function gainXP(h, x) {
+  // Elixir de Sabiduría (+30%) y descanso de la Posada mejorada (+10/20/30% por 10 min)
+  x *= 1 + (elix('sabio') ? .3 : 0) + (elix('descanso') ? (G.restBonus || 0) : 0);
   const msgs = []; h.xp += Math.round(x);
   while (h.xp >= need(h.lvl)) {
     h.xp -= need(h.lvl); const om = S(h, 'mhp'), omm = S(h, 'mmp'); h.lvl++;

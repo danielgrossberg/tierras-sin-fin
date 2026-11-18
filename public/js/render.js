@@ -13,12 +13,16 @@ import { CAVE, PETS } from './data.js';
 import { darkness, twilight } from './daynight.js';
 import { activePet } from './pets.js';
 import { wbAlive, wbPos } from './worldboss.js';
+import { cityLvl, cosPublic, merchVillage } from './economy.js';
+import { COS, CITY } from './data.js';
+import { elix } from './state.js';
 // Título del jugador bajo sus pies (Versión 3 · Fase 4)
 function titleTag(txt, X, Y, alpha) { if (!txt) return; ctx.save(); ctx.globalAlpha = alpha; ctx.font = `italic bold 10px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText('«' + txt + '»', X, Y); ctx.fillStyle = '#ffe08a'; ctx.fillText('«' + txt + '»', X, Y); ctx.restore(); }
 // Mascota que sigue al grupo: más chica, detrás del líder, saltando un poco
-function petSprite(e, X, Y, TS, t, face, alpha) {
+function petSprite(e, X, Y, TS, t, face, alpha, acc) {
   const px = X - face * TS * .5, py = Y + TS * .18 - Math.abs(Math.sin(t / 180)) * 2.5;
   shadow(px, py + TS * .28, TS * .2); emoji(e, px, py, TS * .52, alpha);
+  if (acc && COS[acc]) emoji(COS[acc].e, px + TS * .15, py - TS * .24, TS * .26, alpha);   // accesorio (apariencia)
 }
 
 const cvs = $('#world'), ctx = cvs.getContext('2d');
@@ -102,28 +106,36 @@ function bubble(txt, x, y) {
   ctx.fillStyle = '#1a1f36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx + w / 2, by + h / 2 + 1);
 }
 // Nombre sobre la cabeza en una "píldora" de color con borde negro
-function namePill(txt, x, y, bg, fg) {
+function namePill(txt, x, y, bg, fg, frame) {
+  if (frame === 'frame_real') txt = '👑 ' + txt;
   ctx.font = `bold 12px system-ui,sans-serif,${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const w = ctx.measureText(txt).width + 12, h = 18;
   rrect(x - w / 2, y - h / 2, w, h, 9); ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#000'; ctx.stroke();
+  if (frame === 'frame_oro' || frame === 'frame_real') { ctx.lineWidth = 2.5; ctx.strokeStyle = '#ffd34d'; rrect(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 4, 11); ctx.stroke(); }
+  if (frame === 'frame_neon') { ctx.save(); ctx.shadowColor = '#ff4dff'; ctx.shadowBlur = 10; ctx.lineWidth = 2; ctx.strokeStyle = '#ff7bff'; rrect(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 4, 11); ctx.stroke(); ctx.restore(); }
   ctx.fillStyle = fg; ctx.fillText(txt, x, y + 1);
 }
 // Jugador (propio o compañero): anillo de color con pulso, emoji con halo blanco y contorno oscuro, y nombre.
 // Todo dentro de save/restore con opacidad y filtro explícitos, para que nada se "arrastre" de otros dibujos.
-function heroSprite(X, Y, glyph, size, col, t, flip, alpha, name, nameFg) {
+function heroSprite(X, Y, glyph, size, col, t, flip, alpha, name, nameFg, cos) {
+  cos = cos || {};
+  // Aura (apariencia): brillo grande alrededor del grupo
+  if (cos.aura) { ctx.save(); ctx.globalAlpha = alpha; const r = TS() * (1.3 + .1 * Math.sin(t / 400)), gg = ctx.createRadialGradient(X, Y, 0, X, Y, r); const c = cos.aura === 'aura_sombra' ? '120,60,200' : '255,210,80'; gg.addColorStop(0, `rgba(${c},.45)`); gg.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill(); ctx.restore(); }
   ctx.save();
   ctx.globalAlpha = alpha; ctx.filter = 'none'; ctx.shadowColor = 'transparent';
   const p = .5 + .5 * Math.sin(t / 280);
   ctx.beginPath(); ctx.ellipse(X, Y + TS() * .4, TS() * .5, TS() * .18, 0, 0, 7);
   ctx.fillStyle = hexA(col, .22 + .12 * p); ctx.fill();
-  ctx.lineWidth = 2.5 + 1.5 * p; ctx.strokeStyle = hexA(col, .7 + .3 * p); ctx.stroke();
+  ctx.lineWidth = 2.5 + 1.5 * p; ctx.strokeStyle = cos.ring === 'ring_arcoiris' ? `hsl(${(t / 8) % 360},90%,60%)` : cos.ring === 'ring_fuego' ? `rgba(255,${120 + 60 * p | 0},40,.95)` : cos.ring === 'ring_hielo' ? 'rgba(150,220,255,.95)' : cos.ring === 'ring_estrellas' ? 'rgba(255,230,120,.95)' : hexA(col, .7 + .3 * p); ctx.stroke();
+  // Partículas del anillo (fuego, hielo o estrellas) girando
+  if (cos.ring && cos.ring !== 'ring_arcoiris' && COS[cos.ring]) { for (let i = 0; i < 3; i++) { const a = t / 600 + i * 2.1; ctx.save(); ctx.font = `${Math.round(TS() * .26)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(COS[cos.ring].e, X + Math.cos(a) * TS() * .5, Y + TS() * .4 + Math.sin(a) * TS() * .18); ctx.restore(); } }
   ctx.translate(X, Y); if (flip) ctx.scale(-1, 1);
   ctx.font = `${Math.round(size)}px ${EF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#000';   // relleno opaco: si no, el emoji hereda la transparencia del anillo
   ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = 6 * DPR; ctx.fillText(glyph, 0, 0);   // halo blanco
   ctx.shadowColor = 'rgba(0,0,0,.95)'; ctx.shadowBlur = 2 * DPR; ctx.fillText(glyph, 0, 0);         // contorno oscuro
   ctx.restore();
-  if (name) { ctx.save(); ctx.globalAlpha = alpha; namePill(name, X, Y - size * .82, col, nameFg); ctx.restore(); }
+  if (name) { ctx.save(); ctx.globalAlpha = alpha; namePill(name, X, Y - size * .82, col, nameFg, cos.frame); ctx.restore(); }
 }
 const TS = () => TILE * Z;
 const statusIcon = s => s === 'battle' ? '⚔️ ' : s === 'village' ? '🏘️ ' : s === 'dungeon' ? '🕳️ ' : '';
@@ -239,8 +251,8 @@ function drawDungeon(t) {
     } });
   }
   sprites.push({ y: D.py + .45, fn: () => { const X = sx(D.px), Y = sy(D.py), moving = Math.abs(D.x - D.px) + Math.abs(D.y - D.py) > .03;
-    { const pt = activePet(); if (pt) petSprite(PETS[pt.k].e, X, Y, TS, t, D.face > 0 ? 1 : -1, 1); }
-    shadow(X, Y + TS * .4, TS * .36); heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), leader().e, TS * .97, '#f2c14e', t, D.face > 0, 1, st.name || 'Tú', '#241a00'); } });
+    { const pt = activePet(); if (pt) petSprite(PETS[pt.k].e, X, Y, TS, t, D.face > 0 ? 1 : -1, 1, cosPublic().acc); }
+    shadow(X, Y + TS * .4, TS * .36); heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), leader().e, TS * .97, '#f2c14e', t, D.face > 0, 1, st.name || 'Tú', '#241a00', cosPublic()); } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
   // Niebla
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -279,6 +291,11 @@ export function draw(t) {
       const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(242,193,78,.45)'); gr.addColorStop(1, 'rgba(242,193,78,0)');
       ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
       shadow(X, Y + TS * .5, TS * .7); emoji('🏰', X, Y - TS * .1, TS * 1.65);
+      // Mejoras de la ciudad (Versión 3 · Fase 5): cada proyecto con nivel se ve alrededor del castillo
+      const ring = [['posada', -1.3, .55], ['tienda', 1.3, .55], ['herreria', -1.45, -.35], ['portal', 1.45, -.35], ['estatua', 0, 1.15]];
+      if (cityLvl('muralla')) for (let i = 0; i < 4 + 2 * cityLvl('muralla'); i++) { const a = Math.PI * (.15 + .7 * i / (3 + 2 * cityLvl('muralla'))); emoji(cityLvl('muralla') >= 3 && i % 3 === 0 ? '🗼' : '🧱', X + Math.cos(a + Math.PI) * TS * 1.9, Y + TS * .3 - Math.sin(a) * TS * .4, TS * .42); }
+      for (const [k, dx, dy] of ring) if (cityLvl(k)) emoji(CITY[k].e, X + dx * TS, Y + dy * TS, TS * (.45 + .08 * cityLvl(k)));
+      if (cityLvl('estatua') && net.city) { const top = Object.entries(net.city.donors || {}).sort((a, b) => b[1] - a[1]).slice(0, cityLvl('estatua')).map(x => x[0]); if (top.length) label('🗿 ' + top.join(' · '), X, Y + TS * 1.6, 10, '#ffe6a0'); }
       ctx.font = `bold ${Math.max(13, Math.round(TS * .38))}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 4; ctx.strokeStyle = '#000c'; ctx.strokeText(f.name, X, Y - TS * 1.12); ctx.fillStyle = '#f2c14e'; ctx.fillText(f.name, X, Y - TS * 1.12);
     } });
@@ -350,9 +367,9 @@ export function draw(t) {
     sprites.push({ y: o.py + .44, fn: () => {   // sobre lo demás de su casilla
       const moving = Math.abs(o.x - o.px) + Math.abs(o.y - o.py) > .03, a = o.online === false ? .5 : 1;
       shadow(X, Y + TS * .4, TS * .34);
-      if (o.pet && o.biome !== 'WATER' && o.status !== 'dungeon') petSprite(o.pet, X, Y, TS, t, 1, a);
+      if (o.pet && o.biome !== 'WATER' && o.status !== 'dungeon') petSprite(o.pet, X, Y, TS, t, 1, a, o.cos && o.cos.acc);
       heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * .95, mateColor(o.name), t, false, a,
-        statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18');
+        statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18', o.cos || null);
       titleTag(o.title, X, Y + TS * .62, a);
     } });
   }
@@ -374,10 +391,10 @@ export function draw(t) {
   sprites.push({ y: P.py + .45, fn: () => {    // sobre lo demás de su casilla
     const X = sx(P.px), Y = sy(P.py); const moving = Math.abs(P.x - P.px) + Math.abs(P.y - P.py) > .03;
     const bob = onWater ? Math.sin(t / 400) * 2 : -(moving ? Math.abs(Math.sin(t / 70)) * 4 : 0);
-    { const pt = activePet(); if (pt && !onWater) petSprite(PETS[pt.k].e, X, Y, TS, t, P.face > 0 ? 1 : -1, 1); }
+    { const pt = activePet(); if (pt && !onWater) petSprite(PETS[pt.k].e, X, Y, TS, t, P.face > 0 ? 1 : -1, 1, cosPublic().acc); }
     shadow(X, Y + TS * .4, TS * .36);
     // 18% más grande que un monstruo normal (TS*.82), anillo dorado con pulso y nombre en dorado
-    heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00');
+    heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00', cosPublic());
     titleTag(G.title, X, Y + TS * .62, 1);
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
@@ -385,7 +402,7 @@ export function draw(t) {
   const dk = darkness(), tw = twilight();
   if (tw > 0) { ctx.fillStyle = `rgba(255,120,50,${.13 * tw})`; ctx.fillRect(0, 0, W, H); }
   if (dk > 0) {
-    const X = sx(P.px), Y = sy(P.py), g = ctx.createRadialGradient(X, Y, TS * 2.2, X, Y, TS * 5.5);
+    const lm = (1 + .15 * cityLvl('muralla')) * (elix('vela') ? 1.4 : 1), X = sx(P.px), Y = sy(P.py), g = ctx.createRadialGradient(X, Y, TS * 2.2 * lm, X, Y, TS * 5.5 * lm);
     g.addColorStop(0, 'rgba(6,8,30,0)'); g.addColorStop(1, `rgba(6,8,30,${.8 * dk})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -404,6 +421,9 @@ export function draw(t) {
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
   if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏰', `Ciudad Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  // Mapas del tesoro (cofres marcados) y mercader ambulante 🐪
+  for (const m of G.tmaps || []) { const mx = sx(m.x), my = sy(m.y); if (offscreen(mx, my)) edgeArrow(mx, my, '💰', `Tesoro · ${Math.round(Math.hypot(m.x - P.x, m.y - P.y))} c`, '#ffd34d', '#fff2b3', 1, placed); else { emoji('❌', mx, my + TS * .1, TS * .7); emoji('💰', mx, my - TS * .55 - Math.abs(Math.sin(t / 300)) * 4, TS * .55); } }
+  { const mv = merchVillage(); if (mv) { const mx = sx(mv.x), my = sy(mv.y); if (offscreen(mx, my)) edgeArrow(mx, my, '🐪', `Mercader · ${Math.round(Math.hypot(mv.x - P.x, mv.y - P.y))} c`, '#e0a96d', '#ffe2c2', .9, placed); else emoji('🐪', mx + TS * .75, my - TS * .45, TS * .6); } }
   // Jefe de mundo (naranja, siempre que esté vivo)
   if (wbAlive()) { const q = wbPos(); if (q) { const wx = sx(q.x), wy = sy(q.y); if (offscreen(wx, wy)) edgeArrow(wx, wy, '🌋', `Titán · ${Math.round(Math.hypot(q.x - P.x, q.y - P.y))} c`, '#ff5a1f', '#ffd0b0', 1, placed); } }
   // Aldea más cercana (gris)

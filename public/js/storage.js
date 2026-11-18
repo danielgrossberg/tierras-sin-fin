@@ -8,7 +8,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -58,6 +58,10 @@ export function migrate(o) {
     // Versión 3 · Fase 3: mascotas (ninguna todavía) y huevos
     o.pets = o.pets || []; o.pet = o.pet || null; o.eggs = o.eggs || [];
   }
+  if (v < 12) {
+    // Versión 3 · Fase 5: forja (fragmentos), elixires, apariencias, mapas del tesoro y mercader
+    o.frags = o.frags || 0; o.elix = o.elix || {}; o.cos = o.cos || { owned: [] }; o.tmaps = o.tmaps || []; o.merch = o.merch || null;
+  }
   if (v < 11) {
     // Versión 3 · Fase 4: logros (los que ya cumple se desbloquean al entrar), título, arena y jefe de mundo
     o.stats = o.stats || {}; o.ach = o.ach || {}; o.title = o.title || null; o.arena = o.arena || { pts: 0, w: 0, l: 0 }; o.wbClaim = o.wbClaim || null; o.wbSeen = o.wbSeen || null;
@@ -72,6 +76,7 @@ export function migrate(o) {
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];
   o.favs = o.favs && typeof o.favs === 'object' ? o.favs : {};
   o.dungeons = o.dungeons && typeof o.dungeons === 'object' ? o.dungeons : {};
+  o.cos = o.cos && typeof o.cos === 'object' ? o.cos : { owned: [] }; o.cos.owned = Array.isArray(o.cos.owned) ? o.cos.owned : []; o.tmaps = Array.isArray(o.tmaps) ? o.tmaps : []; o.elix = o.elix && typeof o.elix === 'object' ? o.elix : {};
   o.stats = o.stats && typeof o.stats === 'object' ? o.stats : {}; o.ach = o.ach && typeof o.ach === 'object' ? o.ach : {}; o.arena = o.arena && typeof o.arena === 'object' ? o.arena : { pts: 0, w: 0, l: 0 };
   o.pets = Array.isArray(o.pets) ? o.pets.filter(q => q && PETS[q.k]) : []; o.eggs = Array.isArray(o.eggs) ? o.eggs : [];
   if (o.pet && !o.pets.some(q => q.id === o.pet)) o.pet = null;

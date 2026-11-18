@@ -15,6 +15,7 @@ export const net = {
   others: new Map(),    // nombre → {name,x,y,px,py,leaderEmoji,avgLvl,biome,status,online,bubble}
   pins: new Map(),      // nombre → {name,x,y,until}
   invites: new Map(),   // jefes en equipo: id → {id, host, boss, until}
+  city: null,           // proyectos de Ciudad Origen y aldeas compartidas (Versión 3 · Fase 5)
   wb: null,             // jefe de mundo semanal (Versión 3 · Fase 4): {week, gen, hp, mhp, lvl, contrib, killed}
   chat: [],             // chat de la sala (Versión 3): {id, t, kind: msg|quick|sys, name, e, text (HTML escapado)}
   myBubble: null,
@@ -41,6 +42,7 @@ export function ensureSocket() {
   s.on('chat:msg', onChatMsg);
   s.on('ping:place', onPin);
   s.on('event:notice', onNotice);
+  s.on('city:state', d => { if (d && d.p) { net.city = d; fire('city', d); } });
   s.on('wb:state', d => { if (d && Number.isFinite(d.hp)) { net.wb = d; fire('wb', d); } });
   s.on('room:replaced', () => {
     net.replaced = true; net.joined = false; net.others.clear(); setStatus('off');
@@ -70,7 +72,7 @@ async function onConnect() {
   const r = await ask('room:join', { code: net.code, name: net.name, pin: net.pin || undefined, rejoin: true });
   if (r.ok) {
     net.db = !!r.db;
-    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); setServerTime(r.now); if (r.wb) { net.wb = r.wb; fire('wb', r.wb); } lastKey = ''; setStatus('on');
+    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); setServerTime(r.now); if (r.wb) { net.wb = r.wb; fire('wb', r.wb); } if (r.city) { net.city = r.city; fire('city', r.city); } lastKey = ''; setStatus('on');
     if (wasWaiting) fire('feed', '🟢 Conexión recuperada');
     if (owed) flushSave();   // subir lo que no se alcanzó a guardar mientras no había conexión
   } else { setStatus('wait'); fire('feed', '⚠️ ' + esc(r.error || 'No se pudo volver a la sala')); }
@@ -83,7 +85,7 @@ export async function joinRoom(code, name, rejoin, pin) {
     net.code = code; net.name = r.name || name; net.pin = pin || null; net.joined = true; net.replaced = false;
     net.db = !!r.db; net.serverSave = r.save || null;
     net.others.clear(); net.pins.clear(); applyPlayers(r.players || []); applyPins(r.pins || []);
-    net.chat = []; setChat(r.chat); setServerTime(r.now); net.wb = r.wb || null;
+    net.chat = []; setChat(r.chat); setServerTime(r.now); net.wb = r.wb || null; net.city = r.city || null;
     lastKey = ''; setStatus('on');
   }
   return r;
@@ -131,6 +133,7 @@ export const coopAsk = (ev, data) => ask(ev, data, 8000);
 export function coopSend(ev, data) { if (canSend()) net.socket.emit(ev, data); }
 // Logros y ranking · jefe de mundo
 export const netAsk = (ev, data) => ask(ev, data, 8000);
+export function cityVV(list) { if (canSend() && list.length) net.socket.emit('city:vv', { list }); }
 export function statsPush(d) { if (canSend()) net.socket.emit('stats:push', d); }
 export function notice(type, text) { if (canSend()) net.socket.emit('event:notice', { type, text }); }
 

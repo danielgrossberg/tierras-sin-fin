@@ -2,13 +2,16 @@
 'use strict';
 import { $, esc, pick, roomSeed, cleanName } from './util.js';
 import { CL, B, IT, CH, BOONS, CODE_ALPHABET, SEA_POOL } from './data.js';
-import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_GOLD, startItems } from './state.js';
+import { G, setG, P, START, st, held, S, mkHero, heroes, avgLvl, leader, START_GOLD, startItems, elix } from './state.js';
 import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, visitAround, spawnNearby, moveMonsters, inVillage, dangerAt, removeNightMonsters } from './world.js';
 import { stepEggs, activePet } from './pets.js';
 import { isNight } from './daynight.js';
 import { PETS } from './data.js';
 import { checkAch, pushStats, noteDist, bump } from './achievements.js';
 import { isWBTile, openWorldBoss, onWB } from './worldboss.js';
+import { digTreasure, merchVillage, today, cosPublic } from './economy.js';
+import { cityVV } from './net.js';
+import { itemLabel as iLabel } from './items.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, updateMini, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI, updateDayNight } from './ui.js';
@@ -46,6 +49,8 @@ function move(dir) {
   }
   // Misiones de entrega y exploración: se cumplen al pisar el lugar
   if (onTomb() && recoverTomb()) { toast('🎒 ¡Recuperaste tus objetos!'); save('now'); }
+  // Mapa del tesoro (Versión 3 · Fase 5)
+  const tr = digTreasure(nx, ny); if (tr) { toast(`💰 ¡Tesoro!<br><span style="font-size:14px">+${tr.gold} de oro${tr.egg ? ' · 🥚 un huevo' : ''}</span>`); if (tr.it) feed(`🗺️ El tesoro tenía ${iLabel(tr.it)}`); save('now'); }
   const done = onArrive(nx, ny);
   if (done.length) { feed(done.join('<br>')); save('now'); }
   const hit = moveMonsters(); updateHUD();
@@ -65,11 +70,11 @@ function openChest(f) {
   G.opened[f.id] = 1; bump('chests'); const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
   // 50%: equipo del nivel de la zona (mejor rareza mientras más lejos)
   if (Math.random() < .5) {
-    const it = rollLoot(dangerAt(f.x, f.y), Math.min(1, d / 400));
+    const it = rollLoot(dangerAt(f.x, f.y), Math.min(1, d / 400 + (elix('suerte') ? .3 : 0)));
     if (addItem(it)) { toast(`📦 Cofre: ${itemLabel(it)}<br><span style="font-size:13px;color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</span>`); save(); return; }
     toast('🎒 Inventario lleno: el cofre tenía equipo, pero no cabe');
   }
-  if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40) * (heroes().some(h => h.cls === 'enano') ? 1.25 : 1)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
+  if (r < .55) { const g = Math.round((12 + Math.random() * 20) * (1 + d / 40) * (heroes().some(h => h.cls === 'enano') ? 1.25 : 1) * (elix('fortuna') ? 1.3 : 1)); G.gold += g; toast(`📦 Cofre: +${g} de oro`); }
   else { const k = r < .8 ? 'pocion' : r < .93 ? 'eter' : 'pluma', n = k === 'pocion' ? 2 : 1; G.items[k] += n; toast(`📦 Cofre: ${IT[k].e} ${IT[k].n} ×${n}`); }
   save();
 }
@@ -80,7 +85,7 @@ function useShrine(f) {
 }
 // Estado que ven los demás
 const curStatus = () => (getBT() || inCoopBattle()) ? 'battle' : inDungeon() ? 'dungeon' : (inVillage() || modalIs('village')) ? 'village' : 'map';
-const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel(), pet: activePet() ? PETS[activePet().k].e : null });
+const myState = () => ({ x: P.x, y: P.y, leaderEmoji: leader().e, avgLvl: Math.round(avgLvl() * 10) / 10, biome: tileAt(P.x, P.y).b, status: curStatus(), tomb: G.tomb ? [G.tomb.x, G.tomb.y] : null, vs: coopVs(), dun: dunLabel(), pet: activePet() ? PETS[activePet().k].e : null, cos: cosPublic() });
 
 // ================= Entrada: teclado =================
 const KEYMAP = { arrowup: 'u', w: 'u', arrowdown: 'd', s: 'd', arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r' };
@@ -151,9 +156,17 @@ let lastTombCheck = 0, lastDN = 0, wasNight = null, lastAch = 0;
 function dayNightTick() {
   updateDayNight();
   const n = isNight(); if (wasNight === null) { wasNight = n; return; }
+  merchTick();
   if (n === wasNight) return; wasNight = n;
   if (n) { spawnNearby(); if (!inDungeon()) toast('🌙 Cae la noche<br><span style="font-size:13px">Monstruos +20% más fuertes, +30% de experiencia y botín, y aparecen los nocturnos</span>'); }
   else { removeNightMonsters(); if (!inDungeon()) toast('☀️ Amanece<br><span style="font-size:13px">Los monstruos nocturnos se esconden</span>'); }
+}
+// Mercader ambulante: aviso al entrar y cuando cambia el día · aldeas descubiertas para el Portal mayor
+let merchDay = null, vvSent = 0;
+function merchTick() {
+  if (!st.inGame) return;
+  const d = today(); if (d !== merchDay) { merchDay = d; const v = merchVillage(); if (v) toast(`🐪 El mercader ambulante está hoy en <b>${v.name}</b><br><span style="font-size:13px">Sigue la flecha 🐪 · cambia de aldea cada día</span>`); }
+  const n = Object.keys(G.vv || {}).length; if (n !== vvSent && net.joined) { vvSent = n; cityVV(Object.values(G.vv).map(v => [v.x, v.y, v.name])); }
 }
 // Huevos de mascota: avanzan con cada paso (también dentro de las mazmorras)
 export function hatchEggs() {
@@ -161,6 +174,7 @@ export function hatchEggs() {
 }
 function checkTomb() { if (tombExpired()) { toast('⌛ Se acabaron los 60 minutos: los objetos de tu tumba 🪦 se perdieron'); save('now'); updateHUD(); } }
 function enterWorld() {
+  merchDay = null; vvSent = 0;
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
@@ -170,7 +184,7 @@ function enterWorld() {
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], stats: {}, ach: {}, title: null, arena: { pts: 0, w: 0, l: 0 }, wbClaim: null, wbSeen: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], frags: 0, elix: {}, cos: { owned: [] }, tmaps: [], merch: null, stats: {}, ach: {}, title: null, arena: { pts: 0, w: 0, l: 0 }, wbClaim: null, wbSeen: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);

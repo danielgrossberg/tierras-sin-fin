@@ -14,7 +14,7 @@ import { activePet, petPower, catBonus, foxBonus, turtleShield, petGainXP, addEg
 import { PETS, PET_MAX, WB_ROUNDS } from './data.js';
 import { bump } from './achievements.js';
 import { wbReport } from './worldboss.js';
-import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName } from './state.js';
+import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName, elix } from './state.js';
 import { createTomb } from './tomb.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
@@ -226,7 +226,8 @@ function stopClock() { if (!BT) return; clearTimeout(BT.clock); clearInterval(BT
 async function autoDefend(h, why) { h.defending = true; log(`${h.name} ${why || 'no alcanzó a elegir'}: se defiende`); popup(h, 'Defensa', '#9fd8ff'); refresh(); await sleep(450); }
 function popup(u, txt, col) { if (BT && BT.coop) BT.pops.push({ id: u.id, txt: String(txt), col: col || '#fff' }); const el = uel(u); if (!el) return; const s = document.createElement('div'); s.className = 'pop'; s.textContent = txt; s.style.color = col || '#fff'; el.appendChild(s); setTimeout(() => s.remove(), 1050); }
 function anim(u, cls) { const el = uel(u); if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), 450); }
-const critOf = u => (u.isHero ? CL[u.cls].crit + (eqSum(u, 'crit') + talFx(u, 'crit')) / 100 : .05) + (u.buffs.song > 0 ? .1 : 0);
+// Elixir de Suerte: +10% de crítico para mis héroes
+const critOf = u => (u.isHero ? CL[u.cls].crit + (eqSum(u, 'crit') + talFx(u, 'crit')) / 100 + (!u.remote && !(BT && BT.pvp) && elix('suerte') ? .1 : 0) : .05) + (u.buffs.song > 0 ? .1 : 0);
 const critMulOf = u => (heroFx(u, 'umbra') ? 2.5 : 1.75) + talFx(u, 'critDmg');
 // Talentos que mejoran la habilidad que se está usando (+%)
 const skMul = u => (u && u.isHero && BT && BT.sk ? 1 + talSk(u, 'skB', BT.sk) : 1);
@@ -582,7 +583,7 @@ export async function startBattle(m, opts = {}) {
   if (opts.bossMul && ens[0] && ens[0].boss) { ens[0].mhp = Math.round(ens[0].mhp * opts.bossMul); ens[0].hp = ens[0].mhp; }
   if (opts.dmgMul) for (const e of ens) { e.atk *= opts.dmgMul; e.mag *= opts.dmgMul; }
   // Noche (fuera de las mazmorras): +20% de stats y +30% de experiencia y oro
-  const night = !m.dun && !opts.pvp && isNight();
+  const night = !m.dun && !opts.pvp && !m.wb && isNight();   // el jefe de mundo no cambia de noche (su vida es la del servidor)
   // Jefe de mundo: la vida es la compartida del servidor
   if (m.wb && ens[0]) { ens[0].mhp = m.wb.mhp; ens[0].hp = m.wb.hp; }
   if (night) for (const e of ens) { e.mhp = Math.round(e.mhp * NIGHT_STATS); e.hp = e.mhp; e.atk *= NIGHT_STATS; e.def *= NIGHT_STATS; e.mag *= NIGHT_STATS; e.xp = Math.round(e.xp * NIGHT_REWARD); e.g = Math.round(e.g * NIGHT_REWARD); }
@@ -612,8 +613,9 @@ export async function startBattle(m, opts = {}) {
 export function bossEgg() { if (Math.random() < .15) { addEgg('jefe'); return ['🥚 <b>¡Un huevo de mascota!</b> Eclosiona en 300 pasos.']; } return []; }
 async function victory() {
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);
-  const cat = ownPet('gato'), loot = (partyHas('goblin') ? 1.3 : 1) * (BT.night ? NIGHT_REWARD : 1) * (cat ? 1 + catBonus(cat) : 1);   // Goblin +30% · noche +30% · gato
-  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))) * (cat ? 1 + catBonus(cat) : 1));   // pasiva del Enano: +25% de oro · talentos de oro
+  const fort = elix('fortuna') ? 1.3 : 1;   // Elixir de Fortuna: +30% de oro y botín
+  const cat = ownPet('gato'), loot = (partyHas('goblin') ? 1.3 : 1) * (BT.night ? NIGHT_REWARD : 1) * (cat ? 1 + catBonus(cat) : 1) * fort;   // Goblin +30% · noche +30% · gato
+  const gold = Math.round(BT.enemies.reduce((a, e) => a + e.g, 0) * (.8 + Math.random() * .4) * (partyHas('enano') ? 1.25 : 1) * (1 + Math.min(.5, heroes().reduce((a, h) => a + talFx(h, 'goldP'), 0))) * (cat ? 1 + catBonus(cat) : 1) * fort);   // pasiva del Enano: +25% de oro · talentos de oro
   G.gold += gold; const lines = [`🏆 <b>¡Victoria!</b> +${xp} XP · +${gold} de oro`];
   // Experiencia según participación; los que esperan en la taberna reciben el 10%
   const team = heroes(), before = team.map(h => h.lvl), shares = splitXP(team, xp), lvMsgs = [];
@@ -628,7 +630,7 @@ async function victory() {
   lines.push(...petGainXP(activePet(), xp * .5));
   // Equipo: 15% en combates normales; los jefes siempre sueltan uno (mínimo Raro)
   if (m.boss || Math.random() < .15 * loot) {
-    const luck = m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400);
+    const luck = Math.min(1, (m.luck != null ? m.luck : Math.hypot(m.x - START.x, m.y - START.y) / 400) + (elix('suerte') ? .3 : 0));   // Elixir de Suerte: mejor rareza
     const it = rollLoot(m.lvl, luck, m.boss ? 'raro' : 'comun');
     lines.push(addItem(it) ? `🎁 Equipo: ${itemLabel(it)} <small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small>`
       : `<span class="mut">🎒 Inventario lleno (40): dejaste ${itemLabel(it)}</span>`);
@@ -661,7 +663,7 @@ async function coopFinish(res) {
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
   bump('kills', BT.enemies.length); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
-  const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1));
+  const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1) * (elix('fortuna') ? 1.3 : 1));
   G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg());
   lines.push(...petGainXP(activePet(), xp * .5));
   const it = rollLoot(m.lvl, m.luck != null ? m.luck : Math.min(1, Math.hypot(m.x - START.x, m.y - START.y) / 400), 'raro');
