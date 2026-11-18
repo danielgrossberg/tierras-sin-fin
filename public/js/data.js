@@ -307,11 +307,56 @@ export const EN = {
   dragon: { n: 'Dragón Glacial', e: '🐉', hp: 95, atk: 15, def: 7, mag: 14, spd: 8, xp: 90, g: 120, sk: ['fuego', 'brutal'], boss: 1 },
   kraken: { n: 'Kraken', e: '🐙', hp: 95, atk: 14, def: 6, mag: 10, spd: 6, xp: 90, g: 110, sk: ['veneno', 'brutal'], boss: 1 },
   reyesq: { n: 'Rey Esqueleto', e: '💀', hp: 85, atk: 13, def: 7, mag: 12, spd: 7, xp: 85, g: 110, sk: ['drenar', 'fuego'], undead: 1, boss: 1, tint: 'drop-shadow(0 0 12px #ff3030)' },
+  // Jefe de mundo semanal (Versión 3 · Fase 4): la vida real la lleva el servidor
+  titan: { n: 'Titán de Lava', e: '🌋', hp: 400, atk: 16, def: 8, mag: 14, spd: 5, xp: 160, g: 0, sk: ['fuego', 'brutal'], boss: 1, tint: 'drop-shadow(0 0 14px #ff5a1f)' },
   // Jefes de mazmorra (Versión 3 · Fase 1)
   liche: { n: 'Señor de la Cripta', e: '💀', hp: 95, atk: 13, def: 7, mag: 14, spd: 7, xp: 100, g: 125, sk: ['drenar', 'fuego'], undead: 1, boss: 1, tint: 'drop-shadow(0 0 12px #a855f7)' },
   reinaarana: { n: 'Reina Araña', e: '🕷️', hp: 100, atk: 15, def: 6, spd: 9, xp: 100, g: 120, sk: ['veneno', 'brutal'], boss: 1, tint: 'hue-rotate(300deg) saturate(2) drop-shadow(0 0 10px #ff3060)' },
   golemrey: { n: 'Gólem Ancestral', e: '🗿', hp: 120, atk: 16, def: 10, spd: 3, xp: 105, g: 130, sk: ['brutal'], boss: 1, tint: 'sepia(.6) saturate(2) drop-shadow(0 0 10px #f2c14e)' },
 };
+// ================= Logros (Versión 3 · Fase 4) =================
+// Cada logro da un título (se muestra bajo el nombre) y a veces oro u objetos. need(s): s = estadísticas del jugador.
+export const ACH_CATS = { exp: '🧭 Exploración', fight: '⚔️ Combate', dun: '🕳️ Mazmorras', coop: '🤝 Cooperativo', col: '💎 Colección', cls: '🌟 Clases', world: '🌋 Mundo y arena' };
+const A = (id, cat, n, d, title, need, reward) => ({ id, cat, n, d, title, need, reward: reward || null });
+export const ACH = [
+  A('exp100', 'exp', 'Primeros Pasos', 'Llega a 100 casillas de Ciudad Origen', 'el Caminante', s => s.maxDist >= 100, { gold: 100 }),
+  A('exp250', 'exp', 'Más Allá', 'Llega a 250 casillas de Ciudad Origen', 'el Explorador', s => s.maxDist >= 250, { gold: 300 }),
+  A('exp500', 'exp', 'Fin del Mapa', 'Llega a 500 casillas de Ciudad Origen', 'el Trotamundos', s => s.maxDist >= 500, { gold: 800, item: 'epico' }),
+  A('vil10', 'exp', 'Cartógrafo', 'Descubre 10 aldeas', 'el Cartógrafo', s => s.villages >= 10, { gold: 200 }),
+  A('vil25', 'exp', 'Viajero Incansable', 'Descubre 25 aldeas', 'el Viajero', s => s.villages >= 25, { gold: 500 }),
+  A('boat', 'exp', 'A Toda Vela', 'Consigue un bote', 'el Navegante', s => s.boat),
+  A('k100', 'fight', 'Cazador', 'Derrota 100 monstruos', 'el Cazador', s => s.kills >= 100, { gold: 150 }),
+  A('k500', 'fight', 'Implacable', 'Derrota 500 monstruos', 'el Implacable', s => s.kills >= 500, { gold: 600, item: 'raro' }),
+  A('boss1', 'fight', 'Primer Jefe', 'Derrota a tu primer jefe', 'Matajefes', s => s.bosses >= 1, { gold: 150 }),
+  A('boss10', 'fight', 'Matadragones', 'Derrota 10 jefes', 'Matadragones', s => s.bosses >= 10, { gold: 800, item: 'epico' }),
+  A('clean', 'fight', 'Intocable', 'Derrota a un jefe sin que caiga nadie del grupo', 'el Intocable', s => s.cleanBoss >= 1, { gold: 200 }),
+  A('night50', 'fight', 'Criatura de la Noche', 'Derrota 50 monstruos de noche', 'el Nocturno', s => s.nightKills >= 50, { gold: 300 }),
+  A('dun1', 'dun', 'Espeleólogo', 'Completa 1 mazmorra', 'el Espeleólogo', s => s.dungeons >= 1, { gold: 200 }),
+  A('dun5', 'dun', 'Saqueador de Criptas', 'Completa 5 mazmorras', 'Saqueador de Criptas', s => s.dungeons >= 5, { gold: 600, item: 'epico' }),
+  A('dun10', 'dun', 'Señor de las Profundidades', 'Completa 10 mazmorras', 'Señor de las Profundidades', s => s.dungeons >= 10, { gold: 1200, item: 'legendario' }),
+  A('coop1', 'coop', 'Compañero', 'Gana tu primer jefe en equipo', 'el Compañero', s => s.coopWins >= 1, { gold: 150 }),
+  A('coop5', 'coop', 'Hermanos de Armas', 'Gana 5 jefes en equipo', 'Hermano de Armas', s => s.coopWins >= 5, { gold: 500, item: 'epico' }),
+  A('legend', 'col', 'Afortunado', 'Consigue un objeto legendario', 'el Afortunado', s => s.legend),
+  A('pets3', 'col', 'Domador', 'Ten 3 mascotas', 'el Domador', s => s.pets >= 3, { gold: 300 }),
+  A('gold2k', 'col', 'Bolsillos Llenos', 'Junta 2000 de oro', 'el Rico', s => s.gold >= 2000),
+  A('chest25', 'col', 'Buscatesoros', 'Abre 25 cofres', 'el Buscatesoros', s => s.chests >= 25, { gold: 250 }),
+  A('epic5', 'col', 'Coleccionista', 'Ten 5 objetos Épicos o mejores', 'el Coleccionista', s => s.epics >= 5, { gold: 300 }),
+  A('cls15', 'cls', 'Maestro de Clases', 'Lleva 3 clases distintas a nivel 15', 'el Maestro', s => s.lvl15 >= 3, { gold: 500 }),
+  A('adv1', 'cls', 'Evolución', 'Elige tu primera clase avanzada', 'el Elegido', s => s.advs >= 1, { gold: 200 }),
+  A('lvl30', 'cls', 'Leyenda Viva', 'Lleva un héroe a nivel 30', 'el Legendario', s => s.maxLvl >= 30, { gold: 1000, item: 'legendario' }),
+  A('tal10', 'cls', 'Sabio', 'Elige 10 talentos en total', 'el Sabio', s => s.talents >= 10, { gold: 300 }),
+  A('wb1', 'world', 'Defensor del Reino', 'Haz daño al jefe de mundo', 'Defensor del Reino', s => s.wbHits >= 1, { gold: 200 }),
+  A('wbkill', 'world', 'Azote de Titanes', 'Ayuda a derrotar al jefe de mundo', 'Azote de Titanes', s => s.wbKills >= 1),
+  A('pvp1', 'world', 'Duelista', 'Gana un duelo en la arena', 'el Duelista', s => s.pvpWins >= 1, { gold: 100 }),
+  A('pvp10', 'world', 'Campeón de la Arena', 'Gana 10 duelos en la arena', 'Campeón de la Arena', s => s.pvpWins >= 10, { gold: 1000, item: 'epico' }),
+];
+export const TITLES = ACH.map(a => a.title);
+// ================= Jefe de mundo semanal (Versión 3 · Fase 4) =================
+export const WB_KEY = 'titan', WB_ROUNDS = 10, WEEK_MS = 7 * 24 * 3600 * 1000, WB_EPOCH = Date.UTC(2026, 0, 5);   // lunes
+export const wbWeek = now => Math.floor((now - WB_EPOCH) / WEEK_MS);
+// Vida y nivel según cuántas veces ya lo derrotaron en la sala (reaparece más fuerte)
+export const wbStats = gen => ({ lvl: 12 + 4 * gen, mhp: Math.round(6000 * (1 + .5 * gen)) });
+
 // ================= Noche y mascotas (Versión 3 · Fase 3) =================
 export const NIGHT_POOL = ['vampiro', 'lobosombra', 'espectro2'];
 // Mascotas: el efecto mejora con el nivel (máx. 20). El búho no pelea: revela cosas en el minimapa.

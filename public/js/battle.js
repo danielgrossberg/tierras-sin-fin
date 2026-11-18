@@ -11,7 +11,9 @@ import { atkMulB, defMulB, estimate, itemTargets, heroCardHTML } from './estimat
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { isNight, NIGHT_STATS, NIGHT_REWARD } from './daynight.js';
 import { activePet, petPower, catBonus, foxBonus, turtleShield, petGainXP, addEgg } from './pets.js';
-import { PETS, PET_MAX } from './data.js';
+import { PETS, PET_MAX, WB_ROUNDS } from './data.js';
+import { bump } from './achievements.js';
+import { wbReport } from './worldboss.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName } from './state.js';
 import { createTomb } from './tomb.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
@@ -37,7 +39,10 @@ const TURN_MS = 30000;   // tiempo por turno en los combates en equipo
 // y un monto fijo por apoyo (mejoras al grupo, revivir, robar).
 function credit(u, v) { if (BT && u && u.isHero && v > 0) BT.pts[u.id] = (BT.pts[u.id] || 0) + v; }
 const support = u => credit(u, BT ? BT.supp : 0);
-function hurtEnemy(by, d, before) { if (d.isHero) return; credit(by, before - d.hp); if (d.hp <= 0) credit(by, d.mhp * .25); }
+function hurtEnemy(by, d, before) {
+  if (d.isHero) return; credit(by, before - d.hp); if (d.hp <= 0) credit(by, d.mhp * .25);
+  if (BT && by && by.isHero && before > d.hp) { const n = by.remote ? by.owner : st.name; BT.dmgBy[n] = (BT.dmgBy[n] || 0) + (before - d.hp); }
+}
 // Reparte X de experiencia entre los héroes del grupo según sus puntos
 function splitXP(party, X) {
   const pts = party.map(h => Math.max(0, BT.pts[h.id] || 0));
@@ -198,8 +203,8 @@ function log(m) { $('#b-log').innerHTML = m; if (BT && BT.coop) { BT.lastLog = m
 function coopSnapshot() {
   return { id: BT.coop.id, bg: BT.m.biome, log: BT.lastLog || '', turn: BT.turn,
     // def/cu/ud: para que el invitado calcule los estimados de daño (Fase 0.5)
-    enemies: BT.enemies.map(e => ({ id: e.id, e: e.e, name: e.name, lvl: e.lvl, boss: e.boss, tint: e.tint, hp: e.hp, mhp: e.mhp, tags: tags(e), def: Math.round(S(e, 'def') * defMul(e) * 10) / 10, cu: e.buffs.curse > 0, ud: !!e.undead })),
-    party: party().map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: (h.tmp || 0) + (h.shield || 0), tags: tags(h), bear: h.buffs.bear > 0, poison: h.poison || 0, buffs: Object.assign({}, h.buffs) })),
+    enemies: (BT.pvp ? BT.sideA : BT.enemies).map(e => ({ id: e.id, e: e.e, name: BT.pvp ? e.name + ' · ' + (e.owner || BT.coop.me) : e.name, lvl: e.lvl, boss: !!e.boss, tint: e.tint || '', hp: e.hp, mhp: S(e, 'mhp'), tags: tags(e), def: Math.round(S(e, 'def') * defMul(e) * 10) / 10, cu: e.buffs.curse > 0, ud: !!e.undead })),
+    party: (BT.pvp ? BT.sideB : party()).map(h => ({ id: h.id, owner: h.owner || BT.coop.me, e: h.e, name: h.name, cls: h.cls, lvl: h.lvl, hp: h.hp, mhp: S(h, 'mhp'), mp: h.mp, mmp: S(h, 'mmp'), tmp: (h.tmp || 0) + (h.shield || 0), tags: tags(h), bear: h.buffs.bear > 0, poison: h.poison || 0, buffs: Object.assign({}, h.buffs) })),
     pets: (BT.pets || []).map(q => ({ id: q.id, k: q.k, lvl: q.lvl, owner: q.owner || BT.coop.me })), night: !!BT.night,
     pops: BT.pops.splice(0) };
 }
@@ -300,7 +305,7 @@ async function strike(a, d, r, o = {}) {
   anim(d, 'hit'); if (d.hp <= 0) fall(d); refresh();
   await sleep(o.fast ? 220 : 450); return dmg;
 }
-function kill(u) { u.hp = 0; u.poison = 0; u.burn = 0; u.stun = 0; u.tmp = 0; u.trap = 0; u.buffs = {}; if (BT) BT.summons = BT.summons.filter(s => s.owner !== u); if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
+function kill(u) { if (u.isHero && BT && !BT.pvp) BT.fell = true; u.hp = 0; u.poison = 0; u.burn = 0; u.stun = 0; u.tmp = 0; u.trap = 0; u.buffs = {}; if (BT) BT.summons = BT.summons.filter(s => s.owner !== u); if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
 function heal(u, amt, by) { if (by && by.isHero) amt *= 1 + talFx(by, 'healP'); const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
 export function useItem(k, t) { G.items[k]--; itemEffect(k, t); }
 function itemEffect(k, t) {
@@ -346,16 +351,17 @@ const petsHTML = () => (BT.pets || []).length ? `<div id="b-pets">${BT.pets.map(
 // ================= Pantalla de combate =================
 function buildBattle(biome) {
   $('#battle').style.background = BG[biome] || BG.GRASS;
-  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint} drop-shadow(0 8px 6px #0007)">${e.e}</span><div class="en">${e.boss ? '👑 ' : ''}${e.name} <span class="lv">Nv ${e.lvl}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('') + petsHTML() + (BT.night ? '<div id="b-night">🌙 Noche</div>' : '');
+  $('#b-field').innerHTML = BT.enemies.map(e => `<div class="enemy ${e.boss ? 'boss' : ''}" id="u-${e.id}"><span class="sp emoji" style="filter:${e.tint || ''} drop-shadow(0 8px 6px #0007)">${esc(e.e)}</span><div class="en">${e.boss ? '👑 ' : ''}${esc(e.name)}${e.isHero && e.owner ? ' · ' + esc(e.owner) : ''} <span class="lv">Nv ${e.lvl}</span></div>${ebarHTML()}<div class="etags"></div></div>`).join('') + petsHTML() + (BT.night ? '<div id="b-night">🌙 Noche</div>' : '');
   // Los héroes de otros jugadores traen nombre desde la red: siempre escapado
   $('#b-party').innerHTML = party().map(h => `<div class="hcard" id="u-${h.id}"><div class="tags"></div><div class="top"><span class="em emoji">${esc(h.e)}</span><div style="min-width:0"><div class="nm">${esc(h.name)}</div><div class="sub">Nv <span class="lvn">${h.lvl}</span> · ${esc(h.owner ? h.owner : clsName(h))}</div></div></div><div class="bar hpb"><i></i></div><div class="bar mp mpb"><i></i></div><div class="nums"><span class="hpt"></span><span class="mpt"></span></div></div>`).join('');
   $('#b-menu').innerHTML = ''; bossBar(null); refresh();
 }
 export function refresh() {
   updateHUD(); if (!BT) return;
-  for (const e of BT.enemies) { const el = uel(e); if (!el) continue; setBar(el.querySelector('.ebar'), e.hp, e.mhp); el.querySelector('.etags').textContent = tags(e); }
+  const ENS = BT.pvp ? BT.sideB : BT.enemies, PTY = BT.pvp ? BT.sideA : party();   // en un duelo los lados se intercambian un momento
+  for (const e of ENS) { const el = uel(e); if (!el) continue; setBar(el.querySelector('.ebar'), e.hp, S(e, 'mhp')); el.querySelector('.etags').textContent = tags(e); if (e.isHero) el.classList.toggle('dead', e.hp <= 0); }
   const boss = BT.enemies.find(e => e.boss); if (boss) bossBar(boss);
-  for (const h of party()) {
+  for (const h of PTY) {
     const el = uel(h); if (!el) continue; const mh = S(h, 'mhp'), mm = S(h, 'mmp');
     el.classList.toggle('dead', h.hp <= 0); el.classList.toggle('active', BT.active === h);
     el.querySelector('.hpb>i').style.width = (100 * h.hp / mh) + '%'; el.querySelector('.mpb>i').style.width = (100 * h.mp / mm) + '%';
@@ -445,7 +451,7 @@ async function remoteTurn(h) {
     payMP(h, k); log(`${h.name} usa <b>${sk.n}</b>`); anim(h, 'act'); refresh(); await sleep(300); await runSkill(k, h, ts); await echo(h, k, sk, ts);
     return;
   }
-  if (a.kind === 'item' && IT[a.key]) {
+  if (a.kind === 'item' && IT[a.key] && !BT.pvp) {
     const t = IT[a.key].t === 'dead' ? dd(a.target) : al(a.target); if (!t) return autoDefend(h);
     log(`${h.name} usa ${IT[a.key].e} ${IT[a.key].n} en ${t.name}`); itemEffect(a.key, t); await sleep(600); return;
   }
@@ -466,7 +472,7 @@ async function heroTurn(h) {
     log(`Turno de <b>${h.e} ${h.name}</b>`);
     const bear = h.buffs.bear > 0;   // Forma de Oso: solo ataques físicos
     const ea = estFor(h, 'atk');
-    const c = await menu([{ v: 'atk', l: bear ? '🐻 Zarpazo' : '⚔️ Atacar', s: ea.line, n: ea.note }, { v: 'skill', l: bear ? '✨ Habilidades (oso)' : '✨ Habilidades', dis: bear }, { v: 'item', l: '🎒 Objetos' }, { v: 'def', l: '🛡️ Defender', s: 'Recibe la mitad de daño' }, { v: 'run', l: '🏃 Huir', full: 1 }]);
+    const c = await menu([{ v: 'atk', l: bear ? '🐻 Zarpazo' : '⚔️ Atacar', s: ea.line, n: ea.note }, { v: 'skill', l: bear ? '✨ Habilidades (oso)' : '✨ Habilidades', dis: bear }, { v: 'item', l: '🎒 Objetos', dis: !!BT.pvp }, { v: 'def', l: '🛡️ Defender', s: 'Recibe la mitad de daño' }, { v: 'run', l: '🏃 Huir', full: 1, dis: !!BT.pvp }]);
     if (BT.timedOut) return autoDefend(h);
     if (c === 'atk') {
       const t = await pickTarget('enemy', estFor(h, 'atk')); if (BT.timedOut) return autoDefend(h); if (!t) continue; log(`${h.name} ataca a ${t.name}`); anim(h, 'act'); await strike(h, t, phys(h, t, 1));
@@ -510,7 +516,9 @@ async function enemyTurn(e) {
   else if (s === 'drenar') { log(`${e.name} <b>drena la vida</b> de ${t.name}`); const d = await strike(e, t, magic(e, t, 1.1), { col: '#c27bff' }); if (d) { const hh = Math.round(d / 2); e.hp = Math.min(e.mhp, e.hp + hh); popup(e, '+' + hh, '#46c37b'); refresh(); } }
   else if (s === 'fuego') { log(`${e.name} lanza <b>Aliento de Fuego</b>`); for (const h of ts) await strike(e, h, magic(e, h, .85), { fast: 1, col: '#ff9a3d' }); }
 }
-const outcome = () => !alive(BT.enemies).length ? 'win' : !alive(party()).length ? 'lose' : null;
+const outcome = () => BT.pvpCancel ? 'cancel' : !alive(BT.enemies).length ? 'win' : !alive(party()).length ? 'lose' : null;
+// Duelo: el héroe del rival actúa con los lados intercambiados (sus aliados son "party" y los míos "enemies")
+async function sideBTurn(u) { const a = BT.party, b = BT.enemies; BT.party = b; BT.enemies = a; try { return await heroTurn(u); } finally { BT.party = a; BT.enemies = b; } }
 async function runBattle() {
   while (true) {
     const order = [...alive(party()), ...alive(BT.enemies)].map(u => ({ u, i: S(u, 'spd') * spdMul(u) * (.75 + Math.random() * .5), h: u.buffs.haste > 0 ? 1 : 0 })).sort((a, b) => b.h - a.h || b.i - a.i).map(o => o.u);
@@ -539,7 +547,7 @@ async function runBattle() {
       if (u.buffs.regen > 0) { const g = Math.min(S(u, 'mhp') - u.hp, Math.max(1, Math.round(S(u, 'mhp') * .06))); if (g > 0) { u.hp += g; popup(u, '💚+' + g, '#46c37b'); } }
       let r;
       if (u.stun > 0) { u.stun--; popup(u, '💫 Aturdido', '#ffe08a'); log(`${u.name} está aturdido y pierde el turno`); refresh(); await sleep(500); }
-      else r = u.isHero ? await heroTurn(u) : await enemyTurn(u);
+      else r = u.isHero ? (BT.pvp && BT.sideB.includes(u) ? await sideBTurn(u) : await heroTurn(u)) : await enemyTurn(u);
       if (BT.coop) stopClock();
       if (u.isHero) BT.acted.add(u.id);
       for (const k in u.buffs) if (u.buffs[k] > 0) u.buffs[k]--;
@@ -550,6 +558,7 @@ async function runBattle() {
     }
     BT.round = (BT.round || 0) + 1;
     await petsAct();
+    if (BT.maxRounds && BT.round >= BT.maxRounds && !outcome()) return 'retreat';   // el jefe de mundo se retira
     if (BT.corpse && --BT.corpse.n <= 0) BT.corpse = null;
     // Al final de cada ronda atacan las invocaciones (Alzar Esqueleto)
     for (const sm of [...BT.summons]) {
@@ -569,26 +578,31 @@ function waitButton(label) { if (AUTO) return Promise.resolve(); return new Prom
 // opts.dmgMul: ajusta el daño de los enemigos (jefes en equipo, ver coop.js)
 export async function startBattle(m, opts = {}) {
   if (st.busy) return; st.busy = true; held.clear();
-  const ens = m.group.map((k, i) => mkEnemy(k, Math.max(1, m.boss && i > 0 ? m.lvl - 2 : m.lvl)));
+  const ens = opts.pvp ? opts.pvp.enemies : m.group.map((k, i) => mkEnemy(k, Math.max(1, m.boss && i > 0 ? m.lvl - 2 : m.lvl)));
   if (opts.bossMul && ens[0] && ens[0].boss) { ens[0].mhp = Math.round(ens[0].mhp * opts.bossMul); ens[0].hp = ens[0].mhp; }
   if (opts.dmgMul) for (const e of ens) { e.atk *= opts.dmgMul; e.mag *= opts.dmgMul; }
   // Noche (fuera de las mazmorras): +20% de stats y +30% de experiencia y oro
-  const night = !m.dun && isNight();
+  const night = !m.dun && !opts.pvp && isNight();
+  // Jefe de mundo: la vida es la compartida del servidor
+  if (m.wb && ens[0]) { ens[0].mhp = m.wb.mhp; ens[0].hp = m.wb.hp; }
   if (night) for (const e of ens) { e.mhp = Math.round(e.mhp * NIGHT_STATS); e.hp = e.mhp; e.atk *= NIGHT_STATS; e.def *= NIGHT_STATS; e.mag *= NIGHT_STATS; e.xp = Math.round(e.xp * NIGHT_REWARD); e.g = Math.round(e.g * NIGHT_REWARD); }
-  const supp = Math.round(.15 * ens.reduce((a, e) => a + e.mhp, 0) / ens.length);
+  const supp = Math.round(.15 * ens.reduce((a, e) => a + S(e, 'mhp'), 0) / ens.length);
   BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set(),
-    party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null, night, round: 0, pets: [] };
-  { const own = activePet(); if (own) BT.pets.push({ id: 'pet0', k: own.k, lvl: own.lvl, hero: BT.party[0] });
+    party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null, night, round: 0, pets: [], dmgBy: {}, fell: false, pvp: !!opts.pvp, maxRounds: m.wb ? WB_ROUNDS : 0 };
+  BT.sideA = BT.party; BT.sideB = ens;
+  if (!BT.pvp) { const own = activePet(); if (own) BT.pets.push({ id: 'pet0', k: own.k, lvl: own.lvl, hero: BT.party[0] });
     BT.party.filter(h => h.remote && validPet(h.pet)).forEach((h, i) => BT.pets.push({ id: 'pet' + (i + 1), k: h.pet.k, lvl: h.pet.lvl, owner: h.owner, hero: h })); }
   // Talentos: escudo al empezar (Bastión, Barrera, Barba de Hierro)
-  for (const h of BT.party) { h.shield = 0; h.ward = 0; h.nextCrit = 0; const ss = talFx(h, 'startShield'); if (ss && h.hp > 0) h.shield = Math.round(S(h, 'mhp') * ss); }
+  for (const h of [...BT.party, ...(BT.pvp ? ens : [])]) { h.shield = 0; h.ward = 0; h.nextCrit = 0; const ss = talFx(h, 'startShield'); if (ss && h.hp > 0) h.shield = Math.round(S(h, 'mhp') * ss); }
   buildBattle(m.biome); $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
   log((m.boss ? `⚠️ ¡Un jefe se alza: <b>${ens[0].name}</b>!${BT.coop ? ' · ¡En equipo!' : ''}` : `¡Aparecen ${ens.map(e => e.e + ' ' + e.name).join(', ')}!`) + (night ? ' 🌙' : ''));
   coopSync(true);
   await sleep(1000);
   const res = await runBattle();
   for (const h of G.roster) { h.buffs = {}; h.defending = false; h.stun = 0; h.tmp = 0; h.trap = 0; h.shield = 0; h.ward = 0; h.nextCrit = 0; h.agony = null; }
-  if (BT.coop) await coopFinish(res);
+  if (BT.pvp) await pvpFinish(res);
+  else if (m.wb) await wbFinish(res);
+  else if (BT.coop) await coopFinish(res);
   else if (res === 'win') await victory();
   else if (res === 'lose') await defeat();
   else m.stun = 5;
@@ -607,6 +621,7 @@ async function victory() {
   for (let i = 0; i < G.roster.length; i++) if (!G.party.includes(i)) gainXP(G.roster[i], xp * .1);
   lines.push(`<div class="xpl">${team.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
   lines.push(...lvMsgs);
+  bump('kills', BT.enemies.length); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
   if (BT.night) lines.push('🌙 <span class="mut">Bonus nocturno: +30% de experiencia y botín</span>');
   if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
@@ -645,6 +660,7 @@ async function coopFinish(res) {
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
+  bump('kills', BT.enemies.length); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
   const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1));
   G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg());
   lines.push(...petGainXP(activePet(), xp * .5));
@@ -655,6 +671,41 @@ async function coopFinish(res) {
   lines.push(...onVictory(BT.enemies, m));
   notice('boss', BT.enemies[0].name);
   log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
+  await waitButton('Continuar');
+}
+// ================= Jefe de mundo: fin de un intento (Versión 3 · Fase 4) =================
+async function wbFinish(res) {
+  const m = BT.m, boss = BT.enemies[0], dmg = Math.max(0, m.wb.hp - boss.hp), parts = {};
+  for (const [n, v] of Object.entries(BT.dmgBy)) if (v > 0) parts[n] = Math.round(v);
+  const xp = Math.round(boss.xp * .35);
+  if (BT.coop) BT.coop.end({ id: BT.coop.id, result: res === 'lose' ? 'lose' : 'wb', xp, dmg, parts, gold: 0, boss: { id: m.id, lvl: m.lvl, name: boss.name, keys: [], x: m.x, y: m.y },
+    heroes: party().filter(h => h.remote).map(h => ({ owner: h.owner, hp: h.hp, mp: h.mp, poison: h.poison || 0 })) });
+  const r = dmg > 0 ? await wbReport(m.wb.week, parts) : null;
+  if ((parts[st.name] || 0) > 0) bump('wbHits');
+  if (res === 'lose') { await defeat(); return; }
+  const w = r && r.wb, lines = [res === 'win' ? '🌋 <b>¡El Titán de Lava cae!</b>' : `🌋 <b>El titán se retira</b> tras ${WB_ROUNDS} rondas`];
+  lines.push(`Daño de este intento: <b>${dmg.toLocaleString('es-CL')}</b>${BT.coop ? ` (tú: ${(parts[st.name] || 0).toLocaleString('es-CL')})` : ''}`);
+  if (dmg > 0 && !(r && r.ok)) lines.push('<span style="color:#ff8a8a">⚠️ No se pudo registrar el daño (sin conexión o el titán ya cayó).</span>');
+  if (w) lines.push(`Vida del titán: ${w.hp.toLocaleString('es-CL')} / ${w.mhp.toLocaleString('es-CL')}${w.killed ? ' · ¡derrotado! Recibirás tu recompensa' : ''}`);
+  for (const h of party().filter(x => !x.remote && x.hp > 0)) lines.push(...gainXP(h, xp));
+  log(lines[0]); $('#b-menu').innerHTML = `<div class="res">${lines.join('<br>')}</div>`;
+  await waitButton('Continuar');
+}
+// ================= Duelo en la arena: fin (Versión 3 · Fase 4) =================
+// Amistoso: no se pierde nada y todos recuperan la vida y la magia. Puntos: ganar 10 (1v1) o 15 (3v3), perder 2.
+export function arenaResult(win, mode) {
+  G.arena = G.arena || { pts: 0, w: 0, l: 0 };
+  const pts = win ? (mode === '3v3' ? 15 : 10) : 2; G.arena.pts += pts; if (win) { G.arena.w++; bump('pvpWins'); } else G.arena.l++;
+  for (const h of heroes()) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; }
+  return pts;
+}
+async function pvpFinish(res) {
+  const cancel = res === 'cancel', win = res === 'win', mode = BT.coop.mode;
+  BT.coop.end({ id: BT.coop.id, result: cancel ? 'cancel' : win ? 'pvplose' : 'pvpwin', mode, reason: BT.pvpCancel ? 'el rival se desconectó' : '' });
+  let line;
+  if (cancel) line = '⚠️ <b>Duelo cancelado</b>. No cambia nada.';
+  else { const pts = arenaResult(win, mode); line = win ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`; }
+  log(line); $('#b-menu').innerHTML = `<div class="res">${line}<br><span class="mut">Duelo amistoso: todos recuperan la vida y la magia.</span></div>`;
   await waitButton('Continuar');
 }
 // Todo el grupo cayó (Versión 2): despiertan en Ciudad Origen con todos revividos; se conservan niveles,

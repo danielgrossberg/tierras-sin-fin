@@ -12,6 +12,9 @@ import { D, DW, DH, VISION, inDungeon, isSeen, isVisible, dunProg, caveDone } fr
 import { CAVE, PETS } from './data.js';
 import { darkness, twilight } from './daynight.js';
 import { activePet } from './pets.js';
+import { wbAlive, wbPos } from './worldboss.js';
+// Título del jugador bajo sus pies (Versión 3 · Fase 4)
+function titleTag(txt, X, Y, alpha) { if (!txt) return; ctx.save(); ctx.globalAlpha = alpha; ctx.font = `italic bold 10px system-ui,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText('«' + txt + '»', X, Y); ctx.fillStyle = '#ffe08a'; ctx.fillText('«' + txt + '»', X, Y); ctx.restore(); }
 // Mascota que sigue al grupo: más chica, detrás del líder, saltando un poco
 function petSprite(e, X, Y, TS, t, face, alpha) {
   const px = X - face * TS * .5, py = Y + TS * .18 - Math.abs(Math.sin(t / 180)) * 2.5;
@@ -330,6 +333,14 @@ export function draw(t) {
     sprites.push({ y: tq.target.y + .02, fn: () => { const X = sx(tq.target.x), Y = sy(tq.target.y); emoji('❗', X, Y - TS * 1.05 - Math.abs(Math.sin(t / 250)) * 5, TS * .6); } });
   }
   const onWater = tileAt(P.x, P.y).b === 'WATER';
+  // 🌋 Jefe de mundo: gigante, con brillo de lava y su barra de vida compartida
+  if (wbAlive()) { const q = wbPos(); if (q && q.x >= x0 - 1 && q.x <= x1 + 1 && q.y >= y0 - 1 && q.y <= y1 + 1) sprites.push({ y: q.y + .1, fn: () => {
+    const X = sx(q.x), Y = sy(q.y), r = TS * (1.6 + .12 * Math.sin(t / 300)), w = net.wb;
+    const gr = ctx.createRadialGradient(X, Y, 0, X, Y, r); gr.addColorStop(0, 'rgba(255,90,31,.6)'); gr.addColorStop(1, 'rgba(255,90,31,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+    shadow(X, Y + TS * .6, TS * .8); emoji('🌋', X, Y - TS * .3 - Math.abs(Math.sin(t / 500)) * 3, TS * 2.1); emoji('👑', X, Y - TS * 1.5, TS * .5);
+    const bw = TS * 2.2, bx = X - bw / 2, by = Y + TS * .75; ctx.fillStyle = '#000c'; ctx.fillRect(bx - 1, by - 1, bw + 2, 9); ctx.fillStyle = '#ff5a1f'; ctx.fillRect(bx, by, bw * w.hp / w.mhp, 7);
+    label(`Titán de Lava · ${Math.round(100 * w.hp / w.mhp)}%`, X, by + 17, 11, '#ffd0b0');
+  } }); }
   // Otros jugadores
   const away = [];
   for (const o of net.others.values()) {
@@ -342,6 +353,7 @@ export function draw(t) {
       if (o.pet && o.biome !== 'WATER' && o.status !== 'dungeon') petSprite(o.pet, X, Y, TS, t, 1, a);
       heroSprite(X, Y - (moving ? Math.abs(Math.sin(t / 70)) * 4 : 0), o.biome === 'WATER' ? '⛵' : (o.leaderEmoji || '🙂'), TS * .95, mateColor(o.name), t, false, a,
         statusIcon(o.status) + o.name + (o.online === false ? ' 📴' : ''), '#0b0e18');
+      titleTag(o.title, X, Y + TS * .62, a);
     } });
   }
   // Tumba 🪦 propia (con brillo y "Tus objetos") y las de los compañeros ("🪦 de Nombre", no se pueden recoger)
@@ -366,6 +378,7 @@ export function draw(t) {
     shadow(X, Y + TS * .4, TS * .36);
     // 18% más grande que un monstruo normal (TS*.82), anillo dorado con pulso y nombre en dorado
     heroSprite(X, Y + bob, onWater ? '⛵' : leader().e, TS * .97, '#f2c14e', t, P.face > 0 && !onWater, 1, st.name || 'Tú', '#241a00');
+    titleTag(G.title, X, Y + TS * .62, 1);
   } });
   sprites.sort((a, b) => a.y - b.y).forEach(s => s.fn());
   // ---- Día y noche (Versión 3 · Fase 3)
@@ -391,6 +404,8 @@ export function draw(t) {
   refreshHud(t);
   const placed = [], vx = sx(START.x), vy = sy(START.y);
   if (offscreen(vx, vy)) edgeArrow(vx, vy, '🏰', `Ciudad Origen · ${Math.round(Math.hypot(START.x - P.x, START.y - P.y))} c`, '#f2c14e', '#ffe6a0', 1, placed);
+  // Jefe de mundo (naranja, siempre que esté vivo)
+  if (wbAlive()) { const q = wbPos(); if (q) { const wx = sx(q.x), wy = sy(q.y); if (offscreen(wx, wy)) edgeArrow(wx, wy, '🌋', `Titán · ${Math.round(Math.hypot(q.x - P.x, q.y - P.y))} c`, '#ff5a1f', '#ffd0b0', 1, placed); } }
   // Aldea más cercana (gris)
   { const v = nearestVillage(P.x, P.y); if (v) { const ax = sx(v.x), ay = sy(v.y); if (offscreen(ax, ay)) edgeArrow(ax, ay, '🏘️', `${v.name} · ${Math.round(Math.hypot(v.x - P.x, v.y - P.y))} c`, '#9aa3b5', '#e2e6ef', 1, placed); } }
   // Tumba (roja): distancia y minutos que quedan

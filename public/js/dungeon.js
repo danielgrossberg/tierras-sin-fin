@@ -17,6 +17,7 @@ import { save } from './storage.js';
 import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { onDungeonDone } from './quests.js';
 import { activePet, owlRadius, stepEggs } from './pets.js';
+import { bump } from './achievements.js';
 import { PETS } from './data.js';
 
 export const DW = 40, DH = 30, VISION = 5;
@@ -182,7 +183,7 @@ function fight(m) {
 function monsterDown(m) {
   D.mons.delete(m.id); D.mpos.delete(m.x + ',' + m.y);
   if (!m.boss) { D.dead.add(m.id); return []; }   // los normales reaparecen la próxima vez que entres
-  const pr = dunProg(D.cave.id); pr.boss = 1; pr.done = 1;
+  const pr = dunProg(D.cave.id); if (!pr.done) bump('dungeons'); pr.boss = 1; pr.done = 1;
   return [`✅ <b>¡Mazmorra completada!</b> Apareció un portal de salida 🌀`, ...onDungeonDone(D.cave.id)];
 }
 function moveMons() {
@@ -229,7 +230,7 @@ function openChest(c) {
   const ilvl = D.cave.lvl + D.f, luck = Math.min(1, Math.hypot(D.cave.x - START.x, D.cave.y - START.y) / 400);
   const it = rollLoot(ilvl, luck, 'comun', Math.random, 1);   // +1 nivel de rareza garantizado
   if (!addItem(it)) { toast('🎒 Inventario lleno: el cofre sigue aquí. Vende o tira algo y vuelve.'); return; }
-  dunProg(D.cave.id).ch[c.id] = 1;
+  dunProg(D.cave.id).ch[c.id] = 1; bump('chests');
   const g = Math.round((15 + ilvl * 6) * (.8 + Math.random() * .4)); G.gold += g;
   toast(`📦 Cofre de mazmorra: ${itemLabel(it)}<br><span style="font-size:13px;color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</span> <span style="font-size:13px">· +${g} oro</span>`);
   save();

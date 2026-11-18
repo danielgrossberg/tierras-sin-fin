@@ -6,6 +6,9 @@ import { G, P, START, st, held, S, heroes, alive, need, avgLvl, leader, changeEq
 import { ADV, ADV_LVL, TAL, TAL_LVLS, advOf, PETS, EGG_PRICE, EGG_STEPS, PET_MAX } from './data.js';
 import { activePet, petLabel, petEffect, petNeed, addEgg } from './pets.js';
 import { isNight, clockText, darkness } from './daynight.js';
+import { achTabHTML, loadRank, setTitle, achCount } from './achievements.js';
+import { challenge, coopBusy } from './coop.js';
+import { wbAlive, wbPos, wbWhere } from './worldboss.js';
 import { feats, monsters, getChunk, tileAt, dangerAt, ckey, inVillage, isCoastal, spawnNearby, visitAround, nearestVillage as nearestV } from './world.js';
 import { boardQuest, accept, abandon, track, tracked, active, isActive, progressText, rewardText, compass, MAX_ACTIVE, SLOTS_PER_BOARD, QICON, QNAME } from './quests.js';
 import { runSkill, useItem, skillCost } from './battle.js';
@@ -88,6 +91,7 @@ export function updateCoords() {
     const v = nearestVillage();
     if (G.tomb) h += `<div class="crow ctomb">🪦 <b>Tus objetos:</b> ${rel(G.tomb.x, G.tomb.y)} · ${towards(G.tomb.x, G.tomb.y)} · ${tombMinutes()} min</div>`;
     h += `<div class="crow">🏰 <b>Ciudad Origen:</b> 0, 0 · ${towards(START.x, START.y)}</div>`;
+    if (wbAlive()) { const w = net.wb, q = wbPos(); if (q) h += `<div class="crow cwb">🌋 <b>Titán de Lava:</b> ${Math.round(100 * w.hp / w.mhp)}% · ${rel(q.x, q.y)} · ${towards(q.x, q.y)}</div>`; }
     h += `<div class="crow">🏘️ ${v ? `<b>${esc(v.name)}:</b> ${rel(v.x, v.y)} · ${towards(v.x, v.y)}` : '<span class="mut">Aún no hay otras aldeas cerca</span>'}</div>`;
     for (const o of net.others.values()) {
       const col = mateColor(o.name), pos = o.status && !MATE_ST[o.status] && Number.isFinite(o.x);
@@ -103,14 +107,14 @@ export function playersHTML(onlyOthers) {
   const rows = [];
   if (!onlyOthers && st.inGame) {
     const b = tileAt(P.x, P.y).b;
-    rows.push(`<div class="prow me"><span class="emoji pe">${leader().e}</span><div class="pi"><b>${esc(st.name)}</b> <span class="mut">(tú) · Nv ${avgLvl().toFixed(1)}</span><div class="mut ps">${B[b].i} ${B[b].n}</div></div></div>`);
+    rows.push(`<div class="prow me"><span class="emoji pe">${leader().e}</span><div class="pi"><b>${esc(st.name)}</b>${G.title ? ` <span class="ptitle">«${esc(G.title)}»</span>` : ''} <span class="mut">(tú) · Nv ${avgLvl().toFixed(1)}</span><div class="mut ps">${B[b].i} ${B[b].n}</div></div></div>`);
   }
   for (const o of net.others.values()) {
     const away = o.status === 'away', lobby = o.status === 'lobby' || away, off = o.online === false;
     const bi = B[o.biome] || B.GRASS;
     const where = lobby || o.status === 'dungeon' ? '' : `${bi.i} ${bi.n}`;
     const dist = !lobby && st.inGame ? `<span class="pd">${Math.round(Math.hypot(o.x - P.x, o.y - P.y))} c ${dirArrow(o.x - P.x, o.y - P.y)}</span>` : '';
-    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b> <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : o.vs ? '👑 vs ' + esc(o.vs) : o.status === 'dungeon' && o.dun ? '🕳️ en ' + esc(o.dun) : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
+    rows.push(`<div class="prow ${off ? 'off' : ''}"><span class="emoji pe">${away ? '💤' : lobby ? '⏳' : esc(o.leaderEmoji || '🙂')}</span><div class="pi"><b>${esc(o.name)}</b>${o.title ? ` <span class="ptitle">«${esc(o.title)}»</span>` : ''} <span class="mut">${lobby ? '' : '· Nv ' + Number(o.avgLvl || 1).toFixed(1)}</span><div class="mut ps">${away ? '💤 fuera de línea' : off ? '📴 desconectado' : o.vs ? '👑 vs ' + esc(o.vs) : o.status === 'dungeon' && o.dun ? '🕳️ en ' + esc(o.dun) : STATUS[o.status] || ''}${where ? ' · ' + where : ''}</div></div>${dist}</div>`);
   }
   if (!rows.length || (rows.length === 1 && !onlyOthers && st.inGame)) rows.push(`<div class="mut pempty">${st.online ? 'Comparte el código <b>' + esc(st.room) + '</b> para que tu amigo entre.' : 'Modo sin conexión.'}</div>`);
   return rows.join('');
@@ -149,7 +153,7 @@ function villageRender() {
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
       : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
   </div>
-  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}
+  ${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${arenaHTML(f)}
   <div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div></div>
@@ -175,6 +179,7 @@ function villageAct(a, k) {
   // Mascotas (Versión 3 · Fase 3)
   if (a === 'buyegg' && VF.start && G.gold >= EGG_PRICE) { G.gold -= EGG_PRICE; addEgg('tienda'); save('now'); VMSG = `🥚 Compraste un huevo de mascota. Eclosiona en ${EGG_STEPS} pasos.`; }
   if (a === 'petuse') { const q = (G.pets || []).find(x => x.id === k); if (q) { G.pet = q.id; save('now'); VMSG = `🐾 Ahora te acompaña ${PETS[q.k].e} ${PETS[q.k].n}.`; } }
+  if (a === 'duel') { const i = k.indexOf(':'), mode = k.slice(0, i), to = k.slice(i + 1); closeModal(); challenge(to, mode); return; }
   if (a === 'petstay') { G.pet = null; save('now'); VMSG = '🐾 Tu mascota se quedó en el establo.'; }
   // ---- Misiones, bote y portal (fase C) ----
   if (a === 'qacc') {
@@ -221,6 +226,16 @@ function boardHTML(f) {
       ${on ? '<span class="qon">✅ En curso</span>' : `<button class="btn sm" data-a="qacc" data-k="${s}" ${n >= MAX_ACTIVE ? 'disabled' : ''}>Aceptar</button>`}</div>`;
   }
   return `<div class="sec"><h3>📜 Tablón de misiones <small class="mut">${n}/${MAX_ACTIVE} activas</small></h3>${rows}</div>`;
+}
+// ---- Arena PvP (Versión 3 · Fase 4): solo en Ciudad Origen, contra jugadores que también estén aquí ----
+function arenaHTML(f) {
+  if (!f.start) return '';
+  const here = [...net.others.values()].filter(o => o.online !== false && o.x === START.x && o.y === START.y && (o.status === 'village' || o.status === 'map'));
+  const a = G.arena || { pts: 0, w: 0, l: 0 };
+  return `<div class="sec"><h3>⚔️ Arena <small class="mut">duelos amistosos: no se pierde nada</small></h3>
+    <p class="mut small" style="margin:0 0 6px">Tus puntos: <b class="goldt">${a.pts}</b> · ${a.w} victorias · ${a.l} derrotas. Los stats se nivelan: el de menor nivel recibe una bonificación. 30 s por turno.</p>
+    ${!st.online ? '<p class="mut small">La arena necesita conexión.</p>' : here.length ? here.map(o => `<div class="shop"><span>${esc(o.leaderEmoji || '🙂')} <b>${esc(o.name)}</b> <small class="mut">Nv ${Number(o.avgLvl || 1).toFixed(1)}${o.title ? ' · «' + esc(o.title) + '»' : ''}</small></span><span class="arbtns"><button class="btn sm gold" data-a="duel" data-k="1v1:${esc(o.name)}" ${coopBusy() ? 'disabled' : ''}>1 vs 1</button><button class="btn sm" data-a="duel" data-k="3v3:${esc(o.name)}" ${coopBusy() ? 'disabled' : ''}>3 vs 3</button></span></div>`).join('')
+      : '<p class="mut small" style="margin:0">No hay otros jugadores en Ciudad Origen ahora. Pídele a tu amigo que venga 🏰.</p>'}</div>`;
 }
 // ---- Establo y huevos (Versión 3 · Fase 3) ----
 function stableHTML(f) {
@@ -444,12 +459,12 @@ function questsTab() {
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['quests', `📜 Misiones <small>${active().length}</small>`]];
+  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`]];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
-  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : heroesTab();
+  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
   h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;
@@ -465,6 +480,8 @@ async function partyAct(a, k) {
     NGC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return;
   }
   if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; }
+  if (a === 'title') { setTitle(k); save(); }
+  if (a === 'rank') { rerender(); await loadRank(); }
   if (a === 'qtrack') track(k);
   if (a === 'qdrop') { if (QD !== k) QD = k; else { abandon(k); QD = null; save(); } }
   if (a === 'cancel') PA = null;

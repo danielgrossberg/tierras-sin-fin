@@ -322,6 +322,27 @@ Abre <http://localhost:3000>. El puerto se puede cambiar con la variable `PORT`.
   mejora). No muere. En los jefes en equipo acompaña al héroe elegido.
 - **Guardado:** `saveVersion` 10: `pets`, `pet` y `eggs`.
 
+### Fase 4 (lista): logros, jefe de mundo semanal y arena PvP
+- **🏆 Logros** (🎒 Grupo → Logros): 30 logros en 7 categorías (exploración, combate, mazmorras, cooperativo,
+  colección, clases, mundo y arena), con barra de progreso. Cada uno da un **título** que se muestra bajo tu nombre
+  en el mapa y en el panel de jugadores (se elige en la misma pestaña), y algunos dan oro o equipo. Al desbloquear:
+  aviso propio y aviso a la sala ("🏆 Dani consiguió «Matadragones»", también en el chat). Los logros que una partida
+  vieja ya cumple se desbloquean solos al entrar. **Ranking de la sala** (más logros, más lejos, más jefes y arena),
+  guardado en el servidor (tabla `player_stats`).
+- **🌋 Jefe de mundo semanal (Titán de Lava):** cada semana aparece a 60–100 casillas de Ciudad Origen, en un lugar
+  determinista (semilla de la sala + número de semana), con flecha naranja, marca en el minimapa y una línea en la
+  tarjeta de coordenadas. Su **vida es compartida por toda la sala** y la guarda el servidor (tabla `world_boss`).
+  Cada intento (solo con el grupo o en equipo con 📣 Pedir ayuda) dura **máximo 10 rondas**; luego se retira y el daño
+  queda registrado con el aporte de cada jugador. Si el grupo cae, aplica la tumba. Al derrotarlo, cada uno que
+  aportó recibe oro y equipo Épico o Legendario según su daño, y el título «Azote de Titanes». La semana siguiente
+  reaparece más fuerte (nivel +4 y +50% de vida por cada vez que cayó).
+- **⚔️ Arena** en Ciudad Origen: desafía a un jugador que también esté ahí, **1 contra 1** (cada uno elige 1 héroe)
+  o **3 contra 3** (el grupo). Duelo amistoso: se usan copias de los héroes, nadie pierde nada y al terminar todos
+  recuperan la vida y la magia. Los stats se nivelan (el lado de menor nivel sube al nivel del otro, conservando sus
+  habilidades). Sin objetos ni huir; 30 s por turno; el retador es el anfitrión. Si alguien se desconecta, el duelo se
+  cancela sin efecto. Puntos: ganar 10 (1v1) o 15 (3v3), perder 2. Logros «el Duelista» y «Campeón de la Arena».
+- **Guardado:** `saveVersion` 11: `stats`, `ach`, `title`, `arena`, `wbClaim`, `wbSeen`.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -336,7 +357,7 @@ Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y si
    - Value: la connection string que copiaste
    - **Save Changes** (Render redespliega solo).
 5. Comprueba en `https://<tu-servicio>.onrender.com/health` que diga `"db":"ok"`.
-   Las tablas `rooms`, `players` y `chat_messages` se crean solas al arrancar.
+   Las tablas `rooms`, `players`, `chat_messages`, `player_stats` y `world_boss` se crean solas al arrancar.
 
 **Probar sin base de datos (local):** `npm start` sin `DATABASE_URL` → `/health` dice `"db":"off"`, no se pide PIN
 y todo se guarda en el navegador. **Probar con base de datos (local):** `DATABASE_URL="postgresql://…" npm start`
@@ -368,6 +389,8 @@ public/js/estimate.js  Estimados de daño/curación de los botones y vista previ
 public/js/hpbar.js     Barras de vida de enemigos con números y barra grande de jefe
 public/js/daynight.js  Día y noche con la hora del servidor
 public/js/pets.js      Mascotas: huevos, eclosión, efectos y experiencia
+public/js/achievements.js Logros, títulos y ranking de la sala
+public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso
 public/js/net.js       Conexión Socket.io, reconexión y estado de los demás jugadores
 public/js/storage.js   Guardado local (clave tsf:{sala}:{nombre})
@@ -394,6 +417,10 @@ scripts/make-icons.js  Genera los íconos (npm run icons)
 | `battle:state` | anfitrión → invitados | estado del combate (enemigos, héroes, turno, registro, números flotantes) |
 | `battle:action` | invitado → anfitrión | `{id, heroId, kind, key, target}` (kind: atk, skill, item o def) |
 | `battle:end` | anfitrión → invitados | `{result, xp, gold, boss, heroes}` (win, lose o cancel; si se va el anfitrión, el servidor manda cancel) |
+| `stats:push` / `rank:get` | cliente → servidor | logros, distancia, jefes, arena y título / ranking de la sala (ack) |
+| `wb:get` / `wb:hit` | cliente → servidor (ack) | estado del jefe de mundo / daño de un intento `{week, parts:{nombre: daño}}` |
+| `wb:state` | servidor → sala | `{week, gen, hp, mhp, lvl, contrib, killed}` |
+| `pvp:invite` / `pvp:accept` / `pvp:decline` | retador ↔ desafiado | duelo en la arena; luego `pvp:start` al retador y el combate usa `battle:state/action/end` |
 
 El servidor valida tipos, largos y frecuencias de todo lo que llega. Los eventos de los jefes en equipo están en `server.js` (sesiones) y `public/js/coop.js` (cliente).
 

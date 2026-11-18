@@ -16,10 +16,12 @@ import { petSnap, activePet, catBonus, petGainXP, addEgg } from './pets.js';
 import { PETS } from './data.js';
 import { onVictory } from './quests.js';
 import { createTomb } from './tomb.js';
+import { arenaResult } from './battle.js';
 import { heroFx, talFx, talSk, clsName } from './state.js';
 import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { inDungeon } from './dungeon.js';
+import { bump } from './achievements.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -33,6 +35,7 @@ export function coopVs() {
   return coop.guest && coop.guest.started ? coop.guest.boss.name : null;
 }
 export const inCoopBattle = () => !!(coop.guest && coop.guest.started);
+export const coopBusy = () => !!(coop.pvp || coop.host || coop.guest);
 
 // Héroe que se manda a la sesión (con sus mejoras de herrería)
 // tal/adv: talentos y clase avanzada (Versión 3 · Fase 2) · gold: para Lluvia de Monedas
@@ -41,14 +44,14 @@ const onlineMates = () => [...net.others.values()].filter(o => o.online !== fals
 export const canAskHelp = () => st.online && net.status === 'on' && onlineMates().length > 0;
 
 // ================= Elegir 1 héroe (tarjetas) =================
-function chooseHero(title, sub, cb) {
+function chooseHero(title, sub, cb, anyHp) {
   const list = G.party.map(i => G.roster[i]);
   openModal(() => `<h2>${title}</h2><p class="mut" style="margin:0 0 8px">${sub}</p>
-    <div class="pick">${list.map((h, i) => { const dead = h.hp <= 0, mh = S(h, 'mhp'), mm = S(h, 'mmp');
+    <div class="pick">${list.map((h, i) => { const dead = h.hp <= 0 && !anyHp, mh = S(h, 'mhp'), mm = S(h, 'mmp');
       return `<button class="pickc ${dead ? 'dead' : ''}" data-a="pick" data-k="${i}" ${dead ? 'disabled' : ''}><span class="emoji pe">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}</small>
         <span class="bar"><i style="width:${100 * h.hp / mh}%"></i></span><span class="bar mp"><i style="width:${100 * h.mp / mm}%"></i></span><small>${dead ? '💀 Caído' : `PV ${h.hp}/${mh} · PM ${h.mp}/${mm}`}</small></button>`; }).join('')}</div>
     <div class="row end"><button class="btn" data-a="back">Volver</button></div>`,
-  (a, k) => { if (a === 'back') { closeModal(); return; } if (a === 'pick') { const h = list[+k]; if (!h || h.hp <= 0) return; closeModal(); cb(h); } });
+  (a, k) => { if (a === 'back') { closeModal(); return; } if (a === 'pick') { const h = list[+k]; if (!h || (h.hp <= 0 && !anyHp)) return; closeModal(); cb(h); } });
 }
 
 // ================= Anfitrión =================
@@ -121,9 +124,17 @@ let inviteTick = null;
 function renderInvites() {
   const box = $('#invite'); if (!box) return;
   const now = Date.now();
+  if (coop.pvpInv && coop.pvpInv.until > now && !coop.guest && !coop.host && !coop.pvp && st.inGame) {
+    const v = coop.pvpInv, left = Math.ceil((v.until - now) / 1000), busy = !!getBT();
+    box.innerHTML = `<div class="invt">⚔️ <b>${esc(v.host)}</b> te desafía a un duelo <b>${v.mode === '3v3' ? '3 contra 3' : '1 contra 1'}</b> en la Arena</div>
+      <div class="invs mut">⏳ ${left} s · amistoso: no se pierde nada${busy ? ' · termina tu combate primero' : ''}</div>
+      <div class="invb"><button class="btn gold" data-i="pvpok" data-k="${esc(v.id)}" ${busy ? 'disabled' : ''}>⚔️ Aceptar</button><button class="btn" data-i="pvpno" data-k="${esc(v.id)}">Rechazar</button></div>`;
+    box.classList.remove('hidden'); if (!inviteTick) inviteTick = setInterval(renderInvites, 1000); return;
+  }
+  if (coop.pvpInv && coop.pvpInv.until <= now) coop.pvpInv = null;
   for (const [id, v] of net.invites) if (v.until < now) net.invites.delete(id);
   const v = [...net.invites.values()].pop();
-  if (!v || coop.guest || coop.host || !st.inGame) { box.classList.add('hidden'); clearInterval(inviteTick); inviteTick = null; return; }
+  if (!v || coop.guest || coop.host || coop.pvp || !st.inGame) { box.classList.add('hidden'); if (!coop.pvpInv) { clearInterval(inviteTick); inviteTick = null; } return; }
   const left = Math.ceil((v.until - now) / 1000), busy = !!getBT();
   box.innerHTML = `<div class="invt">📣 <b>${esc(v.host)}</b> encontró al ${esc(v.boss.e)} <b>${esc(v.boss.name)}</b> 👑 (Nv ${v.boss.lvl})</div>
     <div class="invs mut">⏳ ${left} s · cada jugador pelea con 1 héroe${busy ? ' · termina tu combate para unirte' : ''}</div>
@@ -158,7 +169,7 @@ function guestStart(d) {
   const g = coop.guest; if (!g || d.id !== g.id) return;
   g.started = true; if (isModalOpen()) closeModal();
   st.busy = true;
-  P.x = P.px = g.boss.x; P.y = P.py = g.boss.y + 1; spawnNearby(); visitAround();
+  if (!g.pvp) { P.x = P.px = g.boss.x; P.y = P.py = g.boss.y + 1; spawnNearby(); visitAround(); }
   $('#battle').style.background = BG.GRASS; $('#battle').classList.remove('hidden'); document.body.classList.add('inbattle');
   $('#b-field').innerHTML = ''; $('#b-party').innerHTML = ''; $('#b-menu').innerHTML = '<div class="res">⚔️ ¡Comienza el combate en equipo!</div>'; $('#b-log').textContent = ''; bossBar(null);
   updateHUD();
@@ -195,7 +206,7 @@ function guestState(s) {
   const t = s.turn;
   if (t && t.seq !== g.seq) {
     g.seq = t.seq; g.until = Date.now() + (t.left || TURN_MS); g.sent = false;
-    if (t.owner === st.name) guestMenu('main'); else $('#b-menu').innerHTML = `<div class="res">Turno de ${esc(t.e)} <b>${esc(t.name)}</b> · ${esc(t.owner)}</div>`;
+    if (t.owner === st.name) { g.myId = t.id; if (g.heroes) g.hero = g.heroes.find(x => t.id.endsWith('_' + x.id)) || g.hero; guestMenu('main'); } else $('#b-menu').innerHTML = `<div class="res">Turno de ${esc(t.e)} <b>${esc(t.name)}</b> · ${esc(t.owner)}</div>`;
     startGuestClock(t);
   }
   if (!t) stopGuestClock();
@@ -249,7 +260,7 @@ function guestMenu(stage, data) {
     const ea = est('atk');
     btn(me.bear ? '🐻 Zarpazo' : '⚔️ Atacar', ea.line + note(ea.note), () => targets('enemy', id => send('atk', null, id), ea));
     btn('✨ Habilidades', me.bear ? 'en forma de oso' : '', () => guestMenu('skill'), me.bear);
-    btn('🎒 Objetos', 'tus objetos', () => guestMenu('item'));
+    btn('🎒 Objetos', g.pvp ? 'no en duelos' : 'tus objetos', () => guestMenu('item'), !!g.pvp);
     btn('🛡️ Defender', 'Recibe la mitad de daño', () => send('def'));
   } else if (stage === 'skill') {
     for (const k of learned(h)) { const c = skillCost(h, k), sk = SK[k], e = est(k);
@@ -267,13 +278,25 @@ async function guestEnd(d) {
   const h = g.hero, lines = [];
   if (!g.started) { if (isModalOpen()) closeModal(); toast(`⚠️ ${d.reason || 'El combate en equipo se canceló'}`); return; }
   let lost = false;
-  if (d.result === 'cancel') {
+  if (g.pvp) {
+    // Duelo amistoso: todos recuperan la vida y la magia (también si se cancela)
+    if (d.result === 'pvpwin' || d.result === 'pvplose') { const pts = arenaResult(d.result === 'pvpwin', g.mode); lines.push(d.result === 'pvpwin' ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`); }
+    else { for (const x of g.heroes || [h]) { const pr = g.preAll && g.preAll[x.id]; if (pr) { x.hp = pr.hp; x.mp = pr.mp; } } lines.push(`⚠️ <b>Duelo cancelado</b>${d.reason ? ': ' + esc(d.reason) : ''}. No cambia nada.`); }
+  } else if (d.result === 'wb') {
+    // Jefe de mundo: el titán se retiró (o cayó); el daño ya quedó registrado por el anfitrión
+    const mine = (d.heroes || []).find(x => x.owner === st.name), my = (d.parts || {})[st.name] || 0;
+    if (mine) { h.hp = Math.max(0, Math.min(S(h, 'mhp'), mine.hp)); h.mp = Math.max(0, Math.min(S(h, 'mmp'), mine.mp)); }
+    if (h.hp <= 0) h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25));
+    lines.push(`🌋 <b>Intento contra el titán</b>: el equipo hizo ${(d.dmg || 0).toLocaleString('es-CL')} de daño (tú: ${my.toLocaleString('es-CL')})`);
+    if (my > 0) bump('wbHits');
+    lines.push(...gainXP(h, d.xp || 0));
+  } else if (d.result === 'cancel') {
     h.hp = g.pre.hp; h.mp = g.pre.mp; h.poison = g.pre.poison;     // sin penalización
     lines.push(`⚠️ <b>Combate cancelado</b>${d.reason ? ': ' + esc(d.reason) : ''}. No pierdes nada.`);
   } else if (d.result === 'win') {
     const mine = (d.heroes || []).find(x => x.owner === st.name);
     if (mine) { h.hp = Math.max(0, Math.min(S(h, 'mhp'), mine.hp)); h.mp = Math.max(0, Math.min(S(h, 'mmp'), mine.mp)); h.poison = mine.poison || 0; }
-    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`);
+    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`); bump('coopWins'); bump('kills', (d.boss && d.boss.keys || []).length || 1);
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, d.xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
     const extra = (d.extra && d.extra[st.name]) || 0, cat = activePet() && activePet().k === 'gato' ? activePet() : null; G.gold += Math.round(d.gold * (cat ? 1 + catBonus(cat) : 1)) + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);
@@ -297,11 +320,66 @@ async function guestEnd(d) {
   const b = document.createElement('button'); b.className = 'btn gold full'; b.textContent = 'Continuar';
   b.onclick = () => {
     $('#battle').classList.add('hidden'); document.body.classList.remove('inbattle'); bossBar(null);
-    if (lost) { P.x = P.px = START.x; P.y = P.py = START.y; } else { P.x = P.px = g.prev.x; P.y = P.py = g.prev.y; }   // vuelve a su posición
+    if (lost) { P.x = P.px = START.x; P.y = P.py = START.y; } else if (!g.pvp) { P.x = P.px = g.prev.x; P.y = P.py = g.prev.y; }   // vuelve a su posición
     spawnNearby(); visitAround(); st.busy = false; updateHUD(); save('now');
   };
   $('#b-menu').appendChild(b);
   save('now');
+}
+
+// ================= Arena PvP (Versión 3 · Fase 4) =================
+// Retador = anfitrión (corre el duelo). 1 contra 1 (elige 1 héroe) o 3 contra 3 (su grupo).
+const PVP_WAIT = 30000;
+let pvpTick = null;
+export function challenge(to, mode) {
+  if (coop.pvp || coop.host || coop.guest || getBT()) { toast('Ya estás en otro combate'); return; }
+  const go = async heroes => {
+    const r = await coopAsk('pvp:invite', { to, mode });
+    if (!r.ok) { toast(r.error || 'No se pudo desafiar'); return; }
+    coop.pvp = { id: r.id, to, mode, heroes, until: Date.now() + PVP_WAIT };
+    openModal(() => { const P2 = coop.pvp; if (!P2) return ''; const left = Math.max(0, Math.ceil((P2.until - Date.now()) / 1000));
+      return `<h2>⚔️ Desafío enviado</h2><p class="mut">Duelo ${P2.mode === '3v3' ? '3 contra 3' : '1 contra 1'} contra <b>${esc(P2.to)}</b> con ${P2.heroes.map(h => h.e + ' ' + esc(h.name)).join(', ')}.</p>
+        <div class="lobbyt pvpwait">⏳ Esperando respuesta… ${left} s</div><div class="row end"><button class="btn" data-a="pvpcancel">Cancelar</button></div>`; },
+    a => { if (a === 'pvpcancel') cancelChallenge('Cancelaste el desafío'); });
+    clearInterval(pvpTick); pvpTick = setInterval(() => { if (!coop.pvp || coop.pvp.started) { clearInterval(pvpTick); return; } if (Date.now() > coop.pvp.until) cancelChallenge(`${coop.pvp.to} no respondió`); else { const el = $('#mcontent .pvpwait'); if (el) el.textContent = `⏳ Esperando respuesta… ${Math.ceil((coop.pvp.until - Date.now()) / 1000)} s`; } }, 1000);
+  };
+  if (mode === '3v3') go(heroes()); else chooseHero('⚔️ Duelo 1 contra 1', `Contra <b>${esc(to)}</b>. Elige tu héroe (en el duelo todos parten con la vida y la magia llenas):`, h => go([h]), true);
+}
+function cancelChallenge(msg) { if (!coop.pvp) return; coopSend('boss:cancel', { id: coop.pvp.id }); coop.pvp = null; clearInterval(pvpTick); if (isModalOpen()) closeModal(); if (msg) toast(msg); }
+// Héroes del duelo: copias (no se toca la partida) con vida y magia llenas; el lado de menor nivel sube al nivel del otro
+function duelUnits(mine, theirs, owner) {
+  const A = mine.map(h => Object.assign(JSON.parse(JSON.stringify(h)), { id: 'a_' + h.id, isHero: true, buffs: {}, defending: false, stun: 0, tmp: 0, trap: 0, poison: 0, upA: G.upA, upD: G.upD }));
+  const B = theirs.map((h, i) => Object.assign({}, h, { id: 'r' + i + '_' + h.id, isHero: true, remote: true, owner, name: String(h.name || 'Héroe').replace(/[<>&"']/g, '').slice(0, 16),
+    e: LEADER_EMOJIS.includes(h.e) ? h.e : (CL[h.cls] ? CL[h.cls].e : '🙂'), adv: ADV[h.adv] && ADV[h.adv].cls === h.cls ? h.adv : null, buffs: {}, xp: 0, defending: false, stun: 0, tmp: 0, trap: 0, poison: 0, bonus: h.bonus || {}, equip: h.equip || {} }));
+  const avg = l => l.reduce((a, h) => a + h.lvl, 0) / l.length, la = avg(A), lb = avg(B);
+  const lift = (l, to) => { for (const h of l) if (h.lvl < to) { h.skLvl = h.lvl; h.lvl = Math.round(to); } };   // nivela: sube stats, conserva sus habilidades
+  if (la < lb) lift(A, lb); else if (lb < la) lift(B, la);
+  for (const h of [...A, ...B]) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); }
+  return { A, B };
+}
+function startDuel(d) {
+  const C = coop.pvp; if (!C || d.id !== C.id) return;
+  C.started = true; clearInterval(pvpTick); if (isModalOpen()) closeModal();
+  const { A, B } = duelUnits(C.heroes, d.heroes || [], d.guest);
+  const ctl = { id: C.id, me: st.name, mode: C.mode, gone: new Set(), waiters: new Map(),
+    send: state => coopSend('battle:state', state), end: res => { coopSend('battle:end', res); coop.pvp = null; },
+    waitAction(heroId, ms) { return new Promise(res => { const t = setTimeout(() => { ctl.waiters.delete(heroId); res(null); }, ms + 1500); ctl.waiters.set(heroId, a => { clearTimeout(t); ctl.waiters.delete(heroId); res(a); }); }); } };
+  feed(`⚔️ ¡Comienza el duelo contra <b>${esc(d.guest)}</b>!`);
+  startBattle({ id: 'pvp', x: P.x, y: P.y, lvl: 1, biome: 'GRASS', group: [], pvp: true }, { party: A, coop: ctl, pvp: { enemies: B } });
+}
+async function acceptDuel(id) {
+  const v = coop.pvpInv; if (!v || v.id !== id) return;
+  if (getBT()) { toast('Termina tu combate primero'); return; }
+  if (isModalOpen()) closeModal();
+  const go = async list => {
+    const r = await coopAsk('pvp:accept', { id, heroes: list.map(snap) });
+    coop.pvpInv = null; renderInvites();
+    if (!r.ok) { toast(r.error || 'No se pudo aceptar'); return; }
+    const preAll = {}; for (const x of list) preAll[x.id] = { hp: x.hp, mp: x.mp };
+    coop.guest = { id, host: v.host, boss: { name: 'Duelo', e: '⚔️', lvl: 0, x: P.x, y: P.y }, hero: list[0], heroes: list, preAll, pre: { hp: list[0].hp, mp: list[0].mp, poison: 0 }, prev: { x: P.x, y: P.y }, pvp: true, mode: v.mode, started: false, seq: -1, built: false, myId: null };
+    guestStart({ id });
+  };
+  if (v.mode === '3v3') go(heroes()); else chooseHero('⚔️ Aceptar el duelo', `${esc(v.host)} te desafía 1 contra 1. Elige tu héroe:`, h => go([h]), true);
 }
 
 // ================= Eventos de la red =================
@@ -311,17 +389,23 @@ export function initCoop() {
     else if (ev === 'boss:closed' && d) { net.invites.delete(d.id); renderInvites(); }
     else if (ev === 'boss:lobby' && coop.host && d.id === coop.host.id) { coop.host.guests = d.guests || []; if (d.guests && d.guests.length) feed(`⚔️ ${esc(d.guests[d.guests.length - 1].name)} se unió a tu combate`); refreshModal(); }
     else if (ev === 'boss:left' && d) {
+      const B0 = getBT(); if (B0 && B0.pvp && B0.coop && B0.coop.id === d.id) { B0.pvpCancel = true; for (const [, w] of B0.coop.waiters) w(null); B0.timedOut = true; if (B0.curRes) { const r = B0.curRes; B0.curRes = null; r('__to'); } feed(`📴 ${esc(d.name)} se desconectó: duelo cancelado`); return; }
       const B = getBT(); if (B && B.coop && B.coop.id === d.id) { B.coop.gone.add(d.name); for (const h of B.party) if (h.owner === d.name && B.coop.waiters.has(h.id)) B.coop.waiters.get(h.id)(null); feed(`📴 ${esc(d.name)} se desconectó: su héroe se defenderá solo`); }
       else if (coop.host && coop.host.id === d.id) { coop.host.guests = coop.host.guests.filter(g => g.name !== d.name); refreshModal(); }
     }
-    else if (ev === 'battle:action' && d) { const B = getBT(); if (B && B.coop && B.coop.id === d.id) { const h = B.party.find(x => x.id === d.heroId); if (h && h.owner === d.from && B.coop.waiters.has(h.id)) B.coop.waiters.get(h.id)(d); } }
+    else if (ev === 'battle:action' && d) { const B = getBT(); if (B && B.coop && B.coop.id === d.id) { const h = [...(B.sideA || []), ...(B.sideB || []), ...B.party].find(x => x.id === d.heroId); if (h && h.owner === d.from && B.coop.waiters.has(h.id)) B.coop.waiters.get(h.id)(d); } }
     else if (ev === 'boss:start') guestStart(d);
+    else if (ev === 'pvp:invite' && d && d.id) { coop.pvpInv = Object.assign({}, d, { until: Date.now() + (d.left || 30000) }); feed(`⚔️ <b>${esc(d.host)}</b> te desafía a un duelo`); renderInvites(); }
+    else if (ev === 'pvp:start') startDuel(d);
+    else if (ev === 'pvp:declined' && coop.pvp && d.id === coop.pvp.id) cancelChallenge(`${d.name} rechazó el duelo`);
     else if (ev === 'battle:state') guestState(d);
     else if (ev === 'battle:end') guestEnd(d);
     else if (ev === 'disconnect' && coop.guest && coop.guest.started) guestEnd({ id: coop.guest.id, result: 'cancel', reason: 'se perdió la conexión' });
   };
   $('#invite').addEventListener('click', e => {
     const b = e.target.closest('[data-i]'); if (!b) return;
-    if (b.dataset.i === 'join') joinInvite(b.dataset.k); else { net.invites.delete(b.dataset.k); renderInvites(); }
+    if (b.dataset.i === 'pvpok') acceptDuel(b.dataset.k);
+    else if (b.dataset.i === 'pvpno') { coopSend('pvp:decline', { id: b.dataset.k }); coop.pvpInv = null; renderInvites(); }
+    else if (b.dataset.i === 'join') joinInvite(b.dataset.k); else { net.invites.delete(b.dataset.k); renderInvites(); }
   });
 }

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { roomSeed, cleanName } from './public/js/util.js';
-import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS } from './public/js/data.js';
+import { B, QUICK, LEADER_EMOJIS, MAX_PLAYERS, CODE_ALPHABET, PIN_TTL, PET_EMOJIS, TITLES, ACH, wbWeek, wbStats } from './public/js/data.js';
 import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,8 @@ const STATUSES = new Set(['map', 'battle', 'village', 'dungeon']);
 const BIOMES = new Set(Object.keys(B));
 const EMOJIS = new Set(LEADER_EMOJIS), PETS_E = new Set(PET_EMOJIS);
 const QUICK_IDS = new Set(QUICK.map(q => q.id));
-const NOTICE_TYPES = new Set(['level', 'boss', 'death']);
+const NOTICE_TYPES = new Set(['level', 'boss', 'death', 'ach']);
+const TITLE_SET = new Set(TITLES);
 const MAX_SAVE = 200 * 1024;                     // tamaño máximo de una partida guardada (bytes)
 const PIN_FAILS = 6, PIN_LOCK = 10 * 60 * 1000;  // intentos de PIN fallidos antes de bloquear 10 minutos
 
@@ -59,7 +60,7 @@ function newCode() {
 }
 function makeRoom(code) {
   const room = { code, seed: roomSeed(code), players: new Map(), pins: new Map(), members: new Set(), coop: new Map(), emptySince: Date.now(), dirty: false,
-    chat: [], chatLoad: null, chatSeq: 0 };
+    chat: [], chatLoad: null, chatSeq: 0, stats: new Map(), wb: null, wbLoad: null };
   rooms.set(code, room); return room;
 }
 
@@ -78,6 +79,20 @@ function chatPush(room, m) {
   if (db.isReady()) db.chatAdd(room.code, msg).catch(e => console.warn('chat:', e.message));
 }
 const sysMsg = (room, text) => chatPush(room, { kind: 'sys', text });
+// ================= Jefe de mundo semanal (Versión 3 · Fase 4) =================
+// Vida compartida por toda la sala durante la semana. Al cambiar de semana reaparece (más fuerte si lo derrotaron).
+const wbPublic = w => ({ week: w.week, gen: w.gen, hp: w.hp, mhp: w.mhp, lvl: w.lvl, contrib: w.contrib, killed: w.killed });
+async function wbOf(room) {
+  if (!room.wb && db.isReady()) { if (!room.wbLoad) room.wbLoad = db.getWB(room.code).catch(() => null); room.wb = (await room.wbLoad) || null; }
+  const week = wbWeek(Date.now()); let w = room.wb;
+  if (!w || w.week !== week) {
+    const gen = w ? w.gen + (w.killed ? 1 : 0) : 0, st = wbStats(gen);
+    w = room.wb = { week, gen, hp: st.mhp, mhp: st.mhp, lvl: st.lvl, contrib: {}, killed: false };
+    wbSave(room);
+  }
+  return w;
+}
+const wbSave = room => { if (db.isReady() && room.wb) db.saveWB(room.code, room.wb).catch(e => console.warn('jefe de mundo:', e.message)); };
 // Carga el historial de la base de datos la primera vez que alguien entra a la sala (una sola vez)
 function loadChat(room) {
   if (!room.chatLoad) room.chatLoad = (async () => {
@@ -87,7 +102,7 @@ function loadChat(room) {
   })();
   return room.chatLoad;
 }
-const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null });
+const publicPlayer = p => ({ name: p.name, x: p.x, y: p.y, leaderEmoji: p.leaderEmoji, avgLvl: p.avgLvl, biome: p.biome, status: p.status, online: p.online, tomb: p.tomb || null, vs: p.vs || null, dun: p.dun || null, pet: p.pet || null, title: p.title || null });
 // Conectados + registrados en la base de datos que no están conectados (aparecen "fuera de línea")
 function publicPlayers(room) {
   const list = [...room.players.values()].map(publicPlayer);
@@ -268,7 +283,7 @@ io.on('connection', socket => {
     room.players.set(name, p); room.emptySince = null;
     socket.join(code); socket.data.room = code; socket.data.name = name; socket.data.playerId = row ? row.id : null;
     ack({ ok: true, code, name, seed: room.seed, players: publicPlayers(room), pins: publicPins(room),
-      db: !!row, save: row ? row.data : null, chat: room.chat, now: Date.now() });   // now: hora del servidor (día y noche)
+      db: !!row, save: row ? row.data : null, chat: room.chat, now: Date.now(), wb: wbPublic(await wbOf(room)) });   // now: hora del servidor (día y noche)
     if (!existing) { socket.to(code).emit('event:notice', { type: 'join', name, text: `${name} entró a la sala` }); sysMsg(room, `👋 ${name} entró a la sala`); }
     markDirty(room);
   });
@@ -317,6 +332,73 @@ io.on('connection', socket => {
     reply({ ok: true });
   });
 
+  // ================= Logros y ranking (Versión 3 · Fase 4) =================
+  const nInt = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : 0;
+  socket.on('stats:push', d => {
+    const c = ctxOf(socket); if (!c || !isObj(d) || !allow(socket, 'stats', 12, 60000)) return;
+    const st = { ach: nInt(d.ach, ACH.length), dist: nInt(d.dist, 1e7), bosses: nInt(d.bosses, 1e6), arena: nInt(d.arena, 1e7), wins: nInt(d.wins, 1e6), title: TITLE_SET.has(d.title) ? d.title : null, lvl: nInt(d.lvl, 999) };
+    c.room.stats.set(c.p.name, st); c.p.title = st.title; markDirty(c.room);
+    if (db.isReady() && socket.data.playerId) db.saveStats(c.room.code, c.p.name, st).catch(e => console.warn('ranking:', e.message));
+  });
+  socket.on('rank:get', async (d, ack) => {
+    if (typeof ack !== 'function') return; const c = ctxOf(socket); if (!c || !allow(socket, 'rank', 10, 10000)) return ack({ ok: false });
+    const all = new Map();
+    if (db.isReady()) { try { for (const r of await db.roomStats(c.room.code)) all.set(r.name, r.data); } catch (e) { /* solo memoria */ } }
+    for (const [n, st] of c.room.stats) all.set(n, st);
+    ack({ ok: true, list: [...all.entries()].map(([name, st]) => Object.assign({ name }, st)) });
+  });
+
+  // ================= Jefe de mundo =================
+  socket.on('wb:get', async (d, ack) => { if (typeof ack !== 'function') return; const c = ctxOf(socket); if (!c) return ack({ ok: false }); ack({ ok: true, wb: wbPublic(await wbOf(c.room)) }); });
+  // Daño de un intento: parts = { nombre: daño } (solo él, o los de su combate en equipo si es el anfitrión)
+  socket.on('wb:hit', async (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c = ctxOf(socket);
+    if (!c || !isObj(d) || !isObj(d.parts) || !allow(socket, 'wbhit', 4, 30000)) return reply({ ok: false });
+    const w = await wbOf(c.room);
+    if (d.week !== w.week || w.killed) return reply({ ok: false, wb: wbPublic(w) });
+    const parts = {}; let total = 0;
+    for (const [n, v] of Object.entries(d.parts).slice(0, 4)) { const name = cleanName(n), dmg = Number.isInteger(v) ? Math.max(0, Math.min(v, 6000)) : 0; if (name && dmg) { parts[name] = dmg; total += dmg; } }
+    if (!total) return reply({ ok: true, wb: wbPublic(w), applied: 0 });
+    const applied = Math.min(total, w.hp), k = applied / total;
+    for (const [n, v] of Object.entries(parts)) w.contrib[n] = (w.contrib[n] || 0) + Math.round(v * k);
+    w.hp -= applied;
+    if (w.hp <= 0) { w.hp = 0; w.killed = true; sysMsg(c.room, `🌋 ¡El Titán de Lava cayó! Los que aportaron reciben su recompensa.`); }
+    wbSave(c.room);
+    io.to(c.room.code).emit('wb:state', wbPublic(w));
+    reply({ ok: true, wb: wbPublic(w), applied });
+  });
+
+  // ================= Arena PvP (Versión 3 · Fase 4) =================
+  // El retador es el anfitrión (corre el combate) y el desafiado manda sus acciones, como en los jefes en equipo.
+  const PVP_MS = 30 * 1000;
+  socket.on('pvp:invite', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d) || !allow(socket, 'pvp', 5, 20000)) return reply({ ok: false, error: 'Espera un momento.' });
+    const to = cleanName(d.to), tp = c0.room.players.get(to), mode = d.mode === '3v3' ? '3v3' : '1v1';
+    if (!tp || !tp.online || to === c0.p.name) return reply({ ok: false, error: 'Ese jugador no está conectado.' });
+    coopLeave(c0.room, c0.p.name);
+    const id = Math.random().toString(36).slice(2, 10);
+    const c = { id, host: c0.p.name, boss: { id: 'pvp', name: 'Duelo', e: '⚔️', lvl: 1, x: 0, y: 0 }, guests: new Map(), state: 'lobby', created: Date.now(), pvp: { mode, to } };
+    c0.room.coop.set(id, c);
+    sendTo(c0.room, to, 'pvp:invite', { id, host: c.host, mode, left: PVP_MS });
+    reply({ ok: true, id });
+  });
+  socket.on('pvp:accept', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
+    if (!c0 || !isObj(d)) return reply({ ok: false }); const c = c0.room.coop.get(d.id);
+    if (!c || !c.pvp || c.pvp.to !== c0.p.name || c.state !== 'lobby' || Date.now() > c.created + PVP_MS) return reply({ ok: false, error: 'El desafío ya terminó.' });
+    const heroes = Array.isArray(d.heroes) ? d.heroes.slice(0, 3).map(cleanHero).filter(Boolean) : [];
+    if (!heroes.length || heroes.length !== (c.pvp.mode === '3v3' ? Math.min(3, d.heroes.length) : 1)) return reply({ ok: false, error: 'Héroes inválidos.' });
+    c.guests.set(c0.p.name, heroes[0]); c.state = 'battle';
+    sendTo(c0.room, c.host, 'pvp:start', { id: c.id, guest: c0.p.name, heroes, mode: c.pvp.mode });
+    reply({ ok: true, id: c.id, host: c.host, mode: c.pvp.mode });
+  });
+  socket.on('pvp:decline', d => {
+    const c0 = ctxOf(socket); if (!c0 || !isObj(d)) return; const c = c0.room.coop.get(d.id);
+    if (!c || !c.pvp || c.pvp.to !== c0.p.name || c.state !== 'lobby') return;
+    sendTo(c0.room, c.host, 'pvp:declined', { id: c.id, name: c0.p.name }); c0.room.coop.delete(c.id);
+  });
+
   socket.on('ping:place', d => {
     const c = ctxOf(socket); if (!c || !isObj(d) || !isCoord(d.x) || !isCoord(d.y)) return;
     if (!allow(socket, 'ping', 3, 10000)) return;
@@ -335,6 +417,7 @@ io.on('connection', socket => {
     if (d.type === 'level') sysMsg(c.room, `⭐ ${c.p.name} sube de nivel: ${text}`);
     else if (d.type === 'boss') sysMsg(c.room, `👑 ${c.p.name} derrotó al jefe ${text}`);
     else if (d.type === 'death') sysMsg(c.room, `💀 El grupo de ${c.p.name} cayó`);
+    else if (d.type === 'ach') sysMsg(c.room, `🏆 ${c.p.name} consiguió «${text}»`);
   });
 
   // ================= Jefes en equipo =================
@@ -358,7 +441,7 @@ io.on('connection', socket => {
     const reply = typeof ack === 'function' ? ack : () => {}; const c0 = ctxOf(socket);
     if (!c0 || !isObj(d) || !allow(socket, 'coop', 6, 10000)) return reply({ ok: false, error: 'No se pudo unir.' });
     const c = c0.room.coop.get(d.id);
-    if (!c || c.state !== 'lobby' || Date.now() > c.created + INVITE_MS) return reply({ ok: false, error: 'La invitación ya terminó.' });
+    if (!c || c.pvp || c.state !== 'lobby' || Date.now() > c.created + INVITE_MS) return reply({ ok: false, error: 'La invitación ya terminó.' });
     if (c.host === c0.p.name) return reply({ ok: false, error: 'Es tu propio jefe.' });
     if (!c.guests.has(c0.p.name) && c.guests.size + 1 >= MAX_COOP) return reply({ ok: false, error: 'Ya hay 4 jugadores.' });
     const hero = cleanHero(d.hero); if (!hero) return reply({ ok: false, error: 'Héroe inválido.' });

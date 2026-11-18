@@ -7,6 +7,8 @@ import { resetWorld, findStart, tileAt, feats, mpos, monsters, playerBlocked, vi
 import { stepEggs, activePet } from './pets.js';
 import { isNight } from './daynight.js';
 import { PETS } from './data.js';
+import { checkAch, pushStats, noteDist, bump } from './achievements.js';
+import { isWBTile, openWorldBoss, onWB } from './worldboss.js';
 import { resize, draw, clearCanvas } from './render.js';
 import { startBattle, getBT } from './battle.js';
 import { initUI, updateMini, dangerBox, confirmOk, toast, feed, updateHUD, openVillage, openParty, openMap, openBossConfirm, closeModal, isModalOpen, modalIs, toggleSocial, closeSocial, updatePlayersUI, updateDayNight } from './ui.js';
@@ -25,11 +27,12 @@ function move(dir) {
   if (inDungeon()) { dungeonMove(dir); return; }   // Versión 3 · Fase 1: dentro de una mazmorra
   const [dx, dy] = DIRS[dir]; if (dx) P.face = dx;
   const nx = P.x + dx, ny = P.y + dy;
+  if (isWBTile(nx, ny)) { openWorldBoss(); return; }   // 🌋 jefe de mundo (Versión 3 · Fase 4)
   const m = mpos.get(nx + ',' + ny);
   if (m && !inVillage()) { if (m.boss) openBossConfirm(m, startBattle); else startBattle(m); return; }
   if (m) return;
   if (playerBlocked(nx, ny)) return;   // con bote se puede navegar por el mar
-  P.x = nx; P.y = ny; G.steps++; hatchEggs();
+  P.x = nx; P.y = ny; G.steps++; hatchEggs(); noteDist();
   visitAround();
   if (G.steps % 20 === 0 || Math.floor(nx / CH) !== Math.floor((nx - dx) / CH) || Math.floor(ny / CH) !== Math.floor((ny - dy) / CH)) spawnNearby();
   const b = tileAt(P.x, P.y).b;
@@ -59,7 +62,7 @@ function seaEncounter() {
   if (kraken) openBossConfirm(m, startBattle); else startBattle(m);
 }
 function openChest(f) {
-  G.opened[f.id] = 1; const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
+  G.opened[f.id] = 1; bump('chests'); const d = Math.hypot(f.x - START.x, f.y - START.y), r = Math.random();
   // 50%: equipo del nivel de la zona (mejor rareza mientras más lejos)
   if (Math.random() < .5) {
     const it = rollLoot(dangerAt(f.x, f.y), Math.min(1, d / 400));
@@ -134,6 +137,7 @@ function frame(t) {
     lerpOthers(dt);
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     if (t - lastDN > 500) { lastDN = t; dayNightTick(); }
+    if (t - lastAch > 2000) { lastAch = t; checkAch(); pushStats(); }
     draw(t);
     updateMini(t);
     tick(t, myState);
@@ -142,7 +146,7 @@ function frame(t) {
 }
 
 // ================= Partidas =================
-let lastTombCheck = 0, lastDN = 0, wasNight = null;
+let lastTombCheck = 0, lastDN = 0, wasNight = null, lastAch = 0;
 // Día y noche: avisos al cambiar; de noche aparecen monstruos nocturnos y al amanecer se van
 function dayNightTick() {
   updateDayNight();
@@ -161,11 +165,12 @@ function enterWorld() {
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;
   updateHUD(); updatePlayersUI(); checkTomb(); updateMini(); save('now');
+  onWB(); pushStats(true);
 }
 function newGame(sel) {
   st.seed = roomSeed(st.room); clearQuestCache(); resetWorld(); resetDungeon(); Object.assign(START, { x: 0, y: 0 }); Object.assign(START, findStart());
   const keys = Object.keys(CL);
-  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
+  setG({ saveVersion: SAVE_VERSION, deaths: 0, favs: {}, dungeons: {}, inDun: null, pets: [], pet: null, eggs: [], stats: {}, ach: {}, title: null, arena: { pts: 0, w: 0, l: 0 }, wbClaim: null, wbSeen: null, inventory: [], quests: [], qtrack: null, board: {}, boat: false, extraFeats: [], vv: { ['village@' + START.x + ',' + START.y]: { x: START.x, y: START.y, name: 'Ciudad Origen' } }, seed: st.seed, room: st.room, start: { x: START.x, y: START.y }, gold: START_GOLD, items: startItems(), roster: keys.map((k, i) => mkHero(k, i)), party: sel.map(k => keys.indexOf(k)), leader: keys.indexOf(sel[0]),
     upA: 0, upD: 0, opened: {}, defeated: {}, steps: 0, lastVillage: { x: START.x, y: START.y }, visited: {}, bosses: 0 });
   P.x = START.x; P.y = START.y; enterWorld();
   setTimeout(() => toast('🏰 Ciudad Origen<br><span style="font-size:14px">Explora en cualquier dirección. ¡Cuidado con los monstruos!</span>'), 300);
@@ -321,6 +326,7 @@ net.ev.players = () => { updatePlayersUI(); renderRoomInfo(); };
 net.ev.feed = html => feed(html);
 net.ev.status = () => { updateHUD(); updatePlayersUI(); renderRoomInfo(); };
 net.ev.saveData = () => st.inGame ? G : null;   // lo que se sube al servidor
+net.ev.wb = () => { onWB(); updateHUD(); };   // jefe de mundo: anuncio y recompensa
 
 initCoop();
 initUI({

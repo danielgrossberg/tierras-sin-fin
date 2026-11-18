@@ -15,6 +15,7 @@ export const net = {
   others: new Map(),    // nombre → {name,x,y,px,py,leaderEmoji,avgLvl,biome,status,online,bubble}
   pins: new Map(),      // nombre → {name,x,y,until}
   invites: new Map(),   // jefes en equipo: id → {id, host, boss, until}
+  wb: null,             // jefe de mundo semanal (Versión 3 · Fase 4): {week, gen, hp, mhp, lvl, contrib, killed}
   chat: [],             // chat de la sala (Versión 3): {id, t, kind: msg|quick|sys, name, e, text (HTML escapado)}
   myBubble: null,
   ev: {},               // callbacks que conecta main.js: players, feed, status
@@ -40,13 +41,14 @@ export function ensureSocket() {
   s.on('chat:msg', onChatMsg);
   s.on('ping:place', onPin);
   s.on('event:notice', onNotice);
+  s.on('wb:state', d => { if (d && Number.isFinite(d.hp)) { net.wb = d; fire('wb', d); } });
   s.on('room:replaced', () => {
     net.replaced = true; net.joined = false; net.others.clear(); setStatus('off');
     fire('feed', '⚠️ Entraste con este nombre desde otro lugar. Aquí sigues en modo individual.');
     fire('players'); s.disconnect();
   });
   // Jefes en equipo (coop.js): se reenvían todos los eventos al módulo cooperativo
-  for (const ev of ['boss:invite', 'boss:lobby', 'boss:closed', 'boss:start', 'boss:left', 'battle:state', 'battle:action', 'battle:end']) s.on(ev, d => fire('coop', ev, d));
+  for (const ev of ['boss:invite', 'boss:lobby', 'boss:closed', 'boss:start', 'boss:left', 'battle:state', 'battle:action', 'battle:end', 'pvp:invite', 'pvp:start', 'pvp:declined']) s.on(ev, d => fire('coop', ev, d));
   s.on('disconnect', () => fire('coop', 'disconnect', {}));
   net.socket = s;
   return s;
@@ -68,7 +70,7 @@ async function onConnect() {
   const r = await ask('room:join', { code: net.code, name: net.name, pin: net.pin || undefined, rejoin: true });
   if (r.ok) {
     net.db = !!r.db;
-    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); setServerTime(r.now); lastKey = ''; setStatus('on');
+    applyPlayers(r.players || []); applyPins(r.pins || []); setChat(r.chat); setServerTime(r.now); if (r.wb) { net.wb = r.wb; fire('wb', r.wb); } lastKey = ''; setStatus('on');
     if (wasWaiting) fire('feed', '🟢 Conexión recuperada');
     if (owed) flushSave();   // subir lo que no se alcanzó a guardar mientras no había conexión
   } else { setStatus('wait'); fire('feed', '⚠️ ' + esc(r.error || 'No se pudo volver a la sala')); }
@@ -81,7 +83,7 @@ export async function joinRoom(code, name, rejoin, pin) {
     net.code = code; net.name = r.name || name; net.pin = pin || null; net.joined = true; net.replaced = false;
     net.db = !!r.db; net.serverSave = r.save || null;
     net.others.clear(); net.pins.clear(); applyPlayers(r.players || []); applyPins(r.pins || []);
-    net.chat = []; setChat(r.chat); setServerTime(r.now);
+    net.chat = []; setChat(r.chat); setServerTime(r.now); net.wb = r.wb || null;
     lastKey = ''; setStatus('on');
   }
   return r;
@@ -127,6 +129,9 @@ export function placePin(x, y) {
 // Cooperativo: con respuesta (ack) o simple
 export const coopAsk = (ev, data) => ask(ev, data, 8000);
 export function coopSend(ev, data) { if (canSend()) net.socket.emit(ev, data); }
+// Logros y ranking · jefe de mundo
+export const netAsk = (ev, data) => ask(ev, data, 8000);
+export function statsPush(d) { if (canSend()) net.socket.emit('stats:push', d); }
 export function notice(type, text) { if (canSend()) net.socket.emit('event:notice', { type, text }); }
 
 // ================= Guardado en el servidor =================
@@ -211,6 +216,7 @@ function onNotice(d) {
   else if (d.type === 'level') fire('feed', `⭐ <b>${esc(d.name)}</b> sube de nivel: ${esc(d.text)}`);
   else if (d.type === 'boss') fire('feed', `👑 <b>${esc(d.name)}</b> derrotó al jefe ${esc(d.text)}`);
   else if (d.type === 'death') fire('feed', `💀 El grupo de <b>${esc(d.name)}</b> cayó`);
+  else if (d.type === 'ach') fire('feed', `🏆 <b>${esc(d.name)}</b> consiguió <i>${esc(d.text)}</i>`);
 }
 
 // Color de cada jugador de la sala: según su lugar en la lista alfabética de TODOS los nombres de la sala

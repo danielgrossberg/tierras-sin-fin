@@ -45,6 +45,19 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS chat_room_id ON chat_messages (room_code, id DESC);
+-- Versión 3 · Fase 4: ranking de la sala (logros, distancia, jefes, arena) y jefe de mundo semanal
+CREATE TABLE IF NOT EXISTS player_stats (
+  room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS player_stats_room_name ON player_stats (room_code, lower(name));
+CREATE TABLE IF NOT EXISTS world_boss (
+  room_code TEXT PRIMARY KEY REFERENCES rooms(code) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 export const CHAT_KEEP = 100;
 
@@ -112,6 +125,21 @@ export async function chatAdd(code, m) {
   await pool.query(
     `DELETE FROM chat_messages WHERE room_code = $1 AND id < (
        SELECT min(id) FROM (SELECT id FROM chat_messages WHERE room_code = $1 ORDER BY id DESC LIMIT ${CHAT_KEEP}) t)`, [code]);
+}
+
+// ================= Ranking y jefe de mundo (Versión 3 · Fase 4) =================
+export async function saveStats(code, name, data) {
+  await pool.query(`INSERT INTO player_stats (room_code, name, data) VALUES ($1, $2, $3::jsonb)
+    ON CONFLICT (room_code, lower(name)) DO UPDATE SET data = EXCLUDED.data, name = EXCLUDED.name, updated_at = now()`, [code, name, JSON.stringify(data)]);
+}
+export async function roomStats(code) {
+  const r = await pool.query('SELECT name, data FROM player_stats WHERE room_code = $1', [code]);
+  return r.rows.map(x => ({ name: x.name, data: x.data }));
+}
+export async function getWB(code) { const r = await pool.query('SELECT data FROM world_boss WHERE room_code = $1', [code]); return r.rows[0] ? r.rows[0].data : null; }
+export async function saveWB(code, data) {
+  await pool.query(`INSERT INTO world_boss (room_code, data) VALUES ($1, $2::jsonb)
+    ON CONFLICT (room_code) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [code, JSON.stringify(data)]);
 }
 
 // Solo guarda si la partida que llega no es más vieja que la guardada (evita que un celular viejo pise a uno nuevo)

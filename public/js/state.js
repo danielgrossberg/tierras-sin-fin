@@ -60,7 +60,7 @@ export function mkHero(cls, i) {
 export const heroes = () => G.party.map(i => G.roster[i]);
 export const alive = a => a.filter(u => u.hp > 0);
 export const need = l => Math.round(12 * Math.pow(l, 1.7));
-export const learned = h => [...CL[h.cls].sk, ...(h.adv && ADV[h.adv] ? ADV[h.adv].sk : [])].filter(k => SK[k].lv <= h.lvl);
+export const learned = h => [...CL[h.cls].sk, ...(h.adv && ADV[h.adv] ? ADV[h.adv].sk : [])].filter(k => SK[k].lv <= (h.skLvl || h.lvl));   // skLvl: nivel real en un duelo nivelado
 export function gainXP(h, x) {
   const msgs = []; h.xp += Math.round(x);
   while (h.xp >= need(h.lvl)) {
