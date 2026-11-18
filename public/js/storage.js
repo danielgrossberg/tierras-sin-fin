@@ -8,7 +8,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -73,6 +73,13 @@ export function migrate(o) {
     o.stats.dungeons = o.stats.dungeons || Object.values(o.dungeons || {}).filter(d => d && d.done).length;
     if (o.pos && o.start) o.stats.maxDist = Math.max(o.stats.maxDist || 0, Math.round(Math.hypot(o.pos.x - o.start.x, o.pos.y - o.start.y)));
   }
+  if (v < 14) {
+    // Versión 3 · Fase 6.3: estadísticas (tiempo, oro, golpe más fuerte, curación, monstruos por tipo) y por héroe
+    o.stats = o.stats || {}; o.deaths = o.deaths || 0;
+    for (const k of ['playMs', 'earned', 'spent', 'healed']) o.stats[k] = o.stats[k] || 0;
+    o.stats.killsBy = o.stats.killsBy || {}; o.stats.maxHit = o.stats.maxHit || null;
+    for (const h of o.roster) h.st = h.st || { battles: 0, dmg: 0, kills: 0 };
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0, antidoto: 0 }, o.items || {});
   o.mats = o.mats && typeof o.mats === 'object' ? o.mats : {}; o.prof = o.prof && typeof o.prof === 'object' ? o.prof : {}; o.gath = o.gath && typeof o.gath === 'object' ? o.gath : {};
@@ -87,7 +94,7 @@ export function migrate(o) {
   if (o.pet && !o.pets.some(q => q.id === o.pet)) o.pet = null;
   if (o.inDun && !(o.inDun.cave && o.inDun.cave.id)) o.inDun = null;
   o.quests = Array.isArray(o.quests) ? o.quests : []; o.vv = o.vv || {}; o.board = o.board || {}; o.extraFeats = Array.isArray(o.extraFeats) ? o.extraFeats : [];
-  for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; h.tal = h.tal && typeof h.tal === 'object' ? h.tal : {}; if (h.adv && !ADV[h.adv]) h.adv = null; h.shield = 0; h.ward = 0; }
+  for (const h of o.roster) { h.bonus = h.bonus || {}; h.buffs = {}; h.poison = h.poison || 0; h.equip = h.equip || {}; h.tal = h.tal && typeof h.tal === 'object' ? h.tal : {}; if (h.adv && !ADV[h.adv]) h.adv = null; h.shield = 0; h.ward = 0; h.st = h.st && typeof h.st === 'object' ? h.st : { battles: 0, dmg: 0, kills: 0 }; }
   o.saveVersion = SAVE_VERSION;
   return o;
 }

@@ -58,7 +58,8 @@ export function checkAch() {
 // Lo que se manda al servidor para el ranking (solo si cambió)
 let lastPush = '', lastT = 0;
 export function pushStats(force) {
-  const s = stats(), a = G.arena || {}, d = { ach: achCount(), dist: s.maxDist || 0, bosses: G.bosses || 0, arena: a.pts || 0, wins: a.w || 0, title: G.title || null, lvl: Math.max(...G.roster.map(h => h.lvl)) };
+  const s = stats(), a = G.arena || {}, d = { ach: achCount(), dist: s.maxDist || 0, bosses: G.bosses || 0, arena: a.pts || 0, wins: a.w || 0, title: G.title || null, lvl: Math.max(...G.roster.map(h => h.lvl)),
+    kills: s.kills || 0, hit: s.maxHit ? s.maxHit.dmg : 0, play: Math.floor((s.playMs || 0) / 60000) };   // 6.3: monstruos, golpe más fuerte, minutos jugados
   const k = JSON.stringify(d); if (k === lastPush || (!force && Date.now() - lastT < 15000)) return;
   lastPush = k; lastT = Date.now(); statsPush(d);
 }
@@ -75,7 +76,7 @@ function rankHTML() {
   if (RANK.off) return '<p class="mut small">El ranking necesita conexión con el servidor.</p>';
   const col = (title, key, fmt) => { const l = RANK.slice().sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 5);
     return `<div class="rkcol"><b>${title}</b>${l.map((x, i) => `<div class="rkrow ${x.name === net.name ? 'me' : ''}"><span>${['🥇', '🥈', '🥉', '4.', '5.'][i]} ${esc(x.name)}</span><b>${fmt(x[key] || 0)}</b></div>`).join('') || '<small class="mut">—</small>'}</div>`; };
-  return `<div class="rank">${col('🏆 Más logros', 'ach', v => v)}${col('🧭 Más lejos', 'dist', v => v + ' c')}${col('👑 Más jefes', 'bosses', v => v)}${col('⚔️ Arena', 'arena', v => v + ' pts')}</div>
+  return `<div class="rank">${col('🏆 Más logros', 'ach', v => v)}${col('🧭 Más lejos', 'dist', v => v + ' c')}${col('👑 Más jefes', 'bosses', v => v)}${col('⚔️ Arena', 'arena', v => v + ' pts')}${col('👾 Más monstruos', 'kills', v => v.toLocaleString('es-CL'))}${col('💥 Golpe más fuerte', 'hit', v => v.toLocaleString('es-CL'))}${col('⏱️ Más tiempo jugado', 'play', v => v >= 60 ? Math.floor(v / 60) + ' h' : v + ' min')}</div>
     <button class="btn sm" data-a="rank">🔄 Actualizar</button>`;
 }
 export function achTabHTML() {

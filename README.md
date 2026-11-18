@@ -408,6 +408,16 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
   por día (tabla `daily_rewards`). Racha "🔥 5 días seguidos"; si se salta un día vuelve al día 1. Se guardan los días
   jugados y la mejor racha. Necesita conexión. `DAILY_SHIFT` (variable de entorno) adelanta el calendario solo para pruebas.
 
+### Fase 6.3 (lista): estadísticas 📊
+- Nueva pestaña **🎒 Grupo → 📊 Estadísticas**: tiempo jugado, pasos, distancia máxima, días jugados y mejor racha,
+  logros; monstruos derrotados (y **por tipo**), jefes, mazmorras, caídas del grupo, **golpe más fuerte** (daño, héroe y
+  habilidad) y curación total; oro ganado y gastado, materiales recolectados y objetos fabricados; y una tabla **por
+  héroe** (combates, daño y golpes finales).
+- Se guardan con la partida (en el celular y en el servidor). En coop, el daño de cada héroe lo cuenta su dueño solo
+  cuando él es el anfitrión; los duelos de arena no cuentan para el daño ni el golpe más fuerte.
+- El **ranking de la sala** suma tres columnas: más monstruos, golpe más fuerte y tiempo jugado (validados en el servidor).
+- **Guardado:** `saveVersion` 14: `stats.playMs`, `earned`, `spent`, `healed`, `killsBy`, `maxHit` y `st` por héroe.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -458,6 +468,7 @@ public/js/achievements.js Logros, títulos y ranking de la sala
 public/js/worldboss.js Jefe de mundo semanal (vida compartida en el servidor)
 public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, tesoros, apariencias y donaciones
 public/js/daily.js     Recompensa diaria (calendario de 7 días)
+public/js/stats.js     Estadísticas del jugador (panel 📊 y registro de daño, curación, oro y tiempo)
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso

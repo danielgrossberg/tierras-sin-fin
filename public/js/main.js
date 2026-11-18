@@ -15,6 +15,7 @@ import { veinHere, veinTier } from './dungeon.js';
 import { onGather } from './quests.js';
 import { NODES } from './data.js';
 import { checkDaily } from './daily.js';
+import { statsTick, resetTrack } from './stats.js';
 // ================= Recolección (Versión 3 · Fase 6.1): botón grande al pisar un punto =================
 const gBtn = $('#gather');
 function gatherSpot() {
@@ -160,7 +161,7 @@ addEventListener('contextmenu', e => { if (e.target.tagName !== 'INPUT') e.preve
 document.addEventListener('gesturestart', e => e.preventDefault()); // evita zoom con pellizco en iOS
 
 // ================= Loop principal =================
-let lastT = 0;
+let lastT = 0, lastSt = 0;
 function frame(t) {
   const dt = Math.min(.05, (t - lastT) / 1000 || 0); lastT = t;
   if (st.inGame && !st.titleOpen) {
@@ -174,6 +175,7 @@ function frame(t) {
     if (t - lastTombCheck > 2000) { lastTombCheck = t; checkTomb(); }
     if (t - lastDN > 500) { lastDN = t; dayNightTick(); }
     if (t - lastAch > 2000) { lastAch = t; checkAch(); pushStats(); }
+    if (t - lastSt > 1000) { if (lastSt) statsTick(t - lastSt); lastSt = t; }
     gatherTick();
     draw(t);
     updateMini(t);
@@ -208,7 +210,7 @@ export function hatchEggs() {
 }
 function checkTomb() { if (tombExpired()) { toast('⌛ Se acabaron los 60 minutos: los objetos de tu tumba 🪦 se perdieron'); save('now'); updateHUD(); } }
 function enterWorld() {
-  merchDay = null; vvSent = 0;
+  merchDay = null; vvSent = 0; resetTrack(); lastSt = 0;
   st.titleOpen = false; st.inGame = true; $('#title').classList.add('hidden');
   ['#hud', '#topright', '#dock', '#dpad'].forEach(s => $(s).classList.remove('hidden'));
   P.px = P.x; P.py = P.y; visitAround(); spawnNearby(); lastBiome = tileAt(P.x, P.y).b; lastToastStep = -99;

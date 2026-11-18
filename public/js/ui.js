@@ -7,6 +7,7 @@ import { ADV, ADV_LVL, TAL, TAL_LVLS, advOf, PETS, EGG_PRICE, EGG_STEPS, PET_MAX
 import { activePet, petLabel, petEffect, petNeed, addEgg } from './pets.js';
 import { isNight, clockText, darkness } from './daynight.js';
 import { achTabHTML, loadRank, setTitle, achCount } from './achievements.js';
+import { statsTabHTML } from './stats.js';
 import { challenge, coopBusy } from './coop.js';
 import { wbAlive, wbPos, wbWhere } from './worldboss.js';
 import { elixRows, forgeHTML, merchHTML, trainerHTML, cityBtnsHTML, cityHTML, cosHTML, shopAct, craftHTML } from './shopui.js';
@@ -498,12 +499,12 @@ function questsTab() {
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`]];
+  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas']];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
-  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'mats' ? matsTab() : heroesTab();
+  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
   h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;

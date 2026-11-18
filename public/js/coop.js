@@ -16,6 +16,7 @@ import { petSnap, activePet, catBonus, petGainXP, addEgg } from './pets.js';
 import { PETS } from './data.js';
 import { onVictory } from './quests.js';
 import { createTomb } from './tomb.js';
+import { noteKills, noteDeath, noteBattle } from './stats.js';
 import { arenaResult } from './battle.js';
 import { heroFx, talFx, talSk, clsName } from './state.js';
 import { atkMulB, estimate, itemTargets, heroCardHTML } from './estimate.js';
@@ -277,7 +278,7 @@ async function guestEnd(d) {
   coop.guest = null; stopGuestClock();
   const h = g.hero, lines = [];
   if (!g.started) { if (isModalOpen()) closeModal(); toast(`⚠️ ${d.reason || 'El combate en equipo se canceló'}`); return; }
-  let lost = false;
+  let lost = false; if (!g.pvp) noteBattle(g.heroes || [h]);
   if (g.pvp) {
     // Duelo amistoso: todos recuperan la vida y la magia (también si se cancela)
     if (d.result === 'pvpwin' || d.result === 'pvplose') { const pts = arenaResult(d.result === 'pvpwin', g.mode); lines.push(d.result === 'pvpwin' ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`); }
@@ -296,7 +297,7 @@ async function guestEnd(d) {
   } else if (d.result === 'win') {
     const mine = (d.heroes || []).find(x => x.owner === st.name);
     if (mine) { h.hp = Math.max(0, Math.min(S(h, 'mhp'), mine.hp)); h.mp = Math.max(0, Math.min(S(h, 'mmp'), mine.mp)); h.poison = mine.poison || 0; }
-    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`); bump('coopWins'); bump('kills', (d.boss && d.boss.keys || []).length || 1);
+    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`); bump('coopWins'); bump('kills', (d.boss && d.boss.keys || []).length || 1); noteKills(d.boss && d.boss.keys || []);
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, d.xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
     const extra = (d.extra && d.extra[st.name]) || 0, cat = activePet() && activePet().k === 'gato' ? activePet() : null; G.gold += Math.round(d.gold * (cat ? 1 + catBonus(cat) : 1)) + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);
@@ -311,7 +312,7 @@ async function guestEnd(d) {
     // Se perdió: la regla de la tumba, con los objetos donde estaba antes del combate
     lost = true;
     P.x = g.prev.x; P.y = g.prev.y;
-    const t = createTomb(g.prev.x, g.prev.y);
+    noteDeath(); const t = createTomb(g.prev.x, g.prev.y);
     for (const x of G.roster) { x.hp = S(x, 'mhp'); x.mp = S(x, 'mmp'); x.poison = 0; x.buffs = {}; }
     lines.push(`💀 <b>El equipo cayó…</b> Tus objetos quedaron donde estabas${t.created ? ' (tumba 🪦, 60 min)' : ''}. Despertarás en <b>Ciudad Origen</b>.`);
     notice('death', 'Ciudad Origen');

@@ -16,6 +16,7 @@ import { bump } from './achievements.js';
 import { battleMats, matLabel } from './gather.js';
 import { foodP } from './state.js';
 import { wbReport } from './worldboss.js';
+import { noteHit, noteHeal, noteKills, noteBattle, noteDeath } from './stats.js';
 import { G, P, START, held, st, S, heroes, alive, learned, gainXP, eqSum, heroFx, talFx, talSk, clsName, elix } from './state.js';
 import { createTomb } from './tomb.js';
 import { monsters, mpos, spawnNearby, visitAround } from './world.js';
@@ -43,7 +44,7 @@ function credit(u, v) { if (BT && u && u.isHero && v > 0) BT.pts[u.id] = (BT.pts
 const support = u => credit(u, BT ? BT.supp : 0);
 function hurtEnemy(by, d, before) {
   if (d.isHero) return; credit(by, before - d.hp); if (d.hp <= 0) credit(by, d.mhp * .25);
-  if (BT && by && by.isHero && before > d.hp) { const n = by.remote ? by.owner : st.name; BT.dmgBy[n] = (BT.dmgBy[n] || 0) + (before - d.hp); }
+  if (BT && by && by.isHero && before > d.hp) { const n = by.remote ? by.owner : st.name; BT.dmgBy[n] = (BT.dmgBy[n] || 0) + (before - d.hp); noteHit(by, before - d.hp, d.hp <= 0, BT.sk); }
 }
 // Reparte X de experiencia entre los héroes del grupo según sus puntos
 function splitXP(party, X) {
@@ -309,7 +310,7 @@ async function strike(a, d, r, o = {}) {
   await sleep(o.fast ? 220 : 450); return dmg;
 }
 function kill(u) { if (u.isHero && BT && !BT.pvp) BT.fell = true; u.hp = 0; u.poison = 0; u.burn = 0; u.stun = 0; u.tmp = 0; u.trap = 0; u.buffs = {}; if (BT) BT.summons = BT.summons.filter(s => s.owner !== u); if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
-function heal(u, amt, by) { if (by && by.isHero) amt *= 1 + talFx(by, 'healP'); const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
+function heal(u, amt, by) { if (by && by.isHero) amt *= 1 + talFx(by, 'healP'); const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); noteHeal(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
 export function useItem(k, t) { G.items[k]--; itemEffect(k, t); }
 function itemEffect(k, t) {
   if (k === 'pocion') { heal(t, S(t, 'mhp') * .5); t.poison = 0; }
@@ -593,7 +594,7 @@ export async function startBattle(m, opts = {}) {
   const supp = Math.round(.15 * ens.reduce((a, e) => a + S(e, 'mhp'), 0) / ens.length);
   BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set(),
     party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null, night, round: 0, pets: [], dmgBy: {}, fell: false, pvp: !!opts.pvp, maxRounds: m.wb ? WB_ROUNDS : 0 };
-  BT.sideA = BT.party; BT.sideB = ens;
+  BT.sideA = BT.party; BT.sideB = ens; if (!BT.pvp) noteBattle(BT.party);
   if (!BT.pvp) { const own = activePet(); if (own) BT.pets.push({ id: 'pet0', k: own.k, lvl: own.lvl, hero: BT.party[0] });
     BT.party.filter(h => h.remote && validPet(h.pet)).forEach((h, i) => BT.pets.push({ id: 'pet' + (i + 1), k: h.pet.k, lvl: h.pet.lvl, owner: h.owner, hero: h })); }
   // Talentos: escudo al empezar (Bastión, Barrera, Barba de Hierro)
@@ -626,7 +627,7 @@ async function victory() {
   for (let i = 0; i < G.roster.length; i++) if (!G.party.includes(i)) gainXP(G.roster[i], xp * .1);
   lines.push(`<div class="xpl">${team.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
   lines.push(...lvMsgs);
-  bump('kills', BT.enemies.length); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
+  bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
   if (BT.night) lines.push('🌙 <span class="mut">Bonus nocturno: +30% de experiencia y botín</span>');
   if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
@@ -666,7 +667,7 @@ async function coopFinish(res) {
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
-  bump('kills', BT.enemies.length); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
+  bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
   const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1) * (elix('fortuna') ? 1.3 : 1));
   G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg());
   lines.push(...petGainXP(activePet(), xp * .5));
@@ -717,7 +718,7 @@ async function pvpFinish(res) {
 // Todo el grupo cayó (Versión 2): despiertan en Ciudad Origen con todos revividos; se conservan niveles,
 // experiencia, oro y mejoras; los objetos (pociones, inventario y equipo puesto) quedan en una tumba 🪦 por 60 minutos.
 async function defeat() {
-  const old = !!G.tomb;
+  const old = !!G.tomb; noteDeath();
   log('💀 Tu grupo ha caído…');
   $('#b-menu').innerHTML = `<div class="res">💀 <b>Tu grupo ha caído…</b> Tus objetos quedaron donde caíste. Despertarás en <b>Ciudad Origen</b>.<br>
     <span class="mut">Conservas niveles, experiencia, oro y mejoras. Tienes <b>60 minutos</b> para volver a la tumba 🪦 y recuperar tus objetos y tu equipo.</span>

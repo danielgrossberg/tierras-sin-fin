@@ -621,3 +621,20 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .dday.now{border:2px solid var(--gold);background:#2d2a1c;box-shadow:0 0 12px #f2c14e55}
 .achhead>b{display:flex;align-items:center;gap:8px}
 .achhead .btn{margin-left:auto}
+/* ===== Estadísticas (V3 · Fase 6.3) ===== */
+.tabs{grid-template-columns:repeat(7,1fr)}
+@media (max-width:480px){.tabs{grid-template-columns:repeat(4,1fr)}}
+.tabs.tabs3{grid-template-columns:repeat(3,1fr)}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.stgrid .sec{margin:0}
+.strow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid #ffffff12;font-size:14px}
+.strow:last-child{border-bottom:0}
+.strow b{text-align:right;overflow-wrap:anywhere}
+.kbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.kb{display:flex;flex-direction:column;align-items:center;background:#0002;border-radius:8px;padding:6px 4px;text-align:center}
+.kb .emoji{font-size:24px}.kb small{font-size:11px;color:var(--mut);line-height:1.2}
+.hstat{font-size:13px}
+.hsh,.hsr{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:4px;padding:4px 0;border-bottom:1px solid #ffffff12;align-items:center}
+.hsh{color:var(--mut);font-size:11px}
+.hsr span:not(:first-child),.hsh span:not(:first-child){text-align:right}
+.hsr span:first-child{overflow-wrap:anywhere}

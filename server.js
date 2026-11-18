@@ -370,7 +370,8 @@ io.on('connection', socket => {
   const nInt = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : 0;
   socket.on('stats:push', d => {
     const c = ctxOf(socket); if (!c || !isObj(d) || !allow(socket, 'stats', 12, 60000)) return;
-    const st = { ach: nInt(d.ach, ACH.length), dist: nInt(d.dist, 1e7), bosses: nInt(d.bosses, 1e6), arena: nInt(d.arena, 1e7), wins: nInt(d.wins, 1e6), title: TITLE_SET.has(d.title) ? d.title : null, lvl: nInt(d.lvl, 999) };
+    const st = { ach: nInt(d.ach, ACH.length), dist: nInt(d.dist, 1e7), bosses: nInt(d.bosses, 1e6), arena: nInt(d.arena, 1e7), wins: nInt(d.wins, 1e6), title: TITLE_SET.has(d.title) ? d.title : null, lvl: nInt(d.lvl, 999),
+      kills: nInt(d.kills, 1e8), hit: nInt(d.hit, 1e8), play: nInt(d.play, 1e7) };   // 6.3
     c.room.stats.set(c.p.name, st); c.p.title = st.title; markDirty(c.room);
     if (db.isReady() && socket.data.playerId) db.saveStats(c.room.code, c.p.name, st).catch(e => console.warn('ranking:', e.message));
   });
