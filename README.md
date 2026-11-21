@@ -460,6 +460,25 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
 - Empieza recién con el **primer toque** (regla de los navegadores) y **se pausa** cuando la pestaña o la app pasa a
   segundo plano. Liviano: las notas se programan por adelantado cada 100 ms (60 cuadros/s en la prueba).
 
+### Pruebas finales de la Versión 3 ✅
+Con el código final se volvieron a correr las pruebas de todas las fases (0 a 6.7, en 2 pestañas y vista de celular
+360×640, con base de datos) y una prueba final con **3 pestañas** que cubre:
+- Mazmorra con jefe en equipo de 3 jugadores (cada invitado juega su turno; victoria para los 3 y mazmorra completada).
+- Jefe de mundo atacado por dos jugadores en momentos distintos: la vida compartida baja lo mismo para toda la sala.
+- Paso del día a la noche en dos pestañas al mismo tiempo (🌙 y aviso "Cae la noche").
+- Recargar a mitad de una mazmorra y con un huevo a medio eclosionar: todo se recupera.
+- Donar desde dos pestañas a la vez: la barra del tablón suma ambas donaciones y la ven todos.
+- Chat: mensajes, globos, no leídos, historial al recargar y un intento de `<script>` / `<img onerror>`, que se ve
+  como texto y no se ejecuta.
+- Los 3 modos de visibilidad, pociones y éter con la lista de héroes (en combate y fuera), estimados de daño de ataques y
+  habilidades de 6 clases contra el daño real, vida de enemigos y jefes en números.
+- Recolección y fabricación, recompensa diaria (no se puede cobrar dos veces), monturas, bestiario, estadísticas y
+  música (empieza con el primer toque, cambia por zona y se puede silenciar).
+- Migración de una partida real de la versión publicada (saveVersion 6 → 16) sin perder nada.
+- Sin errores en la consola y sin scroll horizontal.
+
+(Los clanes y el intercambio entre jugadores quedaron fuera de la Versión 3 por decisión del dueño.)
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
