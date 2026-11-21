@@ -195,8 +195,8 @@ body.inbattle #feed{top:calc(8px + var(--sat))}
 @media (max-width:640px){.panel{padding:12px}.hgrid{grid-template-columns:1fr}.panel h2{font-size:20px}}
 
 /* ===== Pantalla de inicio ===== */
-#title{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at top,#2b3566,#0f1220 70%);padding:calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal));overflow:auto;touch-action:pan-y}
-.tpanel{max-width:880px;max-height:none;margin:auto}
+#title{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at top,#2b3566,#0f1220 70%);padding:calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal));overflow:auto;touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.tpanel{max-width:880px;max-height:none;margin:auto;overflow:visible;overscroll-behavior:auto}   /* la pantalla de inicio la desplaza #title: el panel no debe atrapar el deslizamiento */
 .logo{font-family:Georgia,serif;font-size:clamp(30px,8vw,52px);color:var(--gold);text-align:center;text-shadow:0 4px 0 #6b4d0f,0 8px 20px #000}
 .intro{text-align:center;margin:8px 0 14px;font-size:14px}
 #scrLobby{max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
