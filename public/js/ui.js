@@ -31,6 +31,7 @@ import { initChat, toggleSocial, closeSocial, refreshSocial } from './chat.js';
 import { VIS, cycleVis, visMode } from './prefs.js';
 import { estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { bestTabHTML, bestCount, BEST_KEYS } from './bestiary.js';
+import { sfx } from './audio.js';
 export { toggleSocial, closeSocial };
 import { D, inDungeon } from './dungeon.js';
 
@@ -382,6 +383,7 @@ function drawPortalMap() {
 const msgBox = () => VMSG ? `<div class="pend" style="margin-top:8px">${VMSG}</div>` : '';
 function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : VVIEW === 'forge' ? msgBox() + forgeHTML() : VVIEW === 'city' ? msgBox() + cityHTML() : VVIEW === 'cos' ? msgBox() + cosHTML() : VVIEW === 'craft' ? msgBox() + craftHTML() : villageRender(); }
 function travelTo(v) {
+  sfx('portal');
   P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
   toast(`🌀 Llegaste a ${v.name}`);
   const f = feats.get(v.x + ',' + v.y); if (f) setTimeout(() => openVillage(f), 350);
@@ -685,7 +687,7 @@ export function initUI(h) {
   });
   $('#modal').addEventListener('click', e => {
     const b = e.target.closest('[data-a]');
-    if (b && MH && !b.disabled) { MH(b.dataset.a, b.dataset.k); return; }
+    if (b && MH && !b.disabled) { const g0 = G.gold; Promise.resolve(MH(b.dataset.a, b.dataset.k)).then(() => { if (G.gold < g0) sfx('buy'); }).catch(() => {}); return; }
     if (e.target.id === 'modal' && MR) closeModal();
   });
   initChat();

@@ -657,3 +657,10 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 .btags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .btags span{background:#ffffff12;border-radius:999px;padding:3px 10px;font-size:12px}
 .bentry .strow b{font-weight:600;font-size:13px}
+/* ===== Sonido (V3 · Fase 6.7) ===== */
+#topright .trow{display:flex;align-items:center;gap:6px}
+.sndbtn{pointer-events:auto;width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:rgba(15,18,32,.88);font-size:20px;display:flex;align-items:center;justify-content:center;padding:0}
+#sndPanel{position:fixed;right:calc(8px + var(--sar));top:calc(60px + var(--sat));width:min(300px,calc(100vw - 16px - var(--sal) - var(--sar)));z-index:9;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 12px 40px #000a;touch-action:manipulation;display:flex;flex-direction:column;gap:10px}
+.sndrow{display:grid;grid-template-columns:86px 1fr 44px;align-items:center;gap:8px;font-size:14px}
+.sndrow b{text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+.sndrow input[type=range]{width:100%;height:44px;accent-color:var(--gold);touch-action:pan-x;min-width:0;padding:0;background:transparent;border:0}

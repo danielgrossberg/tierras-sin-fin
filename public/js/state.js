@@ -2,6 +2,7 @@
 // G es siempre el mismo objeto: al empezar o cargar partida se reemplaza su contenido.
 'use strict';
 import { CL, SK, ADV, ADV_LVL, TAL, TAL_LVLS, FOODS } from './data.js';
+import { sfx } from './audio.js';
 // Comida activa (Versión 3 · Fase 6.1): G.food = { k, until }
 export const foodP = k => { const f = G.food; return f && f.until > Date.now() && FOODS[f.k] ? (FOODS[f.k].fx[k] || 0) : 0; };
 
@@ -71,7 +72,7 @@ export function gainXP(h, x) {
   x *= 1 + (elix('sabio') ? .3 : 0) + (elix('descanso') ? (G.restBonus || 0) : 0);
   const msgs = []; h.xp += Math.round(x);
   while (h.xp >= need(h.lvl)) {
-    h.xp -= need(h.lvl); const om = S(h, 'mhp'), omm = S(h, 'mmp'); h.lvl++;
+    h.xp -= need(h.lvl); const om = S(h, 'mhp'), omm = S(h, 'mmp'); h.lvl++; if (!h.remote) sfx('level');
     if (h.hp > 0) h.hp += S(h, 'mhp') - om; h.mp += S(h, 'mmp') - omm;
     msgs.push(`⭐ <b>${h.name}</b> sube a nivel ${h.lvl}`);
     for (const k of CL[h.cls].sk) if (SK[k].lv === h.lvl) msgs.push(`✨ ${h.name} aprende <b>${SK[k].n}</b>`);

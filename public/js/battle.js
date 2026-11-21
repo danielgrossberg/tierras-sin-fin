@@ -27,6 +27,7 @@ import { save } from './storage.js';
 import { notice } from './net.js';
 import { mountDrop } from './mounts.js';
 import { markSeen, mastery } from './bestiary.js';
+import { sfx, jingle } from './audio.js';
 
 let BT = null, eid = 0;
 export const getBT = () => BT;
@@ -281,11 +282,11 @@ async function strike(a, d, r, o = {}) {
     d.trap = 0; const td = phys(d, a, 1.2).dmg, b0 = a.hp; a.hp = Math.max(0, a.hp - td); hurtEnemy(d, a, b0); a.stun = 1;
     popup(a, '🪤 ' + td, '#ffe08a'); anim(a, 'hit'); if (a.hp <= 0) { fall(a); refresh(); await sleep(400); return 0; }
   }
-  if (!r.mag && !o.sure && Math.random() < .05) { popup(d, '¡Falla!', '#ccc'); await sleep(o.fast ? 200 : 400); return 0; }
+  if (!r.mag && !o.sure && Math.random() < .05) { sfx('miss'); popup(d, '¡Falla!', '#ccc'); await sleep(o.fast ? 200 : 400); return 0; }
   // Esquivar todo (Sombra, Paso Sombrío)
-  if (d.buffs.evade > 0) { popup(d, '👤 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; }
+  if (d.buffs.evade > 0) { sfx('miss'); popup(d, '👤 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; }
   // Esquivar golpes físicos: Agilidad Élfica 15%, Velo Lunar +30% y talentos (máx. 75%)
-  if (!r.mag && d.isHero) { const ev = (d.cls === 'elfo' ? 15 : 0) + (d.buffs.veil > 0 ? 30 : 0) + talFx(d, 'dodge') + petDodge(d); if (ev > 0 && Math.random() * 100 < Math.min(75, ev)) { popup(d, '💨 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; } }
+  if (!r.mag && d.isHero) { const ev = (d.cls === 'elfo' ? 15 : 0) + (d.buffs.veil > 0 ? 30 : 0) + talFx(d, 'dodge') + petDodge(d); if (ev > 0 && Math.random() * 100 < Math.min(75, ev)) { sfx('miss'); popup(d, '💨 ¡Esquiva!', '#cfe8ff'); await sleep(o.fast ? 220 : 400); return 0; } }
   // Égida del Alba: 15% de bloquear el golpe completo
   if (d.isHero && heroFx(d, 'egida') && Math.random() < .15) { popup(d, '🛡️ ¡Bloqueo!', '#ffe08a'); await sleep(o.fast ? 220 : 450); return 0; }
   // Profecía: anula el próximo golpe
@@ -298,6 +299,8 @@ async function strike(a, d, r, o = {}) {
   if (d.shield > 0) { const ab = Math.min(d.shield, dmg); d.shield -= ab; dmg -= ab; }   // Escudo 💠
   if (d.tmp > 0) { const ab = Math.min(d.tmp, dmg); d.tmp -= ab; dmg -= ab; } // PV temporales (Forma de Oso)
   const before = d.hp; d.hp = Math.max(0, d.hp - dmg); hurtEnemy(a, d, before);
+  if (dmg > 0) sfx(r.crit ? 'crit' : r.mag ? 'magic' : 'hit');   // 🔊
+  if (dmg > 0) sfx(r.crit ? 'crit' : r.mag ? 'magic' : 'hit');   // 🔊
   // Espinas: devuelve 30% del daño recibido al atacante
   if (d.buffs.thorns > 0 && !a.isHero && a.hp > 0 && dmg > 0) {
     const rd = Math.max(1, Math.round(dmg * (.3 + talFx(d, 'thornsP')))), b1 = a.hp; a.hp = Math.max(0, a.hp - rd); hurtEnemy(d, a, b1); popup(a, '🌵' + rd, '#9fe870'); if (a.hp <= 0) fall(a);
@@ -313,7 +316,7 @@ async function strike(a, d, r, o = {}) {
   await sleep(o.fast ? 220 : 450); return dmg;
 }
 function kill(u) { if (u.isHero && BT && !BT.pvp) BT.fell = true; u.hp = 0; u.poison = 0; u.burn = 0; u.stun = 0; u.tmp = 0; u.trap = 0; u.buffs = {}; if (BT) BT.summons = BT.summons.filter(s => s.owner !== u); if (!u.isHero) { const el = uel(u); if (el) el.classList.add('dead'); } }
-function heal(u, amt, by) { if (by && by.isHero) amt *= 1 + talFx(by, 'healP'); const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); noteHeal(by, u.hp - b); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
+function heal(u, amt, by) { if (by && by.isHero) amt *= 1 + talFx(by, 'healP'); const mx = S(u, 'mhp'), b = u.hp; u.hp = Math.min(mx, u.hp + Math.round(amt)); credit(by, u.hp - b); noteHeal(by, u.hp - b); if (u.hp > b) sfx('heal'); popup(u, '+' + (u.hp - b), '#46c37b'); refresh(); return u.hp - b; }
 export function useItem(k, t) { G.items[k]--; itemEffect(k, t); }
 function itemEffect(k, t) {
   if (k === 'pocion') { heal(t, S(t, 'mhp') * .5); t.poison = 0; }
@@ -619,6 +622,7 @@ export async function startBattle(m, opts = {}) {
 // Huevo de mascota: botín raro de los jefes (15%)
 export function bossEgg() { if (Math.random() < .15) { addEgg('jefe'); return ['🥚 <b>¡Un huevo de mascota!</b> Eclosiona en 300 pasos.']; } return []; }
 async function victory() {
+  jingle('victory');
   const m = BT.m; const xp = BT.enemies.reduce((a, e) => a + e.xp, 0);
   const fort = elix('fortuna') ? 1.3 : 1;   // Elixir de Fortuna: +30% de oro y botín
   const cat = ownPet('gato'), loot = (partyHas('goblin') ? 1.3 : 1) * (BT.night ? NIGHT_REWARD : 1) * (cat ? 1 + catBonus(cat) : 1) * fort;   // Goblin +30% · noche +30% · gato
@@ -666,6 +670,7 @@ async function coopFinish(res) {
     boss: { id: m.id, lvl: m.lvl, name: BT.enemies[0].name, keys: BT.enemies.map(e => e.key), x: m.x, y: m.y },
     heroes: party().filter(h => h.remote).map(h => ({ owner: h.owner, hp: h.hp, mp: h.mp, poison: h.poison || 0 })) });
   if (!win) { await defeat(); return; }
+  jingle('victory');
   const lines = [`🏆 <b>¡Victoria en equipo!</b> +${xp} XP · +${gold} de oro`];
   for (const h of party().filter(x => !x.remote)) {
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
@@ -715,14 +720,14 @@ async function pvpFinish(res) {
   BT.coop.end({ id: BT.coop.id, result: cancel ? 'cancel' : win ? 'pvplose' : 'pvpwin', mode, reason: BT.pvpCancel ? 'el rival se desconectó' : '' });
   let line;
   if (cancel) line = '⚠️ <b>Duelo cancelado</b>. No cambia nada.';
-  else { const pts = arenaResult(win, mode); line = win ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`; }
+  else { jingle(win ? 'victory' : 'defeat'); const pts = arenaResult(win, mode); line = win ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`; }
   log(line); $('#b-menu').innerHTML = `<div class="res">${line}<br><span class="mut">Duelo amistoso: todos recuperan la vida y la magia.</span></div>`;
   await waitButton('Continuar');
 }
 // Todo el grupo cayó (Versión 2): despiertan en Ciudad Origen con todos revividos; se conservan niveles,
 // experiencia, oro y mejoras; los objetos (pociones, inventario y equipo puesto) quedan en una tumba 🪦 por 60 minutos.
 async function defeat() {
-  const old = !!G.tomb; noteDeath(); G.riding = false;   // al caer, se desmonta
+  jingle('defeat'); const old = !!G.tomb; noteDeath(); G.riding = false;   // al caer, se desmonta
   log('💀 Tu grupo ha caído…');
   $('#b-menu').innerHTML = `<div class="res">💀 <b>Tu grupo ha caído…</b> Tus objetos quedaron donde caíste. Despertarás en <b>Ciudad Origen</b>.<br>
     <span class="mut">Conservas niveles, experiencia, oro y mejoras. Tienes <b>60 minutos</b> para volver a la tumba 🪦 y recuperar tus objetos y tu equipo.</span>

@@ -25,6 +25,7 @@ import { inDungeon } from './dungeon.js';
 import { bump } from './achievements.js';
 import { mountDrop } from './mounts.js';
 import { markSeen } from './bestiary.js';
+import { jingle } from './audio.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -280,6 +281,7 @@ async function guestEnd(d) {
   coop.guest = null; stopGuestClock();
   const h = g.hero, lines = [];
   if (!g.started) { if (isModalOpen()) closeModal(); toast(`⚠️ ${d.reason || 'El combate en equipo se canceló'}`); return; }
+  if (d.result === 'win' || d.result === 'pvpwin') jingle('victory'); else if (d.result === 'lose' || d.result === 'pvplose') jingle('defeat');
   let lost = false; if (!g.pvp) { noteBattle(g.heroes || [h]); markSeen(d.boss && d.boss.keys || []); }
   if (g.pvp) {
     // Duelo amistoso: todos recuperan la vida y la magia (también si se cancela)

@@ -10,6 +10,7 @@ import { MATS, MAT_MAX, NODES, NODE_RESPAWN, PROFS, PROF_MAX, RECIPES, FOODS, GE
 import { G, P, START } from './state.js';
 import { rollRarity, makeItem, rollLoot, addItem, TYPES, RAR_KEYS } from './items.js';
 import { giveElix } from './economy.js';
+import { sfx } from './audio.js';
 
 // ---- Nivel del material según la distancia (como el peligro)
 export const tierAt = (x, y, max) => Math.min(max, Math.floor(Math.hypot(x - START.x, y - START.y) / 60));
@@ -44,6 +45,7 @@ export function gatherAt(node, tierOverride) {
   G.gath = G.gath || {}; G.gath[node.id] = Date.now();
   const ups = profXP(pk, 10 + 4 * tier);
   G.stats = G.stats || {}; G.stats.gathered = (G.stats.gathered || 0) + got.reduce((a, x) => a + x[1], 0);
+  sfx('gather');
   return { got, ups };
 }
 
@@ -90,6 +92,7 @@ export function craft(id, times = 1) {
     res.push(...profXP(r.prof, 15 + 5 * (o.t || 0) + r.lv));
   }
   if (done) { G.stats = G.stats || {}; G.stats.crafted = (G.stats.crafted || 0) + done; }
+  if (done) sfx('craft');
   return { r, done, res };
 }
 // Resultado legible de una receta

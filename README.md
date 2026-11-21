@@ -447,6 +447,19 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
 - Cada jugador tiene su propio libro (se guarda con la partida).
 - **Guardado:** `saveVersion` 16: `seen`. Los monstruos ya derrotados (estadísticas de la 6.3) quedan descubiertos.
 
+### Fase 6.7 (lista): música y efectos de sonido 🎵
+- **Música original** con sonido de chip clásico (ondas cuadrada, triangular y de sierra, y ruido), generada con la
+  Web Audio API. Las melodías están escritas como datos en `public/js/audio.js` y son **composiciones originales**
+  hechas para este juego (no copian ni imitan melodías de otros juegos o canciones). No hay archivos de audio.
+- **Temas:** 🏰 Ciudad Origen · 🏘️ Aldeas (y pantalla de inicio) · 🌾 Campo de día · 🌙 Campo de noche · 🕳️ Mazmorra ·
+  ⚔️ Combate · 👑 Jefe (también el jefe de mundo) · 🏆 Fanfarria de victoria · 💀 Derrota. Cambian con **fundido** suave.
+- **Efectos:** golpe, golpe crítico, magia, curación, fallo/esquiva, subir de nivel, abrir cofre, recolectar, fabricar,
+  comprar, portal y un sonido suave al llegar un mensaje de chat (respeta el chat silenciado).
+- **Botón 🔊** arriba a la derecha: volumen de música y de efectos por separado y silenciar todo (se guarda en el
+  dispositivo, `localStorage` 'tsf:sound').
+- Empieza recién con el **primer toque** (regla de los navegadores) y **se pausa** cuando la pestaña o la app pasa a
+  segundo plano. Liviano: las notas se programan por adelantado cada 100 ms (60 cuadros/s en la prueba).
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -500,6 +513,7 @@ public/js/daily.js     Recompensa diaria (calendario de 7 días)
 public/js/stats.js     Estadísticas del jugador (panel 📊 y registro de daño, curación, oro y tiempo)
 public/js/mounts.js    Monturas: velocidad, dónde se puede montar, botín y premios
 public/js/bestiary.js  Bestiario: fichas, hábitat, botín, maestría y porcentaje completado
+public/js/audio.js     Música original y efectos de sonido (Web Audio API)
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso

@@ -11,6 +11,7 @@ import { P, st, leader } from './state.js';
 import { net, sendQuick, placePin, sendChat, mateColor, CHAT_MAX } from './net.js';
 import { playersHTML, feed, toast } from './ui.js';
 import { chatMuted, toggleMute } from './prefs.js';
+import { sfx } from './audio.js';
 
 let tab = 'chat', unread = 0, built = false, sendLock = 0;
 const el = () => $('#social');
@@ -98,6 +99,7 @@ function onChat(m) {
     if (stick) list.scrollTop = list.scrollHeight;
   }
   if (m.kind !== 'sys' && !isMine(m) && !(isSocialOpen() && tab === 'chat')) { unread++; updateBadge(); }
+  if (m.kind !== 'sys' && !isMine(m) && !chatMuted()) sfx('chat');
 }
 function updateBadge() {
   const b = $('#socBadge'); if (!b) return;
