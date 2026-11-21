@@ -497,6 +497,23 @@ Se hace por fases (1 a 8), cada una con su commit. Sin clanes.
 - **Menú ⚙️:** sonido (antes era el botón 🔊), modo de ver a los demás jugadores (antes 👁️), guardar, nueva partida y
   **"🚪 Salir de la sala"** en rojo, con confirmación ("¿Salir de la sala? Tu partida queda guardada").
 
+### Fase 1b (lista): 🎒 Mochila y venta
+- **🎒 Mochila** (botón del HUD, tecla B, o desde la aldea): pestañas **Equipo · Objetos · Materiales · Especiales**
+  (huevos 🥚 y mapas del tesoro 🗺️). Cuadrícula compacta: ícono, borde del color de la rareza, cantidad, nivel y un punto
+  verde si es nuevo. **Ordenar** (más nuevo, rareza, tipo, nivel) y **buscador** por nombre. En Equipo, arriba, el
+  equipo puesto de cada héroe (tocar una ranura para quitarlo); en Materiales, las profesiones del grupo.
+- Al tocar un objeto se abre una **ficha desde abajo**: stats, comparación con lo que lleva el héroe elegido (verde o
+  rojo) y acciones **Equipar, Usar** (con la lista del grupo), **Vender** (solo en una aldea), **Desarmar** (pide
+  confirmación; da 🔩) y **🔒 Bloquear**: lo bloqueado no se vende ni se desarma (tampoco en la Forja).
+- **👥 Grupo** queda con Héroes, Misiones, Logros, Estadísticas y Bestiario.
+- **Tienda: 🛒 Comprar | 💰 Vender.** Vender muestra el inventario con las mismas pestañas y filtros; tocar para vender
+  (en los montones se elige la cantidad), **☑️ selección múltiple** con el total, **venta rápida** ("todo lo común" o
+  "común y raro", con la lista antes de confirmar; nunca lo bloqueado ni lo equipado) y **↩️ recompra** de lo último
+  vendido en la sesión (10) al mismo precio. Dentro de una aldea también se vende desde la mochila ("💰 Vender varios").
+- Precios de venta: equipo 30% de su valor (como antes); objetos 30% de su precio; materiales de 2 a 14 de oro según su
+  nivel (gemas 25).
+- **Guardado:** `saveVersion` 17: `lockK` (bloqueo de objetos y materiales); el equipo guarda `lk` (bloqueado) y `nw` (nuevo).
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -551,6 +568,7 @@ public/js/stats.js     Estadísticas del jugador (panel 📊 y registro de daño
 public/js/mounts.js    Monturas: velocidad, dónde se puede montar, botín y premios
 public/js/bestiary.js  Bestiario: fichas, hábitat, botín, maestría y porcentaje completado
 public/js/audio.js     Música original y efectos de sonido (Web Audio API)
+public/js/bag.js       🎒 Mochila y venta: cuadrícula, ficha, bloqueo, venta rápida y recompra
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso

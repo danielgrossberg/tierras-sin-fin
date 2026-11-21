@@ -130,6 +130,7 @@ export function compare(it, cur) {
 export function addItem(it) {
   if (!G.inventory) G.inventory = [];
   if (G.inventory.length >= INV_MAX) return false;
+  it.nw = 1;   // punto de "nuevo" en la 🎒 Mochila (Versión 4)
   G.inventory.push(it); return true;
 }
 

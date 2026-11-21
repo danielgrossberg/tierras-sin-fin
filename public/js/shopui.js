@@ -104,7 +104,7 @@ export async function shopAct(a, k) {
   if (a === 'fclose') { FSEL = null; return {}; }
   if (a === 'fup') { const it = selIt(); if (!it) return {}; const h = FSEL.src === 'eq' ? G.roster[FSEL.h] : null; let r; if (h) changeEquip(h, () => { r = forge(it); }); else r = forge(it); return { msg: r.msg, save: true }; }
   if (a === 'fre') { const it = selIt(); if (!it) return {}; const h = FSEL.src === 'eq' ? G.roster[FSEL.h] : null; let r; if (h) changeEquip(h, () => { r = reforge(it, k); }); else r = reforge(it, k); return { msg: r.ok ? `🔁 Reforjado: ${it.n} ahora tiene ${STAT[r.k]} ${it.st[r.k]}.` : r.msg, save: true }; }
-  if (a === 'fdis') { if (!FSEL || FSEL.src !== 'inv') return {}; if (!FSEL.drop) { FSEL.drop = true; return {}; } const n = dismantle(FSEL.i); FSEL = null; return { msg: `🔩 Desarmado: +${n} fragmentos.`, save: true }; }
+  if (a === 'fdis') { if (!FSEL || FSEL.src !== 'inv') return {}; if (G.inventory[FSEL.i] && G.inventory[FSEL.i].lk) return { msg: '🔒 Ese objeto está bloqueado. Desbloquéalo en la 🎒 Mochila para desarmarlo.' }; if (!FSEL.drop) { FSEL.drop = true; return {}; } const n = dismantle(FSEL.i); FSEL = null; return { msg: `🔩 Desarmado: +${n} fragmentos.`, save: true }; }
   if (a === 'merch') { const r = buyMerch(+k); if (!r) return {}; if (!r.ok) return { msg: r.msg }; return { msg: r.map ? '🗺️ ¡Mapa del tesoro! El cofre ✖️ quedó marcado en tu mapa y con una flecha.' : '🐪 ¡Comprado!', save: true }; }
   if (a === 'train1' || a === 'trainmax') { const h = G.roster[+k]; if (!h) return {}; const c = train(h, a === 'train1' ? h.lvl + 1 : trainMax()); return { msg: c ? `🎓 ${h.name} entrenó hasta Nv ${h.lvl} (${fmt(c)} oro).` : 'No se pudo entrenar.', save: true }; }
   if (a === 'cityview') return { view: 'city' };

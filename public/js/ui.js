@@ -36,6 +36,7 @@ import { RECIPES, CITY } from './data.js';
 import { recipeOk, canCraft } from './gather.js';
 import { merchVillage, trainMax } from './economy.js';
 import { soundPanelHTML, setSound, soundPref } from './audio.js';
+import { B as BAG, toolsHTML, gridHTML, sheetHTML, bagAct, bagClosed, wireBag, multiTotal, rebuyHTML } from './bag.js';
 export { toggleSocial, closeSocial };
 import { D, inDungeon } from './dungeon.js';
 
@@ -201,13 +202,12 @@ function vcards(f) {
 const VSEC = {
   posada: () => { const cost = restCost(); return `<div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div>
     ${heroes().filter(h => talList(h).length).map(h => { const i = G.roster.indexOf(h), c = talResetCost(h); return `<div class="shop"><span>🔄 <b>Reiniciar talentos</b> de ${h.e} ${h.name} <small class="mut">vuelve a elegirlos en 👥 Grupo</small></span><button class="btn sm" data-a="talreset" data-k="${i}" ${G.gold < c ? 'disabled' : ''}>${c} oro</button></div>`; }).join('')}</div>`; },
-  tienda: f => { const ilvl = zoneLvl(f), stock = shopStock(f, ilvl, armN(), cityLvl('tienda') >= 3), inv = G.inventory, full = inv.length >= INV_MAX;
+  tienda: f => TT === 'sell' ? shopTabs() + sellHTML() : shopTabs() + buyHTML(f),
+  _buy: f => { const ilvl = zoneLvl(f), stock = shopStock(f, ilvl, armN(), cityLvl('tienda') >= 3), inv = G.inventory, full = inv.length >= INV_MAX;
     return `<div class="sec"><h3>🧪 Objetos</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < shopP(IT[k].p) ? 'disabled' : ''}>Comprar · ${shopP(IT[k].p)} oro</button></span></div>`).join('')}</div>
   <div class="sec"><h3>⚔️ Armería <small class="mut">equipo común de la zona · Nv ${ilvl}</small></h3>
     ${stock.map(({ it, sold }, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small class="mut">${statList(it.st).join(' · ')} · ${classesText(it)}</small></span>${sold ? '<span class="mut small">Vendido</span>' : `<button class="btn sm" data-a="buyeq" data-k="${i}" ${G.gold < shopP(buyPrice(it)) || full ? 'disabled' : ''}>Comprar · ${shopP(buyPrice(it))} oro</button>`}</div>`).join('')}
-    <div class="shop"><span>💰 <b>Vender equipo</b> <small class="mut">te pagan el 30% de su valor · ${inv.length}/${INV_MAX} en el inventario</small></span><button class="btn sm" data-a="togsell">${VSELL ? 'Ocultar' : 'Ver inventario'}</button></div>
-    ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
-      : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}</div>`; },
+    <div class="shop"><span>💰 <b>¿Quieres vender?</b> <small class="mut">usa la pestaña Vender: equipo, objetos y materiales · ${inv.length}/${INV_MAX} en la mochila</small></span><button class="btn sm" data-a="ttab" data-k="sell">Ir a Vender</button></div></div>`; },
   herreria: () => `<div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div>
@@ -224,6 +224,17 @@ const VSEC = {
   entrenador: () => trainerHTML(),
   arena: f => arenaHTML(f),
 };
+let TT = 'buy';   // pestaña de la Tienda
+const shopTabs = () => `<div class="tabs tabs2"><button class="tab ${TT === 'buy' ? 'on' : ''}" data-a="ttab" data-k="buy">🛒 Comprar</button><button class="tab ${TT === 'sell' ? 'on' : ''}" data-a="ttab" data-k="sell">💰 Vender</button></div>`;
+const buyHTML = f => VSEC._buy(f);
+function sellHTML() {
+  const t = multiTotal();
+  return `${toolsHTML('shop')}
+    ${BAG.tab === 'equip' && !BAG.multi ? '<div class="bquick"><button class="btn" data-a="bquick" data-k="common">Vender todo lo común</button><button class="btn" data-a="bquick" data-k="rare">Vender común y raro</button></div>' : ''}
+    <div class="bmrow">${BAG.multi ? `<button class="btn" data-a="bmulti">Cancelar</button><button class="btn gold" data-a="bmsell" ${t.n ? '' : 'disabled'}>💰 Vender ${t.n} · ${t.g} oro</button>` : '<button class="btn" data-a="bmulti">☑️ Seleccionar varios</button>'}</div>
+    ${gridHTML('shop')}${rebuyHTML()}
+    <p class="mut small">Toca un objeto para venderlo (en los montones eliges la cantidad). Lo 🔒 bloqueado y lo que llevan puesto los héroes no se vende.</p>`;
+}
 const VTITLE = { portal: '🌀 Portal', pmap: '🗺️ Mapa del portal', forge: '⚒️ Forja', city: '🏗️ Construcción', cos: '🎨 Apariencias', craft: '🛠️ Taller' };
 const VPARENT = { forge: 's:herreria', city: 's:ciudad', cos: 's:ciudad', pmap: 'portal' };
 const vparent = v => VPARENT[v] || 'village';
@@ -238,15 +249,18 @@ function villageView() {
   else { title = VTITLE[v] || ''; body = v === 'portal' ? portalRender() : v === 'pmap' ? portalMapRender() : v === 'forge' ? forgeHTML() : v === 'city' ? cityHTML() : v === 'cos' ? cosHTML() : craftHTML(); }
   return `<div class="vhead">${v !== 'village' ? '<button class="btn vup" data-a="vup" aria-label="Volver">← Volver</button>' : ''}<div class="vtitle"><b>${title}</b><small>💰 ${fmtN(G.gold)} · 🎒 ${G.inventory.length}/${INV_MAX}${v !== 'village' ? ' · ' + esc(f.name) : ''}</small></div></div>
     ${VMSG ? `<div class="vmsg" role="status">${VMSG}</div>` : ''}
-    <div class="vbody" data-v="${v}">${body}</div>
-    <div class="vbar"><button class="btn gold vexit" data-a="close">🚪 Salir al mundo</button><button class="btn vsm" data-a="vbag" aria-label="Mochila">🎒</button><button class="btn vsm" data-a="vchat" aria-label="Chat">💬</button></div>`;
+    <div class="vbody" data-v="${v}${sec === 'tienda' ? ':' + TT + ':' + BAG.tab : ''}">${body}</div>
+    <div class="vbar"><button class="btn gold vexit" data-a="close">🚪 Salir al mundo</button><button class="btn vsm" data-a="vbag" aria-label="Mochila">🎒</button><button class="btn vsm" data-a="vchat" aria-label="Chat">💬</button></div>
+    ${sec === 'tienda' && TT === 'sell' ? sheetHTML('shop', { canSell: true }) : ''}`;
 }
 async function villageAct(a, k) {
   VMSG = '';
   if (a === 'close') { closeModal(); return; }
-  if (a === 'vsec') { VVIEW = k === 'portal' ? 'portal' : 's:' + k; VLAST = k; try { localStorage.setItem('tsf:vlast', k); } catch (e) { /* nada */ } PZ = null; PSEL = null; rerender(); return; }
+  if (a === 'ttab') { TT = k; BAG.sel = null; BAG.quick = null; BAG.multi = false; BAG.picks.clear(); if (k === 'sell' && BAG.tab === 'spec') BAG.tab = 'equip'; rerender(); return; }
+  if (/^b[a-z]+$/.test(a) && VVIEW === 's:tienda') { const r = bagAct(a, k, 'shop', { canSell: true }); if (r) { if (r.msg) VMSG = r.msg; if (r.save) save('now'); if (r.sold) sfx('buy'); rerender(); return; } }
+  if (a === 'vsec') { if (k === 'tienda') TT = 'buy'; VVIEW = k === 'portal' ? 'portal' : 's:' + k; VLAST = k; try { localStorage.setItem('tsf:vlast', k); } catch (e) { /* nada */ } PZ = null; PSEL = null; rerender(); return; }
   if (a === 'vup') { VVIEW = vparent(VVIEW); rerender(); if (VVIEW === 'pmap') drawPortalMap(); return; }
-  if (a === 'vbag') { const ret = { f: VF, view: VVIEW }; closeModal(); openParty('equip'); PRET = ret; return; }
+  if (a === 'vbag') { const ret = { f: VF, view: VVIEW }; closeModal(); openBag(); PRET = ret; return; }
   if (a === 'vchat') { toggleSocial(true); return; }
   const sr = await shopAct(a, k);
   if (sr) { if (sr.view) VVIEW = sr.view; if (sr.msg) VMSG = sr.msg; if (sr.save) save('now'); if (MR === villageView) rerender(); if (sr.view) $('#mcontent').scrollTop = 0; return; }
@@ -306,7 +320,7 @@ export function openVillage(f, view) {
   VF = f; VMSG = ''; VSELL = false; G.lastVillage = G.lastVillage || { x: f.x, y: f.y };
   G.vv = G.vv || {}; if (!G.vv[f.id]) G.vv[f.id] = { x: f.x, y: f.y, name: f.name };   // aldea descubierta (portales)
   VVIEW = view || 'village'; PZ = null; PSEL = null;
-  openModal(villageView, villageAct, () => { if (VVIEW === 'pmap') drawPortalMap(); });
+  openModal(villageView, villageAct, () => { if (VVIEW === 'pmap') drawPortalMap(); if (VVIEW === 's:tienda') wireBag($('#mcontent')); });
 }
 
 // ---- Tablón de misiones ----
@@ -582,11 +596,11 @@ function questsTab() {
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas'], ['best', `📖 Bestiario <small>${bestCount()}/${BEST_KEYS.length}</small>`]];
+  const tabs = [['heroes', '🧑 Héroes'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas'], ['best', `📖 Bestiario <small>${bestCount()}/${BEST_KEYS.length}</small>`]];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>👥 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}${activeMount() ? ` · ${MOUNTS[G.mount].e} ${MOUNTS[G.mount].n}${G.riding ? '' : ' <small class="mut">(a pie)</small>'}` : ''}</p>
-  <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
+  <div class="tabs tabs5">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
   h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'best' ? bestTabHTML(BSEL) : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
   h += `<div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
@@ -662,10 +676,39 @@ async function partyAct(a, k) {
     const it = G.inventory[PI.i]; if (it) { G.inventory.splice(PI.i, 1); G.gold += sellPrice(it); PI = null; save('now'); toast(`💰 +${sellPrice(it)} de oro`); }
   }
   if (a === 'drop' && PI && PI.src === 'inv') { if (!PI.drop) PI.drop = true; else { G.inventory.splice(PI.i, 1); PI = null; save(); } }
-  if (MR === partyRender) rerender();
+  if (MR === partyRender || MR === bagRender) rerender();
   if ((a === 'item' || a === 'fskill') && PA) { const p = $('#mcontent .pend'); if (p) p.scrollIntoView({ block: 'nearest' }); }
 }
 let BSEL = null;   // ficha abierta del bestiario
+// ================= 🎒 Mochila (Versión 4 · Fase 1b) =================
+// Mismo marco que la aldea: encabezado fijo, pestañas, buscador y orden; cuadrícula; ficha desde abajo; barra fija abajo.
+let BMSG = '';
+function bagRender() {
+  const canSell = inVillage(), t = multiTotal();
+  BAG.multi = BAG.multi && canSell;
+  const sheet = PA ? `<div class="bshade" data-a="cancel"></div><div class="bsheet">${pendHTML()}</div>` : sheetHTML('bag', { canSell });
+  return `<div class="vhead"><div class="vtitle"><b>🎒 Mochila</b><small>💰 ${G.gold.toLocaleString('es-CL')} · equipo ${G.inventory.length}/${INV_MAX}${canSell ? ' · 🏘️ puedes vender aquí' : ''}</small></div></div>
+    ${BMSG ? `<div class="vmsg" role="status">${BMSG}</div>` : ''}
+    <div class="bagtop">${toolsHTML('bag')}</div>
+    <div class="vbody" data-v="bag:${BAG.tab}">${gridHTML('bag')}</div>
+    ${BAG.multi ? `<div class="vbar bmbar"><button class="btn" data-a="bmulti">Cancelar</button><button class="btn gold" data-a="bmsell" ${t.n ? '' : 'disabled'}>💰 Vender ${t.n} · ${t.g} oro</button></div>`
+      : `<div class="vbar ${canSell ? 'bbar2' : 'bbar1'}"><button class="btn gold" data-a="close">Cerrar</button>${canSell ? '<button class="btn" data-a="bmulti">💰 Vender varios</button>' : ''}</div>`}
+    ${sheet}`;
+}
+async function bagUIAct(a, k) {
+  BMSG = '';
+  if (a === 'close') { PA = null; bagClosed(); closeModal(); if (PRET) { const r = PRET; PRET = null; openVillage(r.f, r.view); } return; }
+  if (a === 'tgt' || a === 'cancel') { await partyAct(a, k); return; }
+  const r = bagAct(a, k, 'bag', { canSell: inVillage() });
+  if (r) { if (r.use) PA = { kind: 'item', k: r.use, t: IT[r.use].t, label: IT[r.use].n }; if (r.msg) BMSG = r.msg; if (r.save) save('now'); if (r.sold) sfx('buy'); }
+  rerender();
+}
+export function openBag(tab) {
+  PRET = null; PA = null; BMSG = ''; BAG.sel = null; BAG.quick = null; BAG.multi = false; BAG.picks.clear();
+  if (tab) BAG.tab = tab;
+  openModal(bagRender, bagUIAct, () => wireBag($('#mcontent')));
+}
+
 // ================= Menú ⚙️ (Versión 4 · Fase 1a): sonido, jugadores, guardar, nueva partida y salir de la sala =================
 let MNC = false, MQ = false;
 function menuRender() {
@@ -695,7 +738,10 @@ async function menuAct(a) {
   rerender();
 }
 export function openMenu() { MNC = false; MQ = false; openModal(menuRender, menuAct, wireMenu); }
-export function openParty(tab) { PRET = null; PA = null; BSEL = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
+export function openParty(tab) {
+  if (tab === 'equip' || tab === 'items' || tab === 'mats') { openBag(tab); return; }   // ahora están en la 🎒 Mochila
+  if (!['heroes', 'quests', 'ach', 'stats', 'best'].includes(PT)) PT = 'heroes';
+  PRET = null; PA = null; BSEL = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
 
 // ================= Confirmación antes de pelear con un jefe =================
 // Los jefes nunca inician el combate solos: el jugador decide.
@@ -789,7 +835,7 @@ export function initUI(h) {
   initChat();
   // 👁️ Mostrar u ocultar a los demás jugadores (3 modos, se guarda en el dispositivo)
   $('#bParty').onclick = () => { if (!st.busy) openParty('heroes'); };
-  $('#bBag').onclick = () => { if (!st.busy) openParty('equip'); };
+  $('#bBag').onclick = () => { if (!st.busy) openBag(); };
   $('#bMenu').onclick = () => { if (!st.busy) openMenu(); };
   // Las tarjetas del grupo se pliegan con un toque (se recuerda en el dispositivo)
   const hh = $('#hudHeroes'); try { hh.classList.toggle('compact', localStorage.getItem('tsf:hudc') === '1'); } catch (e) { /* nada */ }
