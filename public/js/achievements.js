@@ -56,7 +56,7 @@ export function checkAch() {
     feed(`🏆 <b>¡Logro!</b> ${esc(a.n)} · título «${esc(a.title)}»${rw}`);
     notice('ach', a.n);
   }
-  if (got.length) { toast(`🏆 ¡Logro!<br><span style="font-size:15px">${esc(got[0].n)}</span><br><span style="font-size:12px">Título: «${esc(got[0].title)}» (elígelo en 🎒 Grupo → Logros)</span>`); pushStats(true); }
+  if (got.length) { toast(`🏆 ¡Logro!<br><span style="font-size:15px">${esc(got[0].n)}</span><br><span style="font-size:12px">Título: «${esc(got[0].title)}» (elígelo en 👥 Grupo → Logros)</span>`); pushStats(true); }
   return got;
 }
 // Lo que se manda al servidor para el ranking (solo si cambió)
@@ -68,7 +68,7 @@ export function pushStats(force) {
   lastPush = k; lastT = Date.now(); statsPush(d);
 }
 
-// ================= Panel (🎒 Grupo → 🏆 Logros) =================
+// ================= Panel (👥 Grupo → 🏆 Logros) =================
 let RANK = null, RANKING = false;
 export async function loadRank() {
   if (!net.joined) { RANK = { off: true }; return; }

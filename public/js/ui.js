@@ -32,6 +32,10 @@ import { VIS, cycleVis, visMode } from './prefs.js';
 import { estimate, itemTargets, heroCardHTML } from './estimate.js';
 import { bestTabHTML, bestCount, BEST_KEYS } from './bestiary.js';
 import { sfx } from './audio.js';
+import { RECIPES, CITY } from './data.js';
+import { recipeOk, canCraft } from './gather.js';
+import { merchVillage, trainMax } from './economy.js';
+import { soundPanelHTML, setSound, soundPref } from './audio.js';
 export { toggleSocial, closeSocial };
 import { D, inDungeon } from './dungeon.js';
 
@@ -143,8 +147,13 @@ export function updatePlayersUI() {
 let MR = null, MH = null, MA = null;
 export const isModalOpen = () => !!MR;
 export function openModal(render, handler, after) { MR = render; MH = handler; MA = after || null; st.busy = true; held.clear(); closeSocial(); $('#modal').classList.remove('hidden'); rerender(); }
-function rerender() { $('#mcontent').innerHTML = MR(); if (MA) MA(); updateHUD(); }
-export function closeModal() { $('#modal').classList.add('hidden'); MR = MH = MA = null; st.busy = false; held.clear(); save(); }
+function rerender() {
+  const mc = $('#mcontent'), ob = mc.querySelector('.vbody'), key = ob && ob.dataset.v, top = ob ? ob.scrollTop : 0;
+  mc.innerHTML = MR(); mc.classList.toggle('dash', !!mc.querySelector(':scope > .vhead'));
+  const nb = mc.querySelector('.vbody'); if (nb && key && nb.dataset.v === key) nb.scrollTop = top;
+  if (MA) MA(); updateHUD();
+}
+export function closeModal() { $('#modal').classList.add('hidden'); $('#mcontent').classList.remove('dash'); MR = MH = MA = null; st.busy = false; held.clear(); save(); }
 export const modalIs = k => (k === 'party' && MR === partyRender) || (k === 'map' && MR === mapRender) || (k === 'village' && MR === villageView);
 
 // ================= Aldea =================
@@ -155,44 +164,102 @@ function restCost() { return VF.start ? 0 : Math.max(1, Math.round(Math.max(3, M
 const disc = () => 1 - .1 * cityLvl('tienda'), shopP = n => Math.max(1, Math.round(n * disc()));
 const armN = () => [4, 5, 6, 6][cityLvl('tienda')];
 const zoneLvl = f => Math.max(1, dangerAt(f.x, f.y));
-function villageRender() {
-  const f = VF, cost = restCost(), ilvl = zoneLvl(f), stock = shopStock(f, ilvl, armN(), cityLvl('tienda') >= 3), inv = G.inventory, full = inv.length >= INV_MAX;
-  return `<h2>🏘️ ${f.name}</h2><p class="mut" style="margin:0">Refugio seguro: los monstruos no entran aquí. Tienes <b class="goldt">💰 ${G.gold}</b> de oro.</p>
-  ${VMSG ? `<div class="pend" style="margin-top:10px">${VMSG}</div>` : ''}
-  <div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div>
-    ${heroes().filter(h => talList(h).length).map(h => { const i = G.roster.indexOf(h), c = talResetCost(h); return `<div class="shop"><span>🔄 <b>Reiniciar talentos</b> de ${h.e} ${h.name} <small class="mut">vuelve a elegirlos en 🎒 Grupo</small></span><button class="btn sm" data-a="talreset" data-k="${i}" ${G.gold < c ? 'disabled' : ''}>${c} oro</button></div>`; }).join('')}</div>
-  <div class="sec"><h3>🛒 Tienda</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < shopP(IT[k].p) ? 'disabled' : ''}>Comprar · ${shopP(IT[k].p)} oro</button></span></div>`).join('')}
-    <h3 style="margin-top:10px">⚗️ Alquimista <small class="mut">elixires de 30 minutos; se pueden tener varios a la vez</small></h3>${elixRows()}</div>
+// ================= Aldea como panel (Versión 4 · Fase 1a) =================
+// Encabezado fijo (nombre, oro y mochila) · tarjetas por servicio con su estado · cada sección en su propia vista
+// con "← Volver" · barra fija abajo con "🚪 Salir al mundo", 🎒 Mochila y 💬 Chat. La última sección usada queda marcada.
+let VLAST = (() => { try { return localStorage.getItem('tsf:vlast') || null; } catch (e) { return null; } })();
+const fmtN = n => Math.round(n || 0).toLocaleString('es-CL');
+const craftN = pk => RECIPES.filter(r => r.prof === pk && recipeOk(r) && canCraft(r)).length;
+const boardNew = f => { let n = 0; for (let s = 0; s < SLOTS_PER_BOARD; s++) { const q = boardQuest(f, s); if (q && !isActive(q.id)) n++; } return n; };
+const recTxt = n => n ? `${n} receta${n === 1 ? '' : 's'} disponible${n === 1 ? '' : 's'}` : '';
+function vcards(f) {
+  const cost = restCost(), hurt = G.roster.some(h => h.hp < S(h, 'mhp') || h.mp < S(h, 'mmp')), dead = heroes().some(h => h.hp <= 0);
+  const mv = merchVillage(), nb = boardNew(f), canTake = active().length < MAX_ACTIVE, nh = craftN('herr'), na = craftN('alq'), nc = craftN('coc');
+  const dests = portalEntries().filter(e => !e.here).length, pets = (G.pets || []).length, eggs = (G.eggs || []).length, am = activeMount();
+  const c = [
+    { k: 'posada', e: '🛏️', n: 'Posada', s: hurt ? `Descansar · ${cost ? cost + ' oro' : 'gratis'}` : 'Grupo con vida llena', b: dead ? '💀' : '' },
+    { k: 'tienda', e: '🛒', n: 'Tienda', s: 'Comprar y vender' },
+    { k: 'herreria', e: '⚒️', n: 'Herrería y forja', s: recTxt(nh) || `Afilar armas · ${upCost(G.upA)} oro`, b: nh ? String(nh) : '' },
+    { k: 'alq', e: '🧪', n: 'Alquimia', s: recTxt(na) || 'Elixires y pociones', b: na ? String(na) : '' },
+    { k: 'coc', e: '🍲', n: 'Cocina', s: recTxt(nc) || 'Comidas con bonos', b: nc ? String(nc) : '' },
+    { k: 'taberna', e: '🍺', n: 'Taberna', s: `Grupo ${G.party.length}/3`, b: G.roster.some(h => hasPending(h)) ? '🌟' : '' },
+    { k: 'portal', e: '🌀', n: 'Portal', s: dests ? `${dests} destino${dests === 1 ? '' : 's'} · ${travelCost()} oro` : 'Visita otras aldeas primero' },
+    { k: 'misiones', e: '📜', n: 'Misiones', s: nb ? `${nb} nueva${nb === 1 ? '' : 's'} · ${active().length}/${MAX_ACTIVE} activas` : `${active().length}/${MAX_ACTIVE} activas`, b: nb && canTake ? String(nb) : '' },
+    { k: 'establo', e: '🐴', n: 'Establo', s: am ? `${MOUNTS[am].e} ${MOUNTS[am].n}${pets ? ' · ' + pets + ' mascota' + (pets === 1 ? '' : 's') : ''}` : pets || eggs ? `${pets} mascota${pets === 1 ? '' : 's'}${eggs ? ' · 🥚 ' + eggs : ''}` : `Caballo · ${HORSE_PRICE} oro` },
+  ];
+  if (mv && mv.id === f.id) c.push({ k: 'mercader', e: '🐪', n: 'Mercader', s: '¡Hoy aquí!', b: '!' });
+  if (isCoastal(f)) c.push({ k: 'muelle', e: '⛵', n: 'Muelle', s: G.boat ? 'Ya tienes bote' : `Bote · ${BOAT_PRICE} oro` });
+  if (f.start) {
+    const lv = Object.keys(CITY).reduce((x, k) => x + cityLvl(k), 0), res = G.roster.filter((h, i) => !G.party.includes(i) && h.lvl < trainMax()).length;
+    const here = [...net.others.values()].filter(o => o.online !== false && o.x === START.x && o.y === START.y).length;
+    c.push({ k: 'ciudad', e: '🏗️', n: 'Construcción y apariencias', s: `${lv}/18 mejoras de la ciudad` });
+    c.push({ k: 'entrenador', e: '🎓', n: 'Entrenador', s: res ? `${res} héroe${res === 1 ? '' : 's'} para entrenar` : 'Taberna al día' });
+    c.push({ k: 'arena', e: '⚔️', n: 'Arena', s: st.online ? (here ? `${here} jugador${here === 1 ? '' : 'es'} aquí` : 'Duelos amistosos') : 'Necesita conexión' });
+  }
+  return c;
+}
+const VSEC = {
+  posada: () => { const cost = restCost(); return `<div class="sec"><h3>🛏️ Posada</h3><div class="shop"><span>Restaura PV y PM, revive a los caídos y guarda la partida.</span><button class="btn gold" data-a="rest" ${G.gold < cost ? 'disabled' : ''}>Descansar (${cost ? cost + ' oro' : 'gratis'})</button></div>
+    ${heroes().filter(h => talList(h).length).map(h => { const i = G.roster.indexOf(h), c = talResetCost(h); return `<div class="shop"><span>🔄 <b>Reiniciar talentos</b> de ${h.e} ${h.name} <small class="mut">vuelve a elegirlos en 👥 Grupo</small></span><button class="btn sm" data-a="talreset" data-k="${i}" ${G.gold < c ? 'disabled' : ''}>${c} oro</button></div>`; }).join('')}</div>`; },
+  tienda: f => { const ilvl = zoneLvl(f), stock = shopStock(f, ilvl, armN(), cityLvl('tienda') >= 3), inv = G.inventory, full = inv.length >= INV_MAX;
+    return `<div class="sec"><h3>🧪 Objetos</h3>${Object.keys(IT).map(k => `<div class="shop"><span><span class="emoji">${IT[k].e}</span> <b>${IT[k].n}</b> <small class="mut">${IT[k].d}</small></span><span><small class="mut">Tienes ${G.items[k]}</small> <button class="btn sm" data-a="buy" data-k="${k}" ${G.gold < shopP(IT[k].p) ? 'disabled' : ''}>Comprar · ${shopP(IT[k].p)} oro</button></span></div>`).join('')}</div>
   <div class="sec"><h3>⚔️ Armería <small class="mut">equipo común de la zona · Nv ${ilvl}</small></h3>
     ${stock.map(({ it, sold }, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small class="mut">${statList(it.st).join(' · ')} · ${classesText(it)}</small></span>${sold ? '<span class="mut small">Vendido</span>' : `<button class="btn sm" data-a="buyeq" data-k="${i}" ${G.gold < shopP(buyPrice(it)) || full ? 'disabled' : ''}>Comprar · ${shopP(buyPrice(it))} oro</button>`}</div>`).join('')}
     <div class="shop"><span>💰 <b>Vender equipo</b> <small class="mut">te pagan el 30% de su valor · ${inv.length}/${INV_MAX} en el inventario</small></span><button class="btn sm" data-a="togsell">${VSELL ? 'Ocultar' : 'Ver inventario'}</button></div>
     ${VSELL ? (inv.length ? inv.map((it, i) => `<div class="shop"><span class="ishop">${itemLabel(it)}<small style="color:${RAR[it.r].c}">${RAR[it.r].n} · Nv ${it.ilvl}</small></span><button class="btn sm" data-a="selleq" data-k="${i}">Vender · ${sellPrice(it)} oro</button></div>`).join('')
-      : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}
-  </div>
-  ${merchHTML(f)}<div class="sec"><h3>🛠️ Taller</h3><div class="shop"><span>⚗️ Alquimia · ⚒️ Herrería · 🍳 Cocina <small class="mut">fabrica pociones, elixires, equipo y comidas con tus materiales</small></span><button class="btn sm gold" data-a="craftview">Abrir taller</button></div></div>${boardHTML(f)}${dockHTML(f)}${portalHTML(f)}${stableHTML(f)}${mountsHTML()}${f.start ? cityBtnsHTML() + trainerHTML() : ''}${arenaHTML(f)}
-  <div class="sec"><h3>⚒️ Herrería</h3>
+      : '<p class="mut small" style="margin:6px 0 0">No tienes equipo guardado. Lo que llevan puesto los héroes no se vende desde aquí.</p>') : ''}</div>`; },
+  herreria: () => `<div class="sec"><h3>⚒️ Herrería</h3>
     <div class="shop"><span>🗡️ <b>Afilar armas</b> <small class="mut">+2 de Ataque a todos (nivel actual ${G.upA})</small></span><button class="btn sm" data-a="upA" ${G.gold < upCost(G.upA) ? 'disabled' : ''}>${upCost(G.upA)} oro</button></div>
     <div class="shop"><span>🛡️ <b>Reforzar armaduras</b> <small class="mut">+2 de Defensa a todos (nivel actual ${G.upD})</small></span><button class="btn sm" data-a="upD" ${G.gold < upCost(G.upD) ? 'disabled' : ''}>${upCost(G.upD)} oro</button></div>
-    <div class="shop"><span>⚒️ <b>Forja</b> <small class="mut">mejora un objeto de +1 a +10, reforja propiedades o desarma lo que no sirve · 🔩 ${G.frags || 0}</small></span><button class="btn sm gold" data-a="forgeview">Abrir forja</button></div></div>
-  <div class="sec"><h3>🍺 Taberna</h3><p class="mut" style="margin:0 0 8px;font-size:13px">Toca para sumar o sacar héroes del grupo (máximo 3). Los que esperan aquí ganan el 10% de la experiencia.</p>
-    <div class="tav">${G.roster.map((h, i) => `<button class="tavh ${G.party.includes(i) ? 'on' : ''}" data-a="tog" data-k="${i}"><span class="emoji">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}${hasPending(h) ? " 🌟" : ""}</small><small>${G.party.includes(i) ? '✅ En el grupo' : 'Esperando'}</small></button>`).join('')}</div></div>
-  <div class="row end"><button class="btn" data-a="close">Salir de la aldea</button></div>`;
+    <div class="shop"><span>⚒️ <b>Forja</b> <small class="mut">mejora un objeto de +1 a +10, reforja propiedades o desarma lo que no sirve · 🔩 ${G.frags || 0}</small></span><button class="btn sm gold" data-a="forgeview">Abrir forja</button></div></div>${craftHTML({ tab: 'herr', bare: true })}`,
+  alq: () => `<div class="sec"><h3>⚗️ Elixires <small class="mut">30 minutos; se pueden tener varios a la vez</small></h3>${elixRows()}</div>${craftHTML({ tab: 'alq', bare: true })}`,
+  coc: () => craftHTML({ tab: 'coc', bare: true }),
+  taberna: () => `<div class="sec"><h3>🍺 Taberna</h3><p class="mut" style="margin:0 0 8px;font-size:13px">Toca para sumar o sacar héroes del grupo (máximo 3). Los que esperan aquí ganan el 10% de la experiencia.</p>
+    <div class="tav">${G.roster.map((h, i) => `<button class="tavh ${G.party.includes(i) ? 'on' : ''}" data-a="tog" data-k="${i}"><span class="emoji">${h.e}</span><b>${h.name}</b><small>${clsName(h)} · Nv ${h.lvl}${hasPending(h) ? " 🌟" : ""}</small><small>${G.party.includes(i) ? '✅ En el grupo' : 'Esperando'}</small></button>`).join('')}</div></div>`,
+  misiones: f => boardHTML(f),
+  establo: f => stableHTML(f) + mountsHTML(),
+  mercader: f => merchHTML(f) || '<p class="mut">El mercader ya se fue de esta aldea.</p>',
+  muelle: f => dockHTML(f),
+  ciudad: () => cityBtnsHTML(),
+  entrenador: () => trainerHTML(),
+  arena: f => arenaHTML(f),
+};
+const VTITLE = { portal: '🌀 Portal', pmap: '🗺️ Mapa del portal', forge: '⚒️ Forja', city: '🏗️ Construcción', cos: '🎨 Apariencias', craft: '🛠️ Taller' };
+const VPARENT = { forge: 's:herreria', city: 's:ciudad', cos: 's:ciudad', pmap: 'portal' };
+const vparent = v => VPARENT[v] || 'village';
+function dashHTML(f) {
+  return `<p class="mut small" style="margin:0 0 10px">Refugio seguro: los monstruos no entran aquí.</p><div class="vgrid">${vcards(f).map(c => `<button class="vcard ${VLAST === c.k ? 'last' : ''}" data-a="vsec" data-k="${c.k}"><span class="ve emoji">${c.e}</span><b>${c.n}</b><small>${c.s}</small>${c.b ? `<span class="vbadge">${c.b}</span>` : ''}</button>`).join('')}</div>`;
+}
+function villageView() {
+  const f = VF, v = VVIEW, sec = v.startsWith('s:') ? v.slice(2) : null;
+  let title, body;
+  if (v === 'village') { title = `${f.start ? '🏰' : '🏘️'} ${esc(f.name)}`; body = dashHTML(f); }
+  else if (sec && VSEC[sec]) { const c = vcards(f).find(x => x.k === sec) || { e: '', n: '' }; title = `${c.e} ${c.n}`; body = VSEC[sec](f); }
+  else { title = VTITLE[v] || ''; body = v === 'portal' ? portalRender() : v === 'pmap' ? portalMapRender() : v === 'forge' ? forgeHTML() : v === 'city' ? cityHTML() : v === 'cos' ? cosHTML() : craftHTML(); }
+  return `<div class="vhead">${v !== 'village' ? '<button class="btn vup" data-a="vup" aria-label="Volver">← Volver</button>' : ''}<div class="vtitle"><b>${title}</b><small>💰 ${fmtN(G.gold)} · 🎒 ${G.inventory.length}/${INV_MAX}${v !== 'village' ? ' · ' + esc(f.name) : ''}</small></div></div>
+    ${VMSG ? `<div class="vmsg" role="status">${VMSG}</div>` : ''}
+    <div class="vbody" data-v="${v}">${body}</div>
+    <div class="vbar"><button class="btn gold vexit" data-a="close">🚪 Salir al mundo</button><button class="btn vsm" data-a="vbag" aria-label="Mochila">🎒</button><button class="btn vsm" data-a="vchat" aria-label="Chat">💬</button></div>`;
 }
 async function villageAct(a, k) {
   VMSG = '';
   if (a === 'close') { closeModal(); return; }
+  if (a === 'vsec') { VVIEW = k === 'portal' ? 'portal' : 's:' + k; VLAST = k; try { localStorage.setItem('tsf:vlast', k); } catch (e) { /* nada */ } PZ = null; PSEL = null; rerender(); return; }
+  if (a === 'vup') { VVIEW = vparent(VVIEW); rerender(); if (VVIEW === 'pmap') drawPortalMap(); return; }
+  if (a === 'vbag') { const ret = { f: VF, view: VVIEW }; closeModal(); openParty('equip'); PRET = ret; return; }
+  if (a === 'vchat') { toggleSocial(true); return; }
   const sr = await shopAct(a, k);
   if (sr) { if (sr.view) VVIEW = sr.view; if (sr.msg) VMSG = sr.msg; if (sr.save) save('now'); if (MR === villageView) rerender(); if (sr.view) $('#mcontent').scrollTop = 0; return; }
   if (a === 'rest') { const c = restCost(); if (G.gold < c) return; G.gold -= c; for (const h of G.roster) { h.hp = S(h, 'mhp'); h.mp = S(h, 'mmp'); h.poison = 0; } G.lastVillage = { x: VF.x, y: VF.y };
     const pl = cityLvl('posada'); if (pl) { G.restBonus = .1 * pl; giveElix('descanso', 10 * 60 * 1000); }   // Posada mejorada: +10/20/30% de experiencia por 10 min
     save('now'); VMSG = '😴 El grupo descansó. ¡Todos recuperados! Partida guardada.' + (pl ? ` <b class="goldt">😊 Bien descansados: +${10 * pl}% de experiencia por 10 minutos.</b>` : ''); }
   if (a === 'buy') { const c = shopP(IT[k].p); if (G.gold >= c) { G.gold -= c; G.items[k]++; save('now'); } }
-  if (a === 'talreset') { const h = G.roster[+k], c = h && talResetCost(h); if (h && G.gold >= c) { G.gold -= c; changeEquip(h, () => { h.tal = {}; }); save('now'); VMSG = `🔄 Talentos de ${h.name} reiniciados. Elígelos de nuevo en 🎒 Grupo → Héroes.`; } }
+  if (a === 'talreset') { const h = G.roster[+k], c = h && talResetCost(h); if (h && G.gold >= c) { G.gold -= c; changeEquip(h, () => { h.tal = {}; }); save('now'); VMSG = `🔄 Talentos de ${h.name} reiniciados. Elígelos de nuevo en 👥 Grupo → Héroes.`; } }
   if (a === 'upA' || a === 'upD') { const key = a === 'upA' ? 'upA' : 'upD', c = upCost(G[key]); if (G.gold >= c) { G.gold -= c; G[key]++; save('now'); VMSG = a === 'upA' ? '🗡️ ¡Armas afiladas!' : '🛡️ ¡Armaduras reforzadas!'; } }
   if (a === 'buyeq') {
     const s = shopStock(VF, zoneLvl(VF), armN(), cityLvl('tienda') >= 3)[+k];
     if (s && !s.sold && G.gold >= shopP(buyPrice(s.it))) {
-      if (addItem(s.it)) { G.gold -= shopP(buyPrice(s.it)); markBought(VF, +k); save('now'); VMSG = `Compraste ${itemLabel(s.it)}. Equípalo en 🎒 Grupo → Equipo.`; }
+      if (addItem(s.it)) { G.gold -= shopP(buyPrice(s.it)); markBought(VF, +k); save('now'); VMSG = `Compraste ${itemLabel(s.it)}. Equípalo en 🎒 Mochila → Equipo.`; }
       else VMSG = '🎒 Tu inventario está lleno (40). Vende algo primero.';
     }
   }
@@ -214,7 +281,7 @@ async function villageAct(a, k) {
   // ---- Portal (Versión 3 · Fase 0.1) ----
   if (a === 'portal') { VVIEW = 'portal'; PSEL = null; }
   if (a === 'pmap') { VVIEW = 'pmap'; PSEL = null; }
-  if (a === 'vback') VVIEW = 'village';
+  if (a === 'vback') VVIEW = vparent(VVIEW);
   if (a === 'pzone') PZ = PZ === k ? '' : k;   // tocar la zona abierta la pliega
   if (a === 'fav' && G.vv[k] && k !== startId()) { G.favs = G.favs || {}; if (G.favs[k]) delete G.favs[k]; else G.favs[k] = 1; save(); }
   if (a === 'travel' && k.startsWith('sv:') && VF.start && cityLvl('portal') >= 1) {
@@ -235,10 +302,10 @@ async function villageAct(a, k) {
   rerender();
   if (['portal', 'pmap', 'vback'].includes(a)) $('#mcontent').scrollTop = 0;
 }
-export function openVillage(f) {
+export function openVillage(f, view) {
   VF = f; VMSG = ''; VSELL = false; G.lastVillage = G.lastVillage || { x: f.x, y: f.y };
   G.vv = G.vv || {}; if (!G.vv[f.id]) G.vv[f.id] = { x: f.x, y: f.y, name: f.name };   // aldea descubierta (portales)
-  VVIEW = 'village'; PZ = null; PSEL = null;
+  VVIEW = view || 'village'; PZ = null; PSEL = null;
   openModal(villageView, villageAct, () => { if (VVIEW === 'pmap') drawPortalMap(); });
 }
 
@@ -381,7 +448,6 @@ function drawPortalMap() {
   };
 }
 const msgBox = () => VMSG ? `<div class="pend" style="margin-top:8px">${VMSG}</div>` : '';
-function villageView() { return VVIEW === 'portal' ? portalRender() : VVIEW === 'pmap' ? portalMapRender() : VVIEW === 'forge' ? msgBox() + forgeHTML() : VVIEW === 'city' ? msgBox() + cityHTML() : VVIEW === 'cos' ? msgBox() + cosHTML() : VVIEW === 'craft' ? msgBox() + craftHTML() : villageRender(); }
 function travelTo(v) {
   sfx('portal');
   P.x = P.px = v.x; P.y = P.py = v.y; spawnNearby(); visitAround(); save('now');
@@ -390,6 +456,7 @@ function travelTo(v) {
 }
 
 // ================= Grupo (pestañas: Héroes · Equipo · Objetos) =================
+let PRET = null;   // volver a la aldea al cerrar la mochila (Versión 4)
 let PA = null, NGC = false, PT = 'heroes', PH = null, PI = null, PF = false;
 // Puntaje aproximado de un objeto (para la flechita ▲▼ de la lista)
 const score = it => Object.entries(statsOf(it)).reduce((a, [k, v]) => a + v * (k === 'mhp' ? 1 / 3 : k === 'mmp' ? .5 : ['crit', 'ls', 'pres'].includes(k) ? .4 : 1), 0);
@@ -517,17 +584,17 @@ function questsTab() {
 function partyRender() {
   const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas'], ['best', `📖 Bestiario <small>${bestCount()}/${BEST_KEYS.length}</small>`]];
   const pet = activePet(), eggs = G.eggs || [];
-  let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
+  let h = `<h2>👥 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}${activeMount() ? ` · ${MOUNTS[G.mount].e} ${MOUNTS[G.mount].n}${G.riding ? '' : ' <small class="mut">(a pie)</small>'}` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
   h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'best' ? bestTabHTML(BSEL) : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
-  h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
+  h += `<div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;
 }
 async function partyAct(a, k) {
   if (a !== 'newgame' && a !== 'newgame2') NGC = false;
-  if (a === 'close') { PA = null; PI = null; closeModal(); return; }
+  if (a === 'close') { PA = null; PI = null; closeModal(); if (PRET) { const r = PRET; PRET = null; openVillage(r.f, r.view); } return; }
   if (a === 'exit') { PA = null; PI = null; closeModal(); if (hooks.onExit) hooks.onExit(); return; }
   // Nueva partida: primero se muestra el aviso; solo se borra si se escribió CONFIRMAR
   if (a === 'newgame') { NGC = true; rerender(); const i = $('#cfIn'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } return; }
@@ -599,7 +666,36 @@ async function partyAct(a, k) {
   if ((a === 'item' || a === 'fskill') && PA) { const p = $('#mcontent .pend'); if (p) p.scrollIntoView({ block: 'nearest' }); }
 }
 let BSEL = null;   // ficha abierta del bestiario
-export function openParty(tab) { PA = null; BSEL = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
+// ================= Menú ⚙️ (Versión 4 · Fase 1a): sonido, jugadores, guardar, nueva partida y salir de la sala =================
+let MNC = false, MQ = false;
+function menuRender() {
+  const v = VIS[visMode()];
+  return `<h2>⚙️ Menú</h2>
+  <div class="sec"><h3>🔊 Sonido</h3>${soundPanelHTML()}</div>
+  <div class="sec"><h3>👁️ Otros jugadores</h3><div class="shop"><span><span class="emoji">${v.i}</span> <b>${v.n}</b> <small class="mut">${v.d}</small></span><button class="btn sm" data-a="vis">Cambiar</button></div></div>
+  <div class="sec"><h3>💾 Partida</h3><div class="shop"><span>Se guarda sola al descansar y cada tanto. <small class="mut">También puedes guardarla ahora.</small></span><button class="btn sm" data-a="msave">💾 Guardar</button></div>
+    ${MNC ? dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"') : '<div class="shop"><span>Empezar de cero en esta sala <small class="mut">(pide confirmación)</small></span><button class="btn sm" data-a="newgame">Nueva partida</button></div>'}</div>
+  <div class="sec quitsec">${MQ ? '<p style="margin:0 0 8px"><b>¿Salir de la sala?</b> Tu partida queda guardada.</p><div class="row"><button class="btn" data-a="quitno">Cancelar</button><button class="btn red" data-a="quitok" style="flex:1">🚪 Sí, salir de la sala</button></div>' : '<button class="btn red full" data-a="quit">🚪 Salir de la sala</button><p class="mut small" style="margin:6px 0 0">Vuelve a la pantalla de inicio. Tu partida queda guardada.</p>'}</div>
+  <div class="row end"><button class="btn gold" data-a="close">Cerrar</button></div>`;
+}
+function wireMenu() {
+  for (const [id, k] of [['#sndMusic', 'music'], ['#sndSfx', 'sfx']]) { const el = $(id); if (el) el.addEventListener('input', e => { setSound(k, e.target.value / 100); const o = $(id + 'V'); if (o) o.textContent = e.target.value + '%'; if (k === 'sfx') sfx('buy'); }); }
+  const m = $('#sndMute'); if (m) m.addEventListener('click', () => { setSound('mute', !soundPref().mute); rerender(); });
+}
+async function menuAct(a) {
+  if (a !== 'newgame' && a !== 'newgame2') MNC = false;
+  if (a !== 'quit') MQ = false;
+  if (a === 'close') { closeModal(); return; }
+  if (a === 'vis') { const v = VIS[cycleVis()]; updateMini(); toast(`${v.i} ${v.n}`); }
+  if (a === 'msave') toast(save('now') ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador');
+  if (a === 'newgame') { MNC = true; rerender(); const i = $('#cfIn'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } return; }
+  if (a === 'newgame2') { if (!confirmOk($('#cfIn') && $('#cfIn').value)) return; MNC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return; }
+  if (a === 'quit') MQ = true;
+  if (a === 'quitok') { MQ = false; closeModal(); if (hooks.onExit) hooks.onExit(); return; }
+  rerender();
+}
+export function openMenu() { MNC = false; MQ = false; openModal(menuRender, menuAct, wireMenu); }
+export function openParty(tab) { PRET = null; PA = null; BSEL = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
 
 // ================= Confirmación antes de pelear con un jefe =================
 // Los jefes nunca inician el combate solos: el jugador decide.
@@ -692,15 +788,16 @@ export function initUI(h) {
   });
   initChat();
   // 👁️ Mostrar u ocultar a los demás jugadores (3 modos, se guarda en el dispositivo)
-  const visBtn = () => { const v = VIS[visMode()], b = $('#bVis'); if (!b) return; b.querySelector('.vi').textContent = v.i; b.title = v.n; b.setAttribute('aria-label', 'Ver jugadores: ' + v.n); };
-  visBtn();
-  $('#bVis').onclick = () => { const v = VIS[cycleVis()]; visBtn(); toast(`${v.i} ${v.n}<br><span style="font-size:13px;color:#cfd5ea">${v.d}</span>`); updateMini(); };
-  $('#bParty').onclick = () => { if (!st.busy) openParty(); };
+  $('#bParty').onclick = () => { if (!st.busy) openParty('heroes'); };
+  $('#bBag').onclick = () => { if (!st.busy) openParty('equip'); };
+  $('#bMenu').onclick = () => { if (!st.busy) openMenu(); };
+  // Las tarjetas del grupo se pliegan con un toque (se recuerda en el dispositivo)
+  const hh = $('#hudHeroes'); try { hh.classList.toggle('compact', localStorage.getItem('tsf:hudc') === '1'); } catch (e) { /* nada */ }
+  hh.onclick = () => { const c = hh.classList.toggle('compact'); try { localStorage.setItem('tsf:hudc', c ? '1' : '0'); } catch (e) { /* nada */ } };
   $('#bMap').onclick = () => { if (!st.busy) openMap(); };
   $('#bSocial').onclick = () => toggleSocial();
   $('#coords').onclick = () => toggleCoords();
   $('#mini').onclick = () => { if (!st.busy) openMap(); };
   $('#miniTog').onclick = e => { e.stopPropagation(); toggleMini(); };
   $('#miniBtn').onclick = () => toggleMini();
-  $('#bSave').onclick = () => { toast(save('now') ? '💾 Partida guardada' : '⚠️ No se pudo guardar en este navegador'); };
 }

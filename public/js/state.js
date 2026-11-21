@@ -77,8 +77,8 @@ export function gainXP(h, x) {
     msgs.push(`⭐ <b>${h.name}</b> sube a nivel ${h.lvl}`);
     for (const k of CL[h.cls].sk) if (SK[k].lv === h.lvl) msgs.push(`✨ ${h.name} aprende <b>${SK[k].n}</b>`);
     if (h.adv && ADV[h.adv]) for (const k of ADV[h.adv].sk) if (SK[k].lv === h.lvl) msgs.push(`✨ ${h.name} aprende <b>${SK[k].n}</b>`);
-    if (TAL_LVLS.includes(h.lvl)) msgs.push(`🌟 ${h.name} puede elegir un <b>talento</b> (🎒 Grupo)`);
-    if (h.lvl === ADV_LVL && !h.adv) msgs.push(`👑 ${h.name} puede elegir su <b>clase avanzada</b> (🎒 Grupo)`);
+    if (TAL_LVLS.includes(h.lvl)) msgs.push(`🌟 ${h.name} puede elegir un <b>talento</b> (👥 Grupo)`);
+    if (h.lvl === ADV_LVL && !h.adv) msgs.push(`👑 ${h.name} puede elegir su <b>clase avanzada</b> (👥 Grupo)`);
   }
   return msgs;
 }

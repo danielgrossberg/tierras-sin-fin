@@ -124,6 +124,7 @@ export function toggleSocial(force) {
   const open = force == null ? !isSocialOpen() : force;
   if (open && !built) build();
   box.classList.toggle('hidden', !open);
+  box.classList.toggle('over', open && !document.querySelector('#modal').classList.contains('hidden'));   // sobre la aldea (Versión 4)
   if (open) { refreshSala(); updateHead(); setTab(tab); fitKeyboard(); }
   else { const i = box.querySelector('.cin'); if (i) i.blur(); box.querySelector('.cquick') && box.querySelector('.cquick').classList.add('hidden'); }
 }

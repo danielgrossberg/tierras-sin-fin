@@ -53,7 +53,7 @@ function loot(k) {
 }
 const stars = k => '⭐'.repeat(masteryLvl(k));
 
-// ================= Panel: 🎒 Grupo → 📖 Bestiario =================
+// ================= Panel: 👥 Grupo → 📖 Bestiario =================
 export function bestTabHTML(sel) {
   if (sel && EN[sel] && isSeen(sel)) return entryHTML(sel);
   const n = bestCount(), pct = bestPct();

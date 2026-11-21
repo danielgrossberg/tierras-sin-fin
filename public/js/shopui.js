@@ -122,17 +122,19 @@ export async function shopAct(a, k) {
 import { RECIPES, MATS, PROFS, FOODS } from './data.js';
 import { prof, profNeed, matN, canCraft, recipeOk, craft, outLabel, foodActive } from './gather.js';
 let CT = 'alq';
-export function craftHTML() {
+export function craftHTML(o = {}) {
+  if (o.tab) CT = o.tab;
   const tabs = [['alq', '⚗️ Alquimia'], ['herr', '⚒️ Herrería'], ['coc', '🍳 Cocina']], p = prof(CT);
   const f = foodActive();
-  return `<h2>🛠️ Taller</h2><p class="mut" style="margin:0">Fabrica con tus materiales. Tienes 💰 ${fmt(G.gold)}${G.frags ? ` · 🔩 ${G.frags}` : ''}.${f ? ` Comida activa: ${FOODS[f.k].e} ${FOODS[f.k].n} (${mmss(f.until - Date.now())}).` : ''}</p>
-    <div class="tabs tabs3">${tabs.map(([k, l]) => `<button class="tab ${CT === k ? 'on' : ''}" data-a="ctab" data-k="${k}">${l}</button>`).join('')}</div>
+  const head = o.bare ? `<h3 class="achcat">🛠️ Fabricar</h3>` : `<h2>🛠️ Taller</h2><p class="mut" style="margin:0">Fabrica con tus materiales. Tienes 💰 ${fmt(G.gold)}${G.frags ? ` · 🔩 ${G.frags}` : ''}.${f ? ` Comida activa: ${FOODS[f.k].e} ${FOODS[f.k].n} (${mmss(f.until - Date.now())}).` : ''}</p>
+    <div class="tabs tabs3">${tabs.map(([k, l]) => `<button class="tab ${CT === k ? 'on' : ''}" data-a="ctab" data-k="${k}">${l}</button>`).join('')}</div>`;
+  return `${head}
     <p class="small">${PROFS[CT].e} <b>${PROFS[CT].n} Nv ${p.lvl}</b> <span class="mut">· XP ${p.xp}/${profNeed(p.lvl)}</span></p>
     <div class="recipes">${RECIPES.filter(r => r.prof === CT).map(r => { const ok = recipeOk(r);
       return `<div class="recipe ${ok ? '' : 'lock'}"><div class="rtop"><b>${outLabel(r)}</b>${ok ? '' : `<span class="mut small">🔒 ${PROFS[r.prof].n} Nv ${r.lv}</span>`}</div>
         <div class="ring">${Object.entries(r.in).map(([k, n]) => `<span class="${matN(k) >= n ? 'have' : 'miss'}">${MATS[k].e} ${MATS[k].n} ${matN(k)}/${n}</span>`).join('')}${r.g ? `<span class="${G.gold >= r.g ? 'have' : 'miss'}">💰 ${r.g}</span>` : ''}</div>
         ${ok ? `<div class="frow"><button class="btn sm gold" data-a="craft" data-k="${r.id}:1" ${canCraft(r) ? '' : 'disabled'}>Fabricar</button><button class="btn sm" data-a="craft" data-k="${r.id}:5" ${canCraft(r, 5) ? '' : 'disabled'}>Fabricar ×5</button></div>` : ''}</div>`; }).join('')}</div>
-    <div class="row end"><button class="btn gold" data-a="vback">← Volver a la aldea</button></div>`;
+    ${o.bare ? '' : '<div class="row end"><button class="btn gold" data-a="vback">← Volver a la aldea</button></div>'}`;
 }
 export async function craftAct(a, k) {
   if (a === 'craftview') return { view: 'craft' };

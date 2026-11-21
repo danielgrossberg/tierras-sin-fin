@@ -479,6 +479,24 @@ Con el código final se volvieron a correr las pruebas de todas las fases (0 a 6
 
 (Los clanes y el intercambio entre jugadores quedaron fuera de la Versión 3 por decisión del dueño.)
 
+## Versión 4 (en curso)
+Se hace por fases (1 a 8), cada una con su commit. Sin clanes.
+
+### Fase 1a (lista): la aldea como panel, menú ⚙️ y HUD
+- **La aldea es un panel:** encabezado fijo (🏘️ nombre o 🏰 Ciudad Origen, 💰 oro y 🎒 espacio usado) y una cuadrícula
+  de tarjetas (2 columnas en el celular): Posada, Tienda, Herrería y forja, Alquimia, Cocina, Taberna, Portal, Misiones
+  y Establo; Mercader (el día que está), Muelle (aldeas costeras) y, en Ciudad Origen, Construcción y apariencias,
+  Entrenador y Arena. Cada tarjeta tiene una línea de estado ("Descansar · 12 oro", "Grupo 3/3", "2 nuevas"…) y
+  **globitos** cuando hay novedades (misiones nuevas, mercader, recetas que se pueden fabricar, talentos 🌟).
+- Cada tarjeta abre su sección en una vista propia con **"← Volver"** arriba. Solo se desplaza el contenido del medio;
+  al comprar no se pierde el lugar en la lista. Los avisos se ven arriba, fijos. La última sección usada queda marcada.
+- **Barra fija abajo:** "🚪 Salir al mundo" (grande, verde), 🎒 Mochila (al cerrarla vuelves a la misma sección) y
+  💬 Chat (se abre encima de la aldea).
+- **HUD:** barra de 🎒 Mochila · 👥 Grupo · 🗺️ Mapa · 💬 Chat · ⚙️ Menú (y 🐴 si tienes montura), al lado contrario
+  de la cruceta. Las tarjetas del grupo se pliegan con un toque. Teclas: G grupo, B mochila, M mapa, C chat.
+- **Menú ⚙️:** sonido (antes era el botón 🔊), modo de ver a los demás jugadores (antes 👁️), guardar, nueva partida y
+  **"🚪 Salir de la sala"** en rojo, con confirmación ("¿Salir de la sala? Tu partida queda guardada").
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:

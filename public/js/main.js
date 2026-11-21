@@ -18,7 +18,7 @@ import { checkDaily } from './daily.js';
 import { statsTick, resetTrack } from './stats.js';
 import { speedMul, mountEmoji, toggleRide, hasMounts, riding, activeMount } from './mounts.js';
 import { MOUNTS } from './data.js';
-import { setTheme, sfx, soundPanelHTML, setSound, soundPref } from './audio.js';
+import { setTheme, sfx } from './audio.js';
 // ================= Recolección (Versión 3 · Fase 6.1): botón grande al pisar un punto =================
 const gBtn = $('#gather');
 function gatherSpot() {
@@ -137,7 +137,7 @@ addEventListener('keydown', e => {
   // Una tecla que quedó apretada mientras se abría una ventana no vuelve a caminar sola
   if (KEYMAP[k]) { e.preventDefault(); if (e.repeat && !held.includes(KEYMAP[k])) return; if (!held.includes(KEYMAP[k])) { held.push(KEYMAP[k]); tapDir = KEYMAP[k]; } }
   else if (k === 'e') doGather();
-  else if (k === 'g') openParty(); else if (k === 'm') openMap(); else if (k === 'c') toggleSocial(); else if (k === 'escape') closeSocial();
+  else if (k === 'g') openParty('heroes'); else if (k === 'b' || k === 'i') openParty('equip'); else if (k === 'm') openMap(); else if (k === 'c') toggleSocial(); else if (k === 'escape') closeSocial();
 });
 addEventListener('keyup', e => { const d = KEYMAP[e.key.toLowerCase()]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
 addEventListener('blur', () => held.clear());
@@ -183,16 +183,6 @@ function pickTheme() {
   return isNight() ? 'night' : 'day';
 }
 setInterval(() => { if (!st.inGame || st.titleOpen) setTheme('village'); }, 1000);   // pantalla de inicio
-const sndBtn = $('#bSnd'), sndPanel = $('#sndPanel');
-function sndIcon() { const p = soundPref(); sndBtn.textContent = p.mute ? '🔇' : '🔊'; sndBtn.setAttribute('aria-label', p.mute ? 'Sonido silenciado' : 'Sonido'); }
-function sndRender() {
-  sndPanel.innerHTML = soundPanelHTML();
-  for (const [id, k] of [['#sndMusic', 'music'], ['#sndSfx', 'sfx']]) sndPanel.querySelector(id).addEventListener('input', e => { setSound(k, e.target.value / 100); sndPanel.querySelector(id + 'V').textContent = e.target.value + '%'; if (k === 'sfx') sfx('buy'); });
-  sndPanel.querySelector('#sndMute').addEventListener('click', () => { setSound('mute', !soundPref().mute); sndRender(); sndIcon(); });
-}
-sndBtn.addEventListener('click', e => { e.stopPropagation(); const open = sndPanel.classList.toggle('hidden') === false; if (open) { sndPanel.style.top = Math.round(sndBtn.getBoundingClientRect().bottom + 6) + 'px'; sndRender(); } });
-document.addEventListener('pointerdown', e => { if (!sndPanel.classList.contains('hidden') && !sndPanel.contains(e.target) && e.target !== sndBtn) sndPanel.classList.add('hidden'); });
-sndIcon();
 // ================= Loop principal =================
 let lastT = 0, lastSt = 0;
 function frame(t) {
