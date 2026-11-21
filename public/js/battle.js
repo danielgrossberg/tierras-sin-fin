@@ -26,6 +26,7 @@ import { updateHUD, toast } from './ui.js';
 import { save } from './storage.js';
 import { notice } from './net.js';
 import { mountDrop } from './mounts.js';
+import { markSeen, mastery } from './bestiary.js';
 
 let BT = null, eid = 0;
 export const getBT = () => BT;
@@ -292,6 +293,7 @@ async function strike(a, d, r, o = {}) {
   let dmg = r.dmg; if (d.defending) dmg = Math.ceil(dmg / 2);
   if (d.buffs.curse > 0) dmg = Math.round(dmg * (1.3 + (d.curseP || 0)));   // Maldición: +30% de daño recibido (+50% con talento)
   if (d.buffs.mark > 0) dmg = Math.round(dmg * 1.4);                        // Marca de Caza: +40%
+  if (a.isHero && !a.remote && !d.isHero && d.key) dmg = Math.round(dmg * mastery(d.key));   // 📖 maestría del bestiario
   if (a.isHero && !d.isHero && d.hp < d.mhp * .5 && talFx(a, 'execP')) dmg = Math.round(dmg * (1 + talFx(a, 'execP')));   // Ejecutor
   if (d.shield > 0) { const ab = Math.min(d.shield, dmg); d.shield -= ab; dmg -= ab; }   // Escudo 💠
   if (d.tmp > 0) { const ab = Math.min(d.tmp, dmg); d.tmp -= ab; dmg -= ab; } // PV temporales (Forma de Oso)
@@ -595,7 +597,7 @@ export async function startBattle(m, opts = {}) {
   const supp = Math.round(.15 * ens.reduce((a, e) => a + S(e, 'mhp'), 0) / ens.length);
   BT = { m, enemies: ens, active: null, pts: {}, acted: new Set(), supp, fenix: new Set(), summons: [], used: new Set(),
     party: opts.party || heroes(), coop: opts.coop || null, pops: [], extra: {}, turnSeq: 0, turn: null, night, round: 0, pets: [], dmgBy: {}, fell: false, pvp: !!opts.pvp, maxRounds: m.wb ? WB_ROUNDS : 0 };
-  BT.sideA = BT.party; BT.sideB = ens; if (!BT.pvp) noteBattle(BT.party);
+  BT.sideA = BT.party; BT.sideB = ens; if (!BT.pvp) { noteBattle(BT.party); markSeen(ens.map(e => e.key)); }
   if (!BT.pvp) { const own = activePet(); if (own) BT.pets.push({ id: 'pet0', k: own.k, lvl: own.lvl, hero: BT.party[0] });
     BT.party.filter(h => h.remote && validPet(h.pet)).forEach((h, i) => BT.pets.push({ id: 'pet' + (i + 1), k: h.pet.k, lvl: h.pet.lvl, owner: h.owner, hero: h })); }
   // Talentos: escudo al empezar (Bastión, Barrera, Barba de Hierro)
@@ -628,8 +630,9 @@ async function victory() {
   for (let i = 0; i < G.roster.length; i++) if (!G.party.includes(i)) gainXP(G.roster[i], xp * .1);
   lines.push(`<div class="xpl">${team.map((h, i) => `<div class="xpr"><span class="emoji">${h.e}</span><span class="xpn">${h.name}${h.hp <= 0 ? ' 💀' : ''}</span><span class="bar xp"><i style="width:${xp ? Math.round(100 * shares[i] / xp) : 0}%"></i></span><b class="goldt">+${shares[i]} XP</b></div>`).join('')}</div>`);
   lines.push(...lvMsgs);
-  bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
+  bump('kills', BT.enemies.length); const mmsg = noteKills(BT.enemies.map(e => e.key)); if (BT.night) bump('nightKills', BT.enemies.length); if (m.boss && !BT.fell) bump('cleanBoss');
   if (BT.night) lines.push('🌙 <span class="mut">Bonus nocturno: +30% de experiencia y botín</span>');
+  lines.push(...mmsg);
   if (m.boss) { G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); lines.push(...mountDrop(!!m.dun)); }
   else if (Math.random() < .25 * loot) { const k = Math.random() < .8 ? 'pocion' : 'eter'; G.items[k]++; lines.push(`🎁 Encontraste: ${IT[k].e} ${IT[k].n}`); }
   lines.push(...petGainXP(activePet(), xp * .5));
@@ -668,7 +671,7 @@ async function coopFinish(res) {
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
   }
-  bump('kills', BT.enemies.length); noteKills(BT.enemies.map(e => e.key)); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
+  bump('kills', BT.enemies.length); lines.push(...noteKills(BT.enemies.map(e => e.key))); bump('coopWins'); if (!BT.fell) bump('cleanBoss');
   const catC = ownPet('gato'), goldC = Math.round(gold * (catC ? 1 + catBonus(catC) : 1) * (elix('fortuna') ? 1.3 : 1));
   G.gold += goldC; G.items.pluma++; G.items.eter++; G.bosses = (G.bosses || 0) + 1; lines.push('🎁 Botín del jefe: 🪶 Pluma Fénix y 🔷 Éter'); lines.push(...bossEgg()); lines.push(...mountDrop(!!m.dun));
   lines.push(...petGainXP(activePet(), xp * .5));

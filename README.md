@@ -436,6 +436,17 @@ y la noche (+30%): **~1.500–3.000 oro/h al principio y a mitad de juego, ~7.00
 - Se cambia la montura activa en el establo; en 🎒 Grupo se ve cuál llevas.
 - **Guardado:** `saveVersion` 15: `mounts`, `mount`, `riding`. Quien ya tenía uno de los tres logros recibe su montura.
 
+### Fase 6.6 (lista): bestiario 📖
+- Nueva pestaña **🎒 Grupo → 📖 Bestiario** con los 35 monstruos (mundo, noche, mazmorras y jefes, incluido el Titán).
+  Los que no has encontrado se ven como **silueta "???"**; se revelan al empezar un combate contra ellos.
+- **Ficha:** emoji grande, nombre, descripción original, dónde vive, de día o de noche, no-muerto o mágico, habilidades,
+  derrotados, maestría y botín posible (se revela con 10 derrotados).
+- **Maestría:** 25, 100 y 250 derrotados de un tipo dan **+3%, +6% y +10% de daño** de tus héroes contra él (no aplica en
+  duelos). Aviso en el resultado del combate al cruzar cada umbral; ⭐ en la tarjeta.
+- Porcentaje completado con **logros al 25%, 50% y 100%** (Naturalista, Erudito de Bestias, Gran Bestiario).
+- Cada jugador tiene su propio libro (se guarda con la partida).
+- **Guardado:** `saveVersion` 16: `seen`. Los monstruos ya derrotados (estadísticas de la 6.3) quedan descubiertos.
+
 ## Guardado en servidor con Neon
 
 Sin `DATABASE_URL` el juego funciona igual, con guardado solo en el celular y sin PIN. Para activarlo:
@@ -488,6 +499,7 @@ public/js/economy.js   Usos del oro: forja, elixires, entrenador, mercader, teso
 public/js/daily.js     Recompensa diaria (calendario de 7 días)
 public/js/stats.js     Estadísticas del jugador (panel 📊 y registro de daño, curación, oro y tiempo)
 public/js/mounts.js    Monturas: velocidad, dónde se puede montar, botín y premios
+public/js/bestiary.js  Bestiario: fichas, hábitat, botín, maestría y porcentaje completado
 public/js/gather.js    Recolección, profesiones, recetas y comidas
 public/js/shopui.js    Pantallas del taller, de la forja, el mercader, el entrenador, las apariencias y el tablón
 public/js/dungeon.js   Mazmorras: pisos, visión, monstruos, trampas, cofres, escaleras, jefe y progreso

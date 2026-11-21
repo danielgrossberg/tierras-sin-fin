@@ -315,6 +315,46 @@ export const EN = {
   reinaarana: { n: 'Reina Araña', e: '🕷️', hp: 100, atk: 15, def: 6, spd: 9, xp: 100, g: 120, sk: ['veneno', 'brutal'], boss: 1, tint: 'hue-rotate(300deg) saturate(2) drop-shadow(0 0 10px #ff3060)' },
   golemrey: { n: 'Gólem Ancestral', e: '🗿', hp: 120, atk: 16, def: 10, spd: 3, xp: 105, g: 130, sk: ['brutal'], boss: 1, tint: 'sepia(.6) saturate(2) drop-shadow(0 0 10px #f2c14e)' },
 };
+// ================= Bestiario (Versión 3 · Fase 6.6): descripciones =================
+export const EN_DESC = {
+  rata: 'Del tamaño de un perro y siempre con hambre. Roe hasta las botas de los viajeros dormidos.',
+  jabali: 'Embiste sin mirar. Sus colmillos dejan surcos en la tierra de las praderas.',
+  abeja: 'Defiende su panal con un aguijón que arde por horas. Nunca vuela sola.',
+  lobo: 'Caza en manada al atardecer. Sigue el olor de los viajeros por kilómetros.',
+  arana: 'Teje redes entre los árboles más viejos y espera, inmóvil, a que algo tropiece.',
+  oso: 'Tranquilo mientras come bayas; furioso si alguien se acerca a su cueva.',
+  murcielago: 'Duerme cabeza abajo en las grietas y bebe un poco de vida de cada presa.',
+  escorpion: 'Su coraza aguanta el sol del desierto y su cola, el doble de veneno.',
+  serpiente: 'Se esconde bajo la arena tibia y muerde antes de que la veas.',
+  momia: 'Un guardián antiguo envuelto en vendas. Todavía vigila tumbas que nadie recuerda.',
+  loboartico: 'Su pelaje blanco lo vuelve invisible en la nieve hasta el último salto.',
+  osopolar: 'El rey de la tundra. Rompe el hielo de un zarpazo para pescar.',
+  espectro: 'El último aliento de un viajero perdido en la ventisca. Roba el calor del cuerpo.',
+  sapo: 'Croa entre los juncos. Su piel brillante avisa que es mejor no tocarlo.',
+  cocodrilo: 'Parece un tronco flotando en el pantano… hasta que abre la boca.',
+  zombi: 'Camina sin rumbo por el barro. Lento, pero nunca se cansa.',
+  cangrejo: 'Su caparazón es tan duro que los herreros lo usan como yunque.',
+  esqueleto: 'Huesos que se niegan a descansar. Todavía recuerdan cómo usar una espada.',
+  demonio: 'Nació de las grietas de las tierras de ceniza. Escupe fuego cuando se enoja.',
+  fantasma: 'Flota entre las ruinas buscando algo que perdió hace siglos.',
+  vampiro: 'Solo sale cuando cae la noche. Sus alas no hacen ningún ruido.',
+  lobosombra: 'Un lobo hecho de oscuridad. Cuando sale el sol, se deshace como humo.',
+  espectro2: 'Vaga de noche por los caminos, repitiendo un nombre que nadie entiende.',
+  golem: 'Piedra viva que despertó en lo profundo. Lento, pero casi imposible de romper.',
+  minero: 'Murió buscando la veta perfecta y sigue picando las paredes de la mina.',
+  serpmar: 'Nada bajo los botes y se enrosca en los remos de los navegantes.',
+  ogro: 'Gobierna las praderas desde su colina. Cobra peaje con un garrote del tamaño de un árbol.',
+  rex: 'Un reptil gigante que domina las dunas. La tierra tiembla con cada paso.',
+  dragon: 'Duerme sobre un nido de hielo eterno. Su aliento congela y quema a la vez.',
+  kraken: 'Sus tentáculos salen del agua para hundir barcos enteros.',
+  reyesq: 'Reina sobre un ejército de huesos en las tierras de ceniza. Su corona brilla en rojo.',
+  titan: 'Una montaña de lava que despierta cada semana. Toda la sala debe unirse para detenerlo.',
+  liche: 'Un hechicero que cambió su vida por poder. Gobierna la cripta desde su trono de huesos.',
+  reinaarana: 'La madre de todas las arañas de la gruta. Sus hijas obedecen cada movimiento de sus patas.',
+  golemrey: 'El primer gólem, tallado por manos que ya nadie recuerda. Guarda el corazón de la mina.',
+};
+// Maestría: derrotando 25, 100 y 250 de un mismo tipo se hace +3%, +6% y +10% de daño contra él
+export const MASTERY = [[250, .10], [100, .06], [25, .03]];
 // ================= Logros (Versión 3 · Fase 4) =================
 // Cada logro da un título (se muestra bajo el nombre) y a veces oro u objetos. need(s): s = estadísticas del jugador.
 export const ACH_CATS = { exp: '🧭 Exploración', fight: '⚔️ Combate', dun: '🕳️ Mazmorras', coop: '🤝 Cooperativo', col: '💎 Colección', cls: '🌟 Clases', world: '🌋 Mundo y arena' };
@@ -351,6 +391,9 @@ export const ACH = [
   A('pvp1', 'world', 'Duelista', 'Gana un duelo en la arena', 'el Duelista', s => s.pvpWins >= 1, { gold: 100 }),
   A('pvp10', 'world', 'Campeón de la Arena', 'Gana 10 duelos en la arena', 'Campeón de la Arena', s => s.pvpWins >= 10, { gold: 1000, item: 'epico' }),
   A('city1', 'world', 'Constructor', 'Dona para una mejora de Ciudad Origen que se complete', 'el Constructor', s => s.cityDone >= 1, { gold: 200 }),
+  A('best25', 'col', 'Naturalista', 'Descubre el 25% del bestiario', 'el Naturalista', s => s.bestPct >= 25, { gold: 200 }),
+  A('best50', 'col', 'Erudito de Bestias', 'Descubre el 50% del bestiario', 'el Erudito', s => s.bestPct >= 50, { gold: 500, item: 'raro' }),
+  A('best100', 'col', 'Gran Bestiario', 'Descubre todo el bestiario', 'el Bestiario Viviente', s => s.bestPct >= 100, { gold: 1500, item: 'legendario' }),
   A('forge10', 'col', 'Maestro Herrero', 'Lleva un objeto a +10 en la forja', 'Maestro Herrero', s => s.forgeMax >= 10, { gold: 500 }),
 ];
 export const TITLES = ACH.map(a => a.title);

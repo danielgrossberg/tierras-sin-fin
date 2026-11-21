@@ -6,6 +6,7 @@
 import { EN, SK, ACH } from './data.js';
 import { G, st, clsName } from './state.js';
 import { esc } from './util.js';
+import { markSeen, masteryMsgs } from './bestiary.js';
 
 const S = () => (G.stats = G.stats || {});
 // Tiempo jugado y oro ganado/gastado (se mira cada medio segundo; los cambios de oro se suman o restan)
@@ -25,7 +26,7 @@ export function noteHit(h, dmg, killed, skill) {
   const s = S(); if (!s.maxHit || dmg > s.maxHit.dmg) s.maxHit = { dmg, hero: h.name, e: h.e, skill: skill && SK[skill] ? SK[skill].n : 'Ataque' };
 }
 export function noteHeal(by, amt) { if (by && by.isHero && !by.remote && amt > 0) { const s = S(); s.healed = (s.healed || 0) + amt; } }
-export function noteKills(keys) { const s = S(); s.killsBy = s.killsBy || {}; for (const k of keys) s.killsBy[k] = (s.killsBy[k] || 0) + 1; }
+export function noteKills(keys) { const s = S(); s.killsBy = s.killsBy || {}; const before = {}; for (const k of keys) { if (!(k in before)) before[k] = s.killsBy[k] || 0; s.killsBy[k] = (s.killsBy[k] || 0) + 1; } markSeen(keys); return masteryMsgs(before); }
 export function noteBattle(party) { for (const h of party) if (h.isHero && !h.remote) hst(h).battles++; }
 export function noteDeath() { G.deaths = (G.deaths || 0) + 1; }
 

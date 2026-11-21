@@ -30,6 +30,7 @@ import { net, mateColor } from './net.js';
 import { initChat, toggleSocial, closeSocial, refreshSocial } from './chat.js';
 import { VIS, cycleVis, visMode } from './prefs.js';
 import { estimate, itemTargets, heroCardHTML } from './estimate.js';
+import { bestTabHTML, bestCount, BEST_KEYS } from './bestiary.js';
 export { toggleSocial, closeSocial };
 import { D, inDungeon } from './dungeon.js';
 
@@ -512,12 +513,12 @@ function questsTab() {
   <p class="mut small">La misión que sigues aparece en la esquina superior derecha y con una flecha morada 📜 en el borde de la pantalla.</p>`;
 }
 function partyRender() {
-  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas']];
+  const tabs = [['heroes', '🧑 Héroes'], ['equip', `⚔️ Equipo <small>${G.inventory.length}</small>`], ['items', '🧪 Objetos'], ['mats', '🪨 Materiales'], ['quests', `📜 Misiones <small>${active().length}</small>`], ['ach', `🏆 Logros <small>${achCount()}</small>`], ['stats', '📊 Estadísticas'], ['best', `📖 Bestiario <small>${bestCount()}/${BEST_KEYS.length}</small>`]];
   const pet = activePet(), eggs = G.eggs || [];
   let h = `<h2>🎒 Grupo</h2><p class="mut" style="margin:0">💰 ${G.gold} de oro · Ataque +${G.upA * 2} y Defensa +${G.upD * 2} por la herrería</p>
   <p class="petline">${pet ? `🐾 Te acompaña <b>${petLabel(pet)}</b> <small class="mut">${petEffect(pet)}</small>` : '🐾 <span class="mut">Sin mascota (se eligen en el establo de las aldeas)</span>'}${eggs.length ? ` · 🥚 ${eggs.length} huevo${eggs.length > 1 ? 's' : ''} <small class="mut">(faltan ${Math.min(...eggs.map(e => e.left))} pasos)</small>` : ''}${activeMount() ? ` · ${MOUNTS[G.mount].e} ${MOUNTS[G.mount].n}${G.riding ? '' : ' <small class="mut">(a pie)</small>'}` : ''}</p>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${PT === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div>`;
-  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'mats' ? matsTab() : heroesTab();
+  h += PT === 'equip' ? equipTab() : PT === 'items' ? itemsTab() : PT === 'quests' ? questsTab() : PT === 'ach' ? achTabHTML() : PT === 'stats' ? statsTabHTML() : PT === 'best' ? bestTabHTML(BSEL) : PT === 'mats' ? matsTab() : heroesTab();
   if (NGC) h += dangerBox('Nueva partida', 'data-a="newgame2"', 'data-a="ngcancel"');
   h += `<div class="row end"><button class="btn" data-a="exit">🚪 Salir al inicio</button>${NGC ? '' : '<button class="btn" data-a="newgame">Nueva partida</button>'}<button class="btn gold" data-a="close">Cerrar</button></div>`;
   return h;
@@ -532,7 +533,8 @@ async function partyAct(a, k) {
     if (!confirmOk($('#cfIn') && $('#cfIn').value)) return;
     NGC = false; closeModal(); if (hooks.onNewGame) hooks.onNewGame(); return;
   }
-  if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; }
+  if (a === 'tab') { PT = k; PI = null; PA = null; QD = null; BSEL = null; }
+  if (a === 'bsel') { BSEL = k || null; const mc = document.querySelector('#mcontent'); if (mc) mc.scrollTop = 0; }
   if (a === 'title') { setTitle(k); save(); }
   if (a === 'daily') { closeModal(); const { checkDaily } = await import('./daily.js'); const v = await checkDaily(true); if (!v) toast('🎁 La recompensa diaria necesita conexión'); return; }
   if (a === 'rank') { rerender(); await loadRank(); }
@@ -594,7 +596,8 @@ async function partyAct(a, k) {
   if (MR === partyRender) rerender();
   if ((a === 'item' || a === 'fskill') && PA) { const p = $('#mcontent .pend'); if (p) p.scrollIntoView({ block: 'nearest' }); }
 }
-export function openParty(tab) { PA = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
+let BSEL = null;   // ficha abierta del bestiario
+export function openParty(tab) { PA = null; BSEL = null; NGC = false; PI = null; if (tab) PT = tab; openModal(partyRender, partyAct); }
 
 // ================= Confirmación antes de pelear con un jefe =================
 // Los jefes nunca inician el combate solos: el jugador decide.

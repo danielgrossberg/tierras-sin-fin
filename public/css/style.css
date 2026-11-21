@@ -641,3 +641,19 @@ input.pin{letter-spacing:.5em;text-align:center;font-weight:700;font-size:20px}
 /* ===== Monturas (V3 · Fase 6.5) ===== */
 @media (hover:hover) and (pointer:fine){#dock{grid-template-columns:repeat(6,auto)}}
 #bRide.on{border-color:var(--gold);box-shadow:0 0 0 1px #f2c14e66 inset}
+/* ===== Bestiario (V3 · Fase 6.6) ===== */
+.tabs{grid-template-columns:repeat(8,1fr)}
+@media (max-width:480px){.tabs{grid-template-columns:repeat(4,1fr)}}
+.tabs.tabs3{grid-template-columns:repeat(3,1fr)}
+.besthead{display:flex;flex-direction:column;gap:6px}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin-bottom:8px}
+.bcard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:96px;padding:6px 4px;border-radius:10px;border:1px solid #ffffff1a;background:#0003;color:inherit;font:inherit;cursor:pointer;text-align:center}
+.bcard .emoji{font-size:30px;line-height:1.1}
+.bcard small{font-size:11px;line-height:1.2;color:var(--mut)}
+.bcard b{font-size:13px}
+.bcard.unk{cursor:default;opacity:.75}
+.bcard .sil{filter:brightness(0) opacity(.55)!important}
+.bentry .bbig{text-align:center}.bentry .bbig .emoji{font-size:72px;line-height:1.1}
+.btags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.btags span{background:#ffffff12;border-radius:999px;padding:3px 10px;font-size:12px}
+.bentry .strow b{font-weight:600;font-size:13px}

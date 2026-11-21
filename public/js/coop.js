@@ -24,6 +24,7 @@ import { ebarHTML, setBar, bossBar } from './hpbar.js';
 import { inDungeon } from './dungeon.js';
 import { bump } from './achievements.js';
 import { mountDrop } from './mounts.js';
+import { markSeen } from './bestiary.js';
 
 const TURN_MS = 30000;
 export const coop = { host: null, guest: null };
@@ -279,7 +280,7 @@ async function guestEnd(d) {
   coop.guest = null; stopGuestClock();
   const h = g.hero, lines = [];
   if (!g.started) { if (isModalOpen()) closeModal(); toast(`⚠️ ${d.reason || 'El combate en equipo se canceló'}`); return; }
-  let lost = false; if (!g.pvp) noteBattle(g.heroes || [h]);
+  let lost = false; if (!g.pvp) { noteBattle(g.heroes || [h]); markSeen(d.boss && d.boss.keys || []); }
   if (g.pvp) {
     // Duelo amistoso: todos recuperan la vida y la magia (también si se cancela)
     if (d.result === 'pvpwin' || d.result === 'pvplose') { const pts = arenaResult(d.result === 'pvpwin', g.mode); lines.push(d.result === 'pvpwin' ? `🏆 <b>¡Ganaste el duelo!</b> +${pts} puntos de arena` : `⚔️ <b>Perdiste el duelo.</b> +${pts} puntos por participar`); }
@@ -298,7 +299,7 @@ async function guestEnd(d) {
   } else if (d.result === 'win') {
     const mine = (d.heroes || []).find(x => x.owner === st.name);
     if (mine) { h.hp = Math.max(0, Math.min(S(h, 'mhp'), mine.hp)); h.mp = Math.max(0, Math.min(S(h, 'mmp'), mine.mp)); h.poison = mine.poison || 0; }
-    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`); bump('coopWins'); bump('kills', (d.boss && d.boss.keys || []).length || 1); noteKills(d.boss && d.boss.keys || []);
+    lines.push(`🏆 <b>¡Victoria en equipo!</b> +${d.xp} XP · +${d.gold} de oro`); bump('coopWins'); bump('kills', (d.boss && d.boss.keys || []).length || 1); lines.push(...noteKills(d.boss && d.boss.keys || []));
     if (h.hp <= 0) { h.hp = Math.max(1, Math.round(S(h, 'mhp') * .25)); lines.push(`💚 ${h.name} se levanta con 25% de vida`); }
     const before = h.lvl; lines.push(...gainXP(h, d.xp)); if (h.lvl > before) notice('level', `${h.name} Nv ${h.lvl}`);
     const extra = (d.extra && d.extra[st.name]) || 0, cat = activePet() && activePet().k === 'gato' ? activePet() : null; G.gold += Math.round(d.gold * (cat ? 1 + catBonus(cat) : 1)) + extra; if (extra) lines.push(`💰 Robaste ${extra} de oro`);

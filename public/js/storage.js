@@ -8,7 +8,7 @@ export const saveKey = (code, name) => `tsf:${code}:${name}`;
 const PREFS = 'tsf-prefs';
 
 // Versión del formato de guardado. Al cambiar el formato: subir el número y agregar un paso en migrate().
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 export function migrate(o) {
   if (!o || typeof o !== 'object' || !Array.isArray(o.roster) || !Array.isArray(o.party)) return null;
   const v = o.saveVersion || 1;
@@ -86,6 +86,10 @@ export function migrate(o) {
     for (const [a, k] of [['exp250', 'camello'], ['boss10', 'lobog'], ['dun5', 'lagarto']]) if (o.ach && o.ach[a] && !o.mounts.includes(k)) o.mounts.push(k);
     if (!o.mount && o.mounts.length) { o.mount = o.mounts[0]; o.riding = true; }
   }
+  if (v < 16) {
+    // Versión 3 · Fase 6.6: bestiario. Los monstruos ya derrotados cuentan como descubiertos.
+    o.seen = o.seen || {}; for (const k of Object.keys((o.stats && o.stats.killsBy) || {})) o.seen[k] = 1;
+  }
   // Valores por defecto defensivos (por si falta algo en partidas antiguas)
   o.items = Object.assign({ pocion: 0, eter: 0, pluma: 0, antidoto: 0 }, o.items || {});
   o.mats = o.mats && typeof o.mats === 'object' ? o.mats : {}; o.prof = o.prof && typeof o.prof === 'object' ? o.prof : {}; o.gath = o.gath && typeof o.gath === 'object' ? o.gath : {};
@@ -93,7 +97,7 @@ export function migrate(o) {
   for (const k of ['gold', 'upA', 'upD', 'steps', 'bosses']) o[k] = o[k] || 0;
   o.inventory = Array.isArray(o.inventory) ? o.inventory : [];
   o.mounts = Array.isArray(o.mounts) ? o.mounts.filter(k => MOUNTS[k]) : []; if (!o.mounts.includes(o.mount)) o.mount = null; o.riding = !!o.riding;
-  o.favs = o.favs && typeof o.favs === 'object' ? o.favs : {};
+  o.favs = o.favs && typeof o.favs === 'object' ? o.favs : {}; o.seen = o.seen && typeof o.seen === 'object' ? o.seen : {};
   o.dungeons = o.dungeons && typeof o.dungeons === 'object' ? o.dungeons : {};
   o.cos = o.cos && typeof o.cos === 'object' ? o.cos : { owned: [] }; o.cos.owned = Array.isArray(o.cos.owned) ? o.cos.owned : []; o.tmaps = Array.isArray(o.tmaps) ? o.tmaps : []; o.elix = o.elix && typeof o.elix === 'object' ? o.elix : {};
   o.stats = o.stats && typeof o.stats === 'object' ? o.stats : {}; o.ach = o.ach && typeof o.ach === 'object' ? o.ach : {}; o.arena = o.arena && typeof o.arena === 'object' ? o.arena : { pts: 0, w: 0, l: 0 };

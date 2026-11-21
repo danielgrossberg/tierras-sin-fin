@@ -13,6 +13,7 @@ import { rollLoot, addItem, itemLabel, RAR } from './items.js';
 import { toast, feed } from './ui.js';
 import { addMount } from './mounts.js';
 import { MOUNTS } from './data.js';
+import { bestPct } from './bestiary.js';
 
 const S0 = { kills: 0, nightKills: 0, cleanBoss: 0, dungeons: 0, coopWins: 0, chests: 0, maxDist: 0, legend: 0, wbHits: 0, wbKills: 0, pvpWins: 0 };
 export const stats = () => (G.stats = Object.assign({}, S0, G.stats || {}));
@@ -31,11 +32,11 @@ function full() {
     pets: (G.pets || []).length, legend: s.legend || gear.some(i => i.r === 'legendario'), epics: gear.filter(i => i.r === 'epico' || i.r === 'legendario').length,
     lvl15: G.roster.filter(h => h.lvl >= 15).length, advs: G.roster.filter(h => h.adv).length, maxLvl: Math.max(...G.roster.map(h => h.lvl)),
     talents: G.roster.reduce((a, h) => a + talList(h).length, 0),
-    cityDone: (net.city && net.city.credits && net.city.credits[net.name]) || 0, forgeMax: s.forgeMax || 0,
+    cityDone: (net.city && net.city.credits && net.city.credits[net.name]) || 0, forgeMax: s.forgeMax || 0, bestPct: bestPct(),
   });
 }
 // Progreso de los logros que se cuentan (para la barra)
-const PROG = { forge10: ['forgeMax', 10], exp100: ['maxDist', 100], exp250: ['maxDist', 250], exp500: ['maxDist', 500], vil10: ['villages', 10], vil25: ['villages', 25], k100: ['kills', 100], k500: ['kills', 500], boss10: ['bosses', 10],
+const PROG = { best25: ['bestPct', 25], best50: ['bestPct', 50], best100: ['bestPct', 100], forge10: ['forgeMax', 10], exp100: ['maxDist', 100], exp250: ['maxDist', 250], exp500: ['maxDist', 500], vil10: ['villages', 10], vil25: ['villages', 25], k100: ['kills', 100], k500: ['kills', 500], boss10: ['bosses', 10],
   night50: ['nightKills', 50], dun5: ['dungeons', 5], dun10: ['dungeons', 10], coop5: ['coopWins', 5], pets3: ['pets', 3], gold2k: ['gold', 2000], chest25: ['chests', 25], epic5: ['epics', 5], cls15: ['lvl15', 3], lvl30: ['maxLvl', 30], tal10: ['talents', 10], pvp10: ['pvpWins', 10] };
 export const achCount = () => Object.keys(G.ach || {}).length;
 
